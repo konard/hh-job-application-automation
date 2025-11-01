@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 
 (async () => {
-  const MESSAGE = process.env.MESSAGE || 'Вы принимаете по КЭДО?';
+  const MESSAGE = process.env.MESSAGE || 'В какой форме предлагается юридическое оформление удалённой работы?';
   const START_URL = process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist';
 
   const browser = await puppeteer.launch({ headless: false, defaultViewport: null, args: ['--start-maximized'] });

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 APP_DIR="${1:-hhru-automation}"
-MSG='Вы принимаете по КЭДО?'
+MSG='В какой форме предлагается юридическое оформление удалённой работы?'
 START_URL='https://hh.ru/search/vacancy?from=resumelist'
 
 echo "🚀 Initializing repo: $APP_DIR"
