@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "playwright": "node playwright-click-and-type.js",
+    "puppeteer": "node puppeteer-click-and-type.js"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +14,7 @@
   "type": "commonjs",
   "devDependencies": {
     "playwright": "^1.56.1",
-    "puppeteer": "^24.27.0"
+    "puppeteer": "^24.27.0",
+    "yargs": "^18.0.0"
   }
 }

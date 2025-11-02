@@ -1,8 +1,22 @@
 const { chromium } = require('playwright');
+const yargs = require('yargs/yargs');
+const { hideBin } = require('yargs/helpers');
 
 (async () => {
+  // Parse command-line arguments using yargs
+  // npm passes --url as npm_config_url when used without --
+  const argv = yargs(hideBin(process.argv))
+    .option('url', {
+      alias: 'u',
+      type: 'string',
+      description: 'URL to navigate to',
+      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
+    })
+    .help()
+    .argv;
+
   const MESSAGE = process.env.MESSAGE || 'В какой форме предлагается юридическое оформление удалённой работы?';
-  const START_URL = process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist';
+  const START_URL = argv.url;
 
   const browser = await chromium.launch({ headless: false, slowMo: 150 });
   const page = await browser.newPage();
