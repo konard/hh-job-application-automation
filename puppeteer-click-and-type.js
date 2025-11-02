@@ -12,6 +12,11 @@ const { hideBin } = require('yargs/helpers');
       description: 'URL to navigate to',
       default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
     })
+    .option('manual-login', {
+      type: 'boolean',
+      description: 'Open login page and wait for manual authentication before proceeding',
+      default: false
+    })
     .help()
     .argv;
 
@@ -21,7 +26,30 @@ const { hideBin } = require('yargs/helpers');
   const browser = await puppeteer.launch({ headless: false, defaultViewport: null, args: ['--start-maximized'] });
   const [page] = await browser.pages();
 
-  await page.goto(START_URL, { waitUntil: 'domcontentloaded' });
+  // Handle manual login if requested
+  if (argv['manual-login']) {
+    const backurl = encodeURIComponent(START_URL);
+    const loginUrl = `https://hh.ru/account/login?role=applicant&backurl=${backurl}&hhtmFrom=vacancy_search_list`;
+
+    console.log('🔐 Opening login page for manual authentication...');
+    console.log('📍 Login URL:', loginUrl);
+
+    await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
+
+    console.log('⏳ Waiting for you to complete login...');
+    console.log('💡 The browser will automatically continue once you are redirected to:', START_URL);
+
+    // Wait for redirect to the target URL after successful login
+    await page.waitForFunction(
+      (targetUrl) => window.location.href.startsWith(targetUrl),
+      { timeout: 0 }, // No timeout - wait indefinitely for user to login
+      START_URL
+    );
+
+    console.log('✅ Login successful! Proceeding with automation...');
+  } else {
+    await page.goto(START_URL, { waitUntil: 'domcontentloaded' });
+  }
 
   // Click first "Откликнуться"
   await page.waitForSelector('a');

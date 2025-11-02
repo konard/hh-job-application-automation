@@ -12,6 +12,11 @@ const { hideBin } = require('yargs/helpers');
       description: 'URL to navigate to',
       default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
     })
+    .option('manual-login', {
+      type: 'boolean',
+      description: 'Open login page and wait for manual authentication before proceeding',
+      default: false
+    })
     .help()
     .argv;
 
@@ -20,7 +25,31 @@ const { hideBin } = require('yargs/helpers');
 
   const browser = await chromium.launch({ headless: false, slowMo: 150 });
   const page = await browser.newPage();
-  await page.goto(START_URL);
+
+  // Handle manual login if requested
+  if (argv['manual-login']) {
+    const backurl = encodeURIComponent(START_URL);
+    const loginUrl = `https://hh.ru/account/login?role=applicant&backurl=${backurl}&hhtmFrom=vacancy_search_list`;
+
+    console.log('🔐 Opening login page for manual authentication...');
+    console.log('📍 Login URL:', loginUrl);
+
+    await page.goto(loginUrl);
+
+    console.log('⏳ Waiting for you to complete login...');
+    console.log('💡 The browser will automatically continue once you are redirected to:', START_URL);
+
+    // Wait for redirect to the target URL after successful login
+    await page.waitForFunction(
+      (targetUrl) => window.location.href.startsWith(targetUrl),
+      START_URL,
+      { timeout: 0 } // No timeout - wait indefinitely for user to login
+    );
+
+    console.log('✅ Login successful! Proceeding with automation...');
+  } else {
+    await page.goto(START_URL);
+  }
 
   const openBtn = page.locator('a', { hasText: 'Откликнуться' }).first();
   await openBtn.click();
