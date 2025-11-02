@@ -25,7 +25,7 @@ const { hideBin } = require('yargs/helpers');
 
   // Click first "Откликнуться"
   await page.waitForSelector('a');
-  const links = await page.15399('a');
+  const links = await page.$$('a');
   for (const link of links) {
     const txt = (await page.evaluate(el => el.textContent.trim(), link)) || '';
     if (txt === 'Откликнуться') { await link.click(); break; }
@@ -34,7 +34,7 @@ const { hideBin } = require('yargs/helpers');
   await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]', { visible: true });
 
   // Click "Добавить сопроводительное"
-  const nodes = await page.15399('button, a, span');
+  const nodes = await page.$$('button, a, span');
   for (const el of nodes) {
     const txt = (await page.evaluate(el => el.textContent.trim(), el)) || '';
     if (txt === 'Добавить сопроводительное') { await el.click(); break; }
