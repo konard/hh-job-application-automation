@@ -1,25 +1,22 @@
 const { chromium } = require('playwright');
+const yargs = require('yargs/yargs');
+const { hideBin } = require('yargs/helpers');
 
 (async () => {
-  // Parse command-line arguments
-  const args = process.argv.slice(2);
-  let urlFromArgs = null;
-
-  // Check for --url argument
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--url' && i + 1 < args.length) {
-      urlFromArgs = args[i + 1];
-      break;
-    }
-  }
-
-  // If no --url found, check if first argument is a URL (npm strips --url when used without --)
-  if (!urlFromArgs && args.length > 0 && args[0].startsWith('http')) {
-    urlFromArgs = args[0];
-  }
+  // Parse command-line arguments using yargs
+  // npm passes --url as npm_config_url when used without --
+  const argv = yargs(hideBin(process.argv))
+    .option('url', {
+      alias: 'u',
+      type: 'string',
+      description: 'URL to navigate to',
+      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
+    })
+    .help()
+    .argv;
 
   const MESSAGE = process.env.MESSAGE || 'В какой форме предлагается юридическое оформление удалённой работы?';
-  const START_URL = urlFromArgs || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist';
+  const START_URL = argv.url;
 
   const browser = await chromium.launch({ headless: false, slowMo: 150 });
   const page = await browser.newPage();
