@@ -1,6 +1,8 @@
 const puppeteer = require('puppeteer');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
+const path = require('path');
+const os = require('os');
 
 (async () => {
   // Parse command-line arguments using yargs
@@ -17,13 +19,24 @@ const { hideBin } = require('yargs/helpers');
       description: 'Open login page and wait for manual authentication before proceeding',
       default: false
     })
+    .option('user-data-dir', {
+      type: 'string',
+      description: 'Path to user data directory for persistent session storage',
+      default: path.join(os.homedir(), '.hh-automation', 'puppeteer-data')
+    })
     .help()
     .argv;
 
   const MESSAGE = process.env.MESSAGE || 'В какой форме предлагается юридическое оформление удалённой работы?';
   const START_URL = argv.url;
 
-  const browser = await puppeteer.launch({ headless: false, defaultViewport: null, args: ['--start-maximized'] });
+  // Launch browser with persistent user data directory to save cookies and session data
+  const browser = await puppeteer.launch({
+    headless: false,
+    defaultViewport: null,
+    args: ['--start-maximized'],
+    userDataDir: argv['user-data-dir']
+  });
   const [page] = await browser.pages();
 
   // Handle manual login if requested
@@ -59,6 +72,22 @@ const { hideBin } = require('yargs/helpers');
     if (txt === 'Откликнуться') { await link.click(); break; }
   }
 
+  // Wait a moment for potential navigation/redirect
+  await page.waitForTimeout(1000);
+
+  // Check if we're still on the target page
+  const currentUrl = page.url();
+  const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;
+
+  if (!targetPagePattern.test(currentUrl)) {
+    console.log('⚠️  Redirected to a different page:', currentUrl);
+    console.log('💡 This appears to be a separate application form page.');
+    console.log('💡 Please fill out the form manually and navigate back to:', START_URL);
+    console.log('🛑 Automation stopped - manual intervention required.');
+    return; // Exit gracefully without error
+  }
+
+  // Continue with automation only if we're on the target page
   await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]', { visible: true });
 
   // Click "Добавить сопроводительное"

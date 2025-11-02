@@ -1,6 +1,8 @@
 const { chromium } = require('playwright');
 const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
+const path = require('path');
+const os = require('os');
 
 (async () => {
   // Parse command-line arguments using yargs
@@ -17,13 +19,22 @@ const { hideBin } = require('yargs/helpers');
       description: 'Open login page and wait for manual authentication before proceeding',
       default: false
     })
+    .option('user-data-dir', {
+      type: 'string',
+      description: 'Path to user data directory for persistent session storage',
+      default: path.join(os.homedir(), '.hh-automation', 'playwright-data')
+    })
     .help()
     .argv;
 
   const MESSAGE = process.env.MESSAGE || 'В какой форме предлагается юридическое оформление удалённой работы?';
   const START_URL = argv.url;
 
-  const browser = await chromium.launch({ headless: false, slowMo: 150 });
+  // Launch browser with persistent context to save cookies and session data
+  const browser = await chromium.launchPersistentContext(argv['user-data-dir'], {
+    headless: false,
+    slowMo: 150
+  });
   const page = await browser.newPage();
 
   // Handle manual login if requested
@@ -53,6 +64,23 @@ const { hideBin } = require('yargs/helpers');
 
   const openBtn = page.locator('a', { hasText: 'Откликнуться' }).first();
   await openBtn.click();
+
+  // Wait a moment for potential navigation/redirect
+  await page.waitForTimeout(1000);
+
+  // Check if we're still on the target page
+  const currentUrl = page.url();
+  const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;
+
+  if (!targetPagePattern.test(currentUrl)) {
+    console.log('⚠️  Redirected to a different page:', currentUrl);
+    console.log('💡 This appears to be a separate application form page.');
+    console.log('💡 Please fill out the form manually and navigate back to:', START_URL);
+    console.log('🛑 Automation stopped - manual intervention required.');
+    return; // Exit gracefully without error
+  }
+
+  // Continue with automation only if we're on the target page
   await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
 
   const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное")').first();
