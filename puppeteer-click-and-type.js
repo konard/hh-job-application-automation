@@ -47,7 +47,14 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     .help()
     .argv;
 
-  const MESSAGE = process.env.MESSAGE || 'В какой форме предлагается юридическое оформление удалённой работы?';
+  const MESSAGE = process.env.MESSAGE || `В какой форме предлагается юридическое оформление удалённой работы?
+
+Посмотреть мой код на GitHub можно тут:
+
+github.com/konard
+github.com/deep-assistant
+github.com/linksplatform
+github.com/link-foundation`;
   const START_URL = argv.url;
 
   // Launch browser with persistent user data directory to save cookies and session data
