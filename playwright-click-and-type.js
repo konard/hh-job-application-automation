@@ -4,6 +4,26 @@ const { hideBin } = require('yargs/helpers');
 const path = require('path');
 const os = require('os');
 
+let browser = null;
+
+// Handle graceful shutdown on exit signals
+async function gracefulShutdown(signal) {
+  console.log(`\n🛑 Received ${signal}, closing browser gracefully...`);
+  if (browser) {
+    try {
+      await browser.close();
+      console.log('✅ Browser closed successfully');
+    } catch (error) {
+      console.error('❌ Error closing browser:', error.message);
+    }
+  }
+  process.exit(0);
+}
+
+// Register signal handlers for graceful shutdown
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
 (async () => {
   // Parse command-line arguments using yargs
   // npm passes --url as npm_config_url when used without --
@@ -31,14 +51,16 @@ const os = require('os');
   const START_URL = argv.url;
 
   // Launch browser with persistent context to save cookies and session data
-  const browser = await chromium.launchPersistentContext(argv['user-data-dir'], {
+  browser = await chromium.launchPersistentContext(argv['user-data-dir'], {
     headless: false,
     slowMo: 150,
     args: [
-      '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup
+      '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup (older method)
+      '--hide-crash-restore-bubble',        // Hide crash restore bubble (Chrome 113+)
       '--disable-infobars',                 // Disable info bars
       '--no-first-run',                     // Skip first run tasks
-      '--no-default-browser-check'          // Skip default browser check
+      '--no-default-browser-check',         // Skip default browser check
+      '--disable-crash-restore'             // Additional crash restore disable
     ]
   });
   // Use the default page created by launchPersistentContext instead of creating a new one
@@ -46,9 +68,15 @@ const os = require('os');
   const page = browser.pages()[0];
 
   // Detect tab close event and exit gracefully
-  page.on('close', () => {
+  page.on('close', async () => {
     console.log('🔴 Tab close detected! Page was closed by user.');
-    console.log('✅ Ending process gracefully...');
+    console.log('✅ Closing browser gracefully...');
+    try {
+      await browser.close();
+      console.log('✅ Browser closed successfully');
+    } catch (error) {
+      console.error('❌ Error closing browser:', error.message);
+    }
     process.exit(0);
   });
 
@@ -116,5 +144,7 @@ const os = require('os');
 
   console.log('✅ Playwright: typed message successfully');
   // await page.locator('[data-qa="vacancy-response-submit-popup"]').click();
-  // await browser.close();
-})();
+})().catch(async (error) => {
+  console.error('❌ Error occurred:', error.message);
+  process.exit(1);
+});
