@@ -55,13 +55,15 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     headless: false,
     slowMo: 150,
     args: [
+      '--disable-blink-features=AutomationControlled',  // Prevent automation detection
       '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup (older method)
       '--hide-crash-restore-bubble',        // Hide crash restore bubble (Chrome 113+)
-      '--disable-infobars',                 // Disable info bars
+      '--disable-infobars',                 // Disable info bars (deprecated but kept for compatibility)
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
       '--disable-crash-restore'             // Additional crash restore disable
-    ]
+    ],
+    ignoreDefaultArgs: ['--enable-automation']  // Remove "Chrome is being controlled by automated test software" banner
   });
   // Use the default page created by launchPersistentContext instead of creating a new one
   // to avoid having an empty about:blank tab
