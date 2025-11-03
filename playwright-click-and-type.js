@@ -50,6 +50,12 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   const MESSAGE = process.env.MESSAGE || 'В какой форме предлагается юридическое оформление удалённой работы?';
   const START_URL = argv.url;
 
+  // Set environment variables to suppress "Google API keys are missing" warning
+  // This prevents the infobar from appearing and causing page layout issues
+  process.env.GOOGLE_API_KEY = 'no';
+  process.env.GOOGLE_DEFAULT_CLIENT_ID = 'no';
+  process.env.GOOGLE_DEFAULT_CLIENT_SECRET = 'no';
+
   // Launch browser with persistent context to save cookies and session data
   browser = await chromium.launchPersistentContext(argv['user-data-dir'], {
     headless: false,
