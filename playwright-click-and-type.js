@@ -37,6 +37,13 @@ const os = require('os');
   });
   const page = await browser.newPage();
 
+  // Detect tab close event and exit gracefully
+  page.on('close', () => {
+    console.log('🔴 Tab close detected! Page was closed by user.');
+    console.log('✅ Ending process gracefully...');
+    process.exit(0);
+  });
+
   // Handle manual login if requested
   if (argv['manual-login']) {
     const backurl = encodeURIComponent(START_URL);
