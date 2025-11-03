@@ -54,6 +54,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   browser = await chromium.launchPersistentContext(argv['user-data-dir'], {
     headless: false,
     slowMo: 150,
+    chromiumSandbox: true,  // Enable Chromium sandboxing to prevent "--no-sandbox" warning
     args: [
       '--disable-blink-features=AutomationControlled',  // Prevent automation detection
       '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup (older method)
