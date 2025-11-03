@@ -44,6 +44,11 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       description: 'Path to user data directory for persistent session storage',
       default: path.join(os.homedir(), '.hh-automation', 'playwright-data'),
     })
+    .option('job-application-interval', {
+      type: 'number',
+      description: 'Interval in seconds to wait between job application button clicks',
+      default: 20,
+    })
     .help()
     .argv;
 
@@ -134,7 +139,7 @@ github.com/link-foundation`;
   }
 
   const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;
-  const BUTTON_CLICK_INTERVAL = 20000; // 20 seconds interval between button clicks
+  const BUTTON_CLICK_INTERVAL = argv['job-application-interval'] * 1000; // Convert seconds to milliseconds
 
   // Main loop to process all "Откликнуться" buttons
   while (true) {
