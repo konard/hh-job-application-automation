@@ -35,10 +35,12 @@ const os = require('os');
     headless: false,
     slowMo: 150,
     args: [
-      '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup
+      '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup (older method)
+      '--hide-crash-restore-bubble',        // Hide crash restore bubble (Chrome 113+)
       '--disable-infobars',                 // Disable info bars
       '--no-first-run',                     // Skip first run tasks
-      '--no-default-browser-check'          // Skip default browser check
+      '--no-default-browser-check',         // Skip default browser check
+      '--disable-crash-restore'             // Additional crash restore disable
     ]
   });
   // Use the default page created by launchPersistentContext instead of creating a new one
