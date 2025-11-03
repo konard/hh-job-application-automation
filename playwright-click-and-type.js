@@ -33,7 +33,13 @@ const os = require('os');
   // Launch browser with persistent context to save cookies and session data
   const browser = await chromium.launchPersistentContext(argv['user-data-dir'], {
     headless: false,
-    slowMo: 150
+    slowMo: 150,
+    args: [
+      '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup
+      '--disable-infobars',                 // Disable info bars
+      '--no-first-run',                     // Skip first run tasks
+      '--no-default-browser-check'          // Skip default browser check
+    ]
   });
   const page = await browser.newPage();
 
