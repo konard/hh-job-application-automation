@@ -70,10 +70,19 @@ const os = require('os');
   }
 
   const openBtn = page.locator('a', { hasText: 'Откликнуться' }).first();
-  await openBtn.click();
 
-  // Wait a moment for potential navigation/redirect
-  await page.waitForTimeout(1000);
+  // Use Promise.race to handle both navigation and modal popup scenarios
+  await Promise.race([
+    openBtn.click(),
+    // Wait for navigation with a timeout - if navigation happens, this resolves
+    page.waitForNavigation({ timeout: 2000 }).catch(() => {
+      // Navigation timeout is expected if modal opens instead of redirect
+      // This is not an error, just means we stayed on the same page
+    })
+  ]);
+
+  // Give additional time for any delayed redirects to complete
+  await page.waitForTimeout(500);
 
   // Check if we're still on the target page
   const currentUrl = page.url();
