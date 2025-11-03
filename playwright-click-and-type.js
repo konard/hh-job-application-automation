@@ -118,7 +118,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   ]);
 
   // Give additional time for any delayed redirects to complete
-  await new Promise(r => setTimeout(r, 500));
+  await new Promise(r => setTimeout(r, 2000));
 
   // Check if we're still on the target page
   const currentUrl = page.url();
@@ -127,13 +127,36 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   if (!targetPagePattern.test(currentUrl)) {
     console.log('⚠️  Redirected to a different page:', currentUrl);
     console.log('💡 This appears to be a separate application form page.');
-    console.log('💡 Please fill out the form manually and navigate back to:', START_URL);
-    console.log('🛑 Automation stopped - manual intervention required.');
-    return; // Exit gracefully without error
-  }
+    console.log('💡 Please fill out the form manually. Take as much time as you need.');
+    console.log('💡 Once done, navigate back to:', START_URL);
+    console.log('⏳ Waiting for you to return to the target page...');
 
-  // Continue with automation only if we're on the target page
-  await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
+    // Wait indefinitely for user to navigate back to target page
+    await page.waitForFunction(
+      (targetUrl) => window.location.href.startsWith(targetUrl),
+      START_URL,
+      { timeout: 0 } // No timeout - wait indefinitely for user to return
+    );
+
+    console.log('✅ Returned to target page! Checking if modal is present...');
+
+    // Give time for page to fully load after navigation
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Check if modal is present on the page after returning
+    const modalPresent = await page.locator('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]').count() > 0;
+
+    if (!modalPresent) {
+      console.log('💡 Modal not present after return. Application may have been submitted already.');
+      console.log('✅ Automation completed successfully.');
+      return; // Exit gracefully
+    }
+
+    console.log('✅ Modal detected! Continuing with automation...');
+  } else {
+    // No redirect occurred, wait for modal to appear
+    await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
+  }
 
   const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное")').first();
   if (await addCover.count()) await addCover.click();
