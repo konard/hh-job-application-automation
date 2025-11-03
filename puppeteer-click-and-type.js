@@ -91,7 +91,7 @@ const os = require('os');
   }
 
   // Give additional time for any delayed redirects to complete
-  await page.waitForTimeout(500);
+  await new Promise(r => setTimeout(r, 500));
 
   // Check if we're still on the target page
   const currentUrl = page.url();
