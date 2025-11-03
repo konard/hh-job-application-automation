@@ -124,100 +124,116 @@ github.com/link-foundation`;
     await page.goto(START_URL, { waitUntil: 'domcontentloaded' });
   }
 
-  // Click first "Откликнуться"
-  await page.waitForSelector('a');
-  const links = await page.$$('a');
-  for (const link of links) {
-    const txt = (await page.evaluate(el => el.textContent.trim(), link)) || '';
-    if (txt === 'Откликнуться') {
-      // Use Promise.race to handle both navigation and modal popup scenarios
-      await Promise.race([
-        link.click(),
-        // Wait for navigation with a timeout - if navigation happens, this resolves
-        page.waitForNavigation({ timeout: 2000 }).catch(() => {
-          // Navigation timeout is expected if modal opens instead of redirect
-          // This is not an error, just means we stayed on the same page
-        }),
-      ]);
+  const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;
+  const BUTTON_CLICK_INTERVAL = 20000; // 20 seconds interval between button clicks
+
+  // Main loop to process all "Откликнуться" buttons
+  while (true) {
+    // Get all "Откликнуться" buttons on the current page
+    await page.waitForSelector('a');
+    const links = await page.$$('a');
+    const openButtons = [];
+    for (const link of links) {
+      const txt = (await page.evaluate(el => el.textContent.trim(), link)) || '';
+      if (txt === 'Откликнуться') {
+        openButtons.push(link);
+      }
+    }
+
+    if (openButtons.length === 0) {
+      console.log('✅ No more "Откликнуться" buttons found. Automation completed successfully.');
       break;
     }
-  }
 
-  // Give additional time for any delayed redirects to complete
-  await new Promise(r => setTimeout(r, 2000));
+    console.log(`📋 Found ${openButtons.length} "Откликнуться" button(s). Processing next button...`);
 
-  // Check if we're still on the target page
-  const currentUrl = page.url();
-  const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;
+    // Always click the first available button (as processed buttons will be removed from the list)
+    const openBtn = openButtons[0];
 
-  if (!targetPagePattern.test(currentUrl)) {
-    console.log('⚠️  Redirected to a different page:', currentUrl);
-    console.log('💡 This appears to be a separate application form page.');
-    console.log('💡 Please fill out the form manually. Take as much time as you need.');
-    console.log('💡 Once done, navigate back to:', START_URL);
-    console.log('⏳ Waiting for you to return to the target page...');
+    // Use Promise.race to handle both navigation and modal popup scenarios
+    await Promise.race([
+      openBtn.click(),
+      // Wait for navigation with a timeout - if navigation happens, this resolves
+      page.waitForNavigation({ timeout: 2000 }).catch(() => {
+        // Navigation timeout is expected if modal opens instead of redirect
+        // This is not an error, just means we stayed on the same page
+      }),
+    ]);
 
-    // Wait indefinitely for user to navigate back to target page
-    try {
-      await page.waitForFunction(
-        (targetUrl) => window.location.href.startsWith(targetUrl),
-        { timeout: 0 }, // No timeout - wait indefinitely for user to return
-        START_URL,
-      );
-    } catch (error) {
-      // If page was closed by user, the close event handler will handle shutdown
-      if (pageClosedByUser) {
-        return; // Exit gracefully, close handler will take care of cleanup
+    // Give additional time for any delayed redirects to complete
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Check if we're still on the target page
+    const currentUrl = page.url();
+
+    if (!targetPagePattern.test(currentUrl)) {
+      console.log('⚠️  Redirected to a different page:', currentUrl);
+      console.log('💡 This appears to be a separate application form page.');
+      console.log('💡 Please fill out the form manually. Take as much time as you need.');
+      console.log('💡 Once done, navigate back to:', START_URL);
+      console.log('⏳ Waiting for you to return to the target page...');
+
+      // Wait indefinitely for user to navigate back to target page
+      try {
+        await page.waitForFunction(
+          (targetUrl) => window.location.href.startsWith(targetUrl),
+          { timeout: 0 }, // No timeout - wait indefinitely for user to return
+          START_URL,
+        );
+      } catch (error) {
+        // If page was closed by user, the close event handler will handle shutdown
+        if (pageClosedByUser) {
+          return; // Exit gracefully, close handler will take care of cleanup
+        }
+        throw error; // Re-throw if it's a different error
       }
-      throw error; // Re-throw if it's a different error
+
+      console.log('✅ Returned to target page! Continuing with button loop...');
+
+      // Give time for page to fully load after navigation
+      await new Promise(r => setTimeout(r, 1000));
+
+      // Continue to next iteration to get fresh button list
+      continue;
     }
 
-    console.log('✅ Returned to target page! Checking if modal is present...');
-
-    // Give time for page to fully load after navigation
-    await new Promise(r => setTimeout(r, 1000));
-
-    // Check if modal is present on the page after returning
-    const modalPresent = await page.$('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]') !== null;
-
-    if (!modalPresent) {
-      console.log('💡 Modal not present after return. Application may have been submitted already.');
-      console.log('✅ Automation completed successfully.');
-      return; // Exit gracefully
-    }
-
-    console.log('✅ Modal detected! Continuing with automation...');
-  } else {
     // No redirect occurred, wait for modal to appear
     await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]', { visible: true });
-  }
 
-  // Click "Добавить сопроводительное"
-  const nodes = await page.$$('button, a, span');
-  for (const el of nodes) {
-    const txt = (await page.evaluate(el => el.textContent.trim(), el)) || '';
-    if (txt === 'Добавить сопроводительное') { await el.click(); break; }
-  }
+    // Click "Добавить сопроводительное"
+    const nodes = await page.$$('button, a, span');
+    for (const el of nodes) {
+      const txt = (await page.evaluate(el => el.textContent.trim(), el)) || '';
+      if (txt === 'Добавить сопроводительное') { await el.click(); break; }
+    }
 
-  // Activate textarea and type
-  await page.waitForSelector('textarea[data-qa="vacancy-response-popup-form-letter-input"]', { visible: true });
-  await page.click('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
-  await page.type('textarea[data-qa="vacancy-response-popup-form-letter-input"]', MESSAGE);
+    // Activate textarea and type
+    await page.waitForSelector('textarea[data-qa="vacancy-response-popup-form-letter-input"]', { visible: true });
+    await page.click('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
+    await page.type('textarea[data-qa="vacancy-response-popup-form-letter-input"]', MESSAGE);
 
-  console.log('✅ Puppeteer: typed message successfully');
+    console.log('✅ Puppeteer: typed message successfully');
 
-  // Verify textarea contains the expected message
-  const textareaValue = await page.$eval('textarea[data-qa="vacancy-response-popup-form-letter-input"]', el => el.value);
-  if (textareaValue === MESSAGE) {
-    console.log('✅ Puppeteer: verified textarea contains target message');
+    // Verify textarea contains the expected message
+    const textareaValue = await page.$eval('textarea[data-qa="vacancy-response-popup-form-letter-input"]', el => el.value);
+    if (textareaValue === MESSAGE) {
+      console.log('✅ Puppeteer: verified textarea contains target message');
 
-    // Click the "Откликнуться" submit button
-    await page.click('[data-qa="vacancy-response-submit-popup"]');
-    console.log('✅ Puppeteer: clicked submit button');
-  } else {
-    console.error('❌ Puppeteer: textarea value does not match expected message');
-    console.error('Expected:', MESSAGE);
-    console.error('Actual:', textareaValue);
+      // Click the "Откликнуться" submit button
+      await page.click('[data-qa="vacancy-response-submit-popup"]');
+      console.log('✅ Puppeteer: clicked submit button');
+    } else {
+      console.error('❌ Puppeteer: textarea value does not match expected message');
+      console.error('Expected:', MESSAGE);
+      console.error('Actual:', textareaValue);
+    }
+
+    // Wait for the modal to close after submission
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Wait 20 seconds before processing the next button
+    console.log(`⏳ Waiting ${BUTTON_CLICK_INTERVAL / 1000} seconds before processing next button...`);
+    await new Promise(r => setTimeout(r, BUTTON_CLICK_INTERVAL));
   }
 })().catch(async (error) => {
   console.error('❌ Error occurred:', error.message);
