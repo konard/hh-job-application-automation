@@ -105,6 +105,40 @@ github.com/link-foundation`;
     process.exit(0);
   });
 
+  /**
+   * Robust waiting function that waits indefinitely for a URL condition
+   * Uses a polling loop with error handling to avoid "Waiting failed" errors
+   */
+  async function waitForUrlCondition(targetUrl, description) {
+    const pollingInterval = 1000; // Check every second
+    console.log(`⏳ ${description}...`);
+
+    while (true) {
+      // Check if page was closed by user
+      if (pageClosedByUser) {
+        return; // Exit gracefully, close handler will take care of cleanup
+      }
+
+      try {
+        // Try to check if we're on the target URL
+        const result = await page.evaluate((url) => window.location.href.startsWith(url), targetUrl);
+        if (result) {
+          return true; // Condition met
+        }
+      } catch (error) {
+        // If page is closed or context destroyed, exit gracefully
+        if (pageClosedByUser) {
+          return;
+        }
+        // Log error but continue retrying (transient errors are expected)
+        console.log(`⚠️  Temporary error while checking URL: ${error.message.substring(0, 100)}... (retrying)`);
+      }
+
+      // Wait before next check
+      await new Promise(resolve => setTimeout(resolve, pollingInterval));
+    }
+  }
+
   // Handle manual login if requested
   if (argv['manual-login']) {
     const backurl = encodeURIComponent(START_URL);
@@ -115,25 +149,14 @@ github.com/link-foundation`;
 
     await page.goto(loginUrl);
 
-    console.log('⏳ Waiting for you to complete login...');
     console.log('💡 The browser will automatically continue once you are redirected to:', START_URL);
 
     // Wait for redirect to the target URL after successful login
-    try {
-      await page.waitForFunction(
-        (targetUrl) => window.location.href.startsWith(targetUrl),
-        START_URL,
-        { timeout: 0 }, // No timeout - wait indefinitely for user to login
-      );
-    } catch (error) {
-      // If page was closed by user, the close event handler will handle shutdown
-      if (pageClosedByUser) {
-        return; // Exit gracefully, close handler will take care of cleanup
-      }
-      throw error; // Re-throw if it's a different error
-    }
+    await waitForUrlCondition(START_URL, 'Waiting for you to complete login');
 
-    console.log('✅ Login successful! Proceeding with automation...');
+    if (!pageClosedByUser) {
+      console.log('✅ Login successful! Proceeding with automation...');
+    }
   } else {
     await page.goto(START_URL);
   }
@@ -178,21 +201,13 @@ github.com/link-foundation`;
       console.log('💡 This appears to be a separate application form page.');
       console.log('💡 Please fill out the form manually. Take as much time as you need.');
       console.log('💡 Once done, navigate back to:', START_URL);
-      console.log('⏳ Waiting for you to return to the target page...');
 
       // Wait indefinitely for user to navigate back to target page
-      try {
-        await page.waitForFunction(
-          (targetUrl) => window.location.href.startsWith(targetUrl),
-          START_URL,
-          { timeout: 0 }, // No timeout - wait indefinitely for user to return
-        );
-      } catch (error) {
-        // If page was closed by user, the close event handler will handle shutdown
-        if (pageClosedByUser) {
-          return; // Exit gracefully, close handler will take care of cleanup
-        }
-        throw error; // Re-throw if it's a different error
+      await waitForUrlCondition(START_URL, 'Waiting for you to return to the target page');
+
+      // If page was closed by user, exit
+      if (pageClosedByUser) {
+        return;
       }
 
       console.log('✅ Returned to target page! Continuing with button loop...');
