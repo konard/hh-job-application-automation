@@ -69,8 +69,12 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   // to avoid having an empty about:blank tab
   const page = browser.pages()[0];
 
+  // Track if page was closed by user to handle graceful shutdown
+  let pageClosedByUser = false;
+
   // Detect tab close event and exit gracefully
   page.on('close', async () => {
+    pageClosedByUser = true;
     console.log('🔴 Tab close detected! Page was closed by user.');
     console.log('✅ Closing browser gracefully...');
     try {
@@ -96,11 +100,19 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     console.log('💡 The browser will automatically continue once you are redirected to:', START_URL);
 
     // Wait for redirect to the target URL after successful login
-    await page.waitForFunction(
-      (targetUrl) => window.location.href.startsWith(targetUrl),
-      START_URL,
-      { timeout: 0 }, // No timeout - wait indefinitely for user to login
-    );
+    try {
+      await page.waitForFunction(
+        (targetUrl) => window.location.href.startsWith(targetUrl),
+        START_URL,
+        { timeout: 0 }, // No timeout - wait indefinitely for user to login
+      );
+    } catch (error) {
+      // If page was closed by user, the close event handler will handle shutdown
+      if (pageClosedByUser) {
+        return; // Exit gracefully, close handler will take care of cleanup
+      }
+      throw error; // Re-throw if it's a different error
+    }
 
     console.log('✅ Login successful! Proceeding with automation...');
   } else {
@@ -134,11 +146,19 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     console.log('⏳ Waiting for you to return to the target page...');
 
     // Wait indefinitely for user to navigate back to target page
-    await page.waitForFunction(
-      (targetUrl) => window.location.href.startsWith(targetUrl),
-      START_URL,
-      { timeout: 0 }, // No timeout - wait indefinitely for user to return
-    );
+    try {
+      await page.waitForFunction(
+        (targetUrl) => window.location.href.startsWith(targetUrl),
+        START_URL,
+        { timeout: 0 }, // No timeout - wait indefinitely for user to return
+      );
+    } catch (error) {
+      // If page was closed by user, the close event handler will handle shutdown
+      if (pageClosedByUser) {
+        return; // Exit gracefully, close handler will take care of cleanup
+      }
+      throw error; // Re-throw if it's a different error
+    }
 
     console.log('✅ Returned to target page! Checking if modal is present...');
 
