@@ -34,7 +34,13 @@ const os = require('os');
   const browser = await puppeteer.launch({
     headless: false,
     defaultViewport: null,
-    args: ['--start-maximized'],
+    args: [
+      '--start-maximized',
+      '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup
+      '--disable-infobars',                 // Disable info bars
+      '--no-first-run',                     // Skip first run tasks
+      '--no-default-browser-check'          // Skip default browser check
+    ],
     userDataDir: argv['user-data-dir']
   });
   const [page] = await browser.pages();
