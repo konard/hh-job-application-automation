@@ -195,7 +195,20 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   await textarea.type(MESSAGE);
 
   console.log('✅ Playwright: typed message successfully');
-  // await page.locator('[data-qa="vacancy-response-submit-popup"]').click();
+
+  // Verify textarea contains the expected message
+  const textareaValue = await textarea.inputValue();
+  if (textareaValue === MESSAGE) {
+    console.log('✅ Playwright: verified textarea contains target message');
+
+    // Click the "Откликнуться" submit button
+    await page.locator('[data-qa="vacancy-response-submit-popup"]').click();
+    console.log('✅ Playwright: clicked submit button');
+  } else {
+    console.error('❌ Playwright: textarea value does not match expected message');
+    console.error('Expected:', MESSAGE);
+    console.error('Actual:', textareaValue);
+  }
 })().catch(async (error) => {
   console.error('❌ Error occurred:', error.message);
   process.exit(1);

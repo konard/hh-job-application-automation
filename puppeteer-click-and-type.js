@@ -198,7 +198,20 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   await page.type('textarea[data-qa="vacancy-response-popup-form-letter-input"]', MESSAGE);
 
   console.log('✅ Puppeteer: typed message successfully');
-  // await page.click('[data-qa="vacancy-response-submit-popup"]');
+
+  // Verify textarea contains the expected message
+  const textareaValue = await page.$eval('textarea[data-qa="vacancy-response-popup-form-letter-input"]', el => el.value);
+  if (textareaValue === MESSAGE) {
+    console.log('✅ Puppeteer: verified textarea contains target message');
+
+    // Click the "Откликнуться" submit button
+    await page.click('[data-qa="vacancy-response-submit-popup"]');
+    console.log('✅ Puppeteer: clicked submit button');
+  } else {
+    console.error('❌ Puppeteer: textarea value does not match expected message');
+    console.error('Expected:', MESSAGE);
+    console.error('Actual:', textareaValue);
+  }
 })().catch(async (error) => {
   console.error('❌ Error occurred:', error.message);
   process.exit(1);
