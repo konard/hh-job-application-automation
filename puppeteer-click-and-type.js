@@ -73,7 +73,7 @@ const os = require('os');
   }
 
   // Wait a moment for potential navigation/redirect
-  await page.waitForTimeout(1000);
+  await new Promise(r => setTimeout(r, 1000));
 
   // Check if we're still on the target page
   const currentUrl = page.url();
