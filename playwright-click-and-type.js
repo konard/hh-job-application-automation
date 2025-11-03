@@ -32,17 +32,17 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       alias: 'u',
       type: 'string',
       description: 'URL to navigate to',
-      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
+      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist',
     })
     .option('manual-login', {
       type: 'boolean',
       description: 'Open login page and wait for manual authentication before proceeding',
-      default: false
+      default: false,
     })
     .option('user-data-dir', {
       type: 'string',
       description: 'Path to user data directory for persistent session storage',
-      default: path.join(os.homedir(), '.hh-automation', 'playwright-data')
+      default: path.join(os.homedir(), '.hh-automation', 'playwright-data'),
     })
     .help()
     .argv;
@@ -61,9 +61,9 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       '--disable-infobars',                 // Disable info bars (deprecated but kept for compatibility)
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
-      '--disable-crash-restore'             // Additional crash restore disable
+      '--disable-crash-restore',             // Additional crash restore disable
     ],
-    ignoreDefaultArgs: ['--enable-automation']  // Remove "Chrome is being controlled by automated test software" banner
+    ignoreDefaultArgs: ['--enable-automation'],  // Remove "Chrome is being controlled by automated test software" banner
   });
   // Use the default page created by launchPersistentContext instead of creating a new one
   // to avoid having an empty about:blank tab
@@ -99,7 +99,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     await page.waitForFunction(
       (targetUrl) => window.location.href.startsWith(targetUrl),
       START_URL,
-      { timeout: 0 } // No timeout - wait indefinitely for user to login
+      { timeout: 0 }, // No timeout - wait indefinitely for user to login
     );
 
     console.log('✅ Login successful! Proceeding with automation...');
@@ -116,11 +116,11 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     page.waitForNavigation({ timeout: 2000 }).catch(() => {
       // Navigation timeout is expected if modal opens instead of redirect
       // This is not an error, just means we stayed on the same page
-    })
+    }),
   ]);
 
   // Give additional time for any delayed redirects to complete
-  await new Promise(r => setTimeout(r, 500));
+  await new Promise(r => setTimeout(r, 2000));
 
   // Check if we're still on the target page
   const currentUrl = page.url();
@@ -129,13 +129,36 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   if (!targetPagePattern.test(currentUrl)) {
     console.log('⚠️  Redirected to a different page:', currentUrl);
     console.log('💡 This appears to be a separate application form page.');
-    console.log('💡 Please fill out the form manually and navigate back to:', START_URL);
-    console.log('🛑 Automation stopped - manual intervention required.');
-    return; // Exit gracefully without error
-  }
+    console.log('💡 Please fill out the form manually. Take as much time as you need.');
+    console.log('💡 Once done, navigate back to:', START_URL);
+    console.log('⏳ Waiting for you to return to the target page...');
 
-  // Continue with automation only if we're on the target page
-  await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
+    // Wait indefinitely for user to navigate back to target page
+    await page.waitForFunction(
+      (targetUrl) => window.location.href.startsWith(targetUrl),
+      START_URL,
+      { timeout: 0 }, // No timeout - wait indefinitely for user to return
+    );
+
+    console.log('✅ Returned to target page! Checking if modal is present...');
+
+    // Give time for page to fully load after navigation
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Check if modal is present on the page after returning
+    const modalPresent = await page.locator('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]').count() > 0;
+
+    if (!modalPresent) {
+      console.log('💡 Modal not present after return. Application may have been submitted already.');
+      console.log('✅ Automation completed successfully.');
+      return; // Exit gracefully
+    }
+
+    console.log('✅ Modal detected! Continuing with automation...');
+  } else {
+    // No redirect occurred, wait for modal to appear
+    await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
+  }
 
   const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное")').first();
   if (await addCover.count()) await addCover.click();

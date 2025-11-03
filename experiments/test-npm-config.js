@@ -10,7 +10,7 @@ const argv = yargs(hideBin(process.argv))
     alias: 'u',
     type: 'string',
     description: 'URL to navigate to',
-    default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
+    default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist',
   })
   .help()
   .argv;

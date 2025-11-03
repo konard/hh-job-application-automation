@@ -13,7 +13,7 @@ const os = require('os');
   console.log('\n✅ Test 1: Launching browser with persistent context');
   const browser = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
-    slowMo: 150
+    slowMo: 150,
   });
 
   // Use the default page created by launchPersistentContext instead of creating a new one

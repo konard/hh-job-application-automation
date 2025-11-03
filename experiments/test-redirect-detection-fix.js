@@ -31,7 +31,7 @@ async function simulateClickWithNavigationDetection(scenario) {
         }
       }).catch(() => {
         console.log('  ⏱️  No navigation detected (timeout expected)');
-      })
+      }),
     ]);
 
     // Additional delay for any late redirects
@@ -68,29 +68,29 @@ const scenarios = [
     name: 'Modal opens (no navigation)',
     navigates: false,
     finalUrl: 'https://hh.ru/search/vacancy?resume=xxx&from=resumelist',
-    expectedStopped: false
+    expectedStopped: false,
   },
   {
     name: 'Immediate redirect to application page',
     navigates: true,
     navigationDelay: 200,
     finalUrl: 'https://hh.ru/applicant/vacancy_response?vacancyId=123',
-    expectedStopped: true
+    expectedStopped: true,
   },
   {
     name: 'Delayed redirect (800ms)',
     navigates: true,
     navigationDelay: 800,
     finalUrl: 'https://hh.ru/applicant/vacancy_response?vacancyId=456',
-    expectedStopped: true
+    expectedStopped: true,
   },
   {
     name: 'Very delayed redirect (1500ms)',
     navigates: true,
     navigationDelay: 1500,
     finalUrl: 'https://hh.ru/applicant/vacancy_response?vacancyId=789',
-    expectedStopped: true
-  }
+    expectedStopped: true,
+  },
 ];
 
 // Run tests

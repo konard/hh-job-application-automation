@@ -35,7 +35,7 @@ const os = require('os');
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
       '--disable-crash-restore',            // Additional crash restore disable
-    ]
+    ],
   });
 
   const page = browser.pages()[0];

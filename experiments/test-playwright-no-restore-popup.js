@@ -21,8 +21,8 @@ const os = require('os');
       '--disable-infobars',                 // Disable info bars
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
-      '--disable-features=PasswordManager'  // Additional cleanup
-    ]
+      '--disable-features=PasswordManager',  // Additional cleanup
+    ],
   });
 
   const page = await browser.newPage();
