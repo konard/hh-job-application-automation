@@ -61,6 +61,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     headless: false,
     slowMo: 150,
     chromiumSandbox: true,  // Enable Chromium sandboxing to prevent "--no-sandbox" warning
+    viewport: null,  // Make viewport match window size (like Puppeteer's defaultViewport: null)
     args: [
       '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup (older method)
       '--hide-crash-restore-bubble',        // Hide crash restore bubble (Chrome 113+)
