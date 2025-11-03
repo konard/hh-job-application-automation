@@ -10,12 +10,12 @@ const argv1 = yargs(['--url', 'https://hh.ru/search/vacancy'])
     alias: 'u',
     type: 'string',
     description: 'URL to navigate to',
-    default: 'https://hh.ru/search/vacancy?from=resumelist'
+    default: 'https://hh.ru/search/vacancy?from=resumelist',
   })
   .option('manual-login', {
     type: 'boolean',
     description: 'Open login page and wait for manual authentication before proceeding',
-    default: false
+    default: false,
   })
   .help()
   .argv;
@@ -33,12 +33,12 @@ const argv2 = yargs(['--url', 'https://hh.ru/search/vacancy', '--manual-login'])
     alias: 'u',
     type: 'string',
     description: 'URL to navigate to',
-    default: 'https://hh.ru/search/vacancy?from=resumelist'
+    default: 'https://hh.ru/search/vacancy?from=resumelist',
   })
   .option('manual-login', {
     type: 'boolean',
     description: 'Open login page and wait for manual authentication before proceeding',
-    default: false
+    default: false,
   })
   .help()
   .argv;

@@ -18,10 +18,10 @@ const os = require('os');
         '--disable-infobars',                 // Disable info bars (deprecated but kept for compatibility)
         '--no-first-run',                     // Skip first run tasks
         '--no-default-browser-check',         // Skip default browser check
-        '--disable-crash-restore'             // Additional crash restore disable
+        '--disable-crash-restore',             // Additional crash restore disable
       ],
-      ignoreDefaultArgs: ['--enable-automation']  // This removes the automation banner
-    }
+      ignoreDefaultArgs: ['--enable-automation'],  // This removes the automation banner
+    },
   );
 
   const page = browser.pages()[0];

@@ -6,28 +6,28 @@ const testCases = [
   {
     url: 'https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist',
     expectedMatch: true,
-    description: 'Valid target page URL with query params'
+    description: 'Valid target page URL with query params',
   },
   {
     url: 'https://hh.ru/search/vacancy',
     expectedMatch: true,
-    description: 'Valid target page URL without query params'
+    description: 'Valid target page URL without query params',
   },
   {
     url: 'https://hh.ru/applicant/vacancy_response?vacancyId=127227959&employerId=723714&hhtmFrom=vacancy_search_list',
     expectedMatch: false,
-    description: 'Redirect to separate application form page'
+    description: 'Redirect to separate application form page',
   },
   {
     url: 'https://hh.ru/applicant/resumes',
     expectedMatch: false,
-    description: 'Different page on same domain'
+    description: 'Different page on same domain',
   },
   {
     url: 'https://hh.ru/search/vacancy/advanced',
     expectedMatch: true,
-    description: 'Target page with additional path'
-  }
+    description: 'Target page with additional path',
+  },
 ];
 
 const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;

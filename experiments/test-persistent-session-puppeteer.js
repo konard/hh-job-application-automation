@@ -15,7 +15,7 @@ const os = require('os');
     headless: false,
     defaultViewport: null,
     args: ['--start-maximized'],
-    userDataDir: userDataDir
+    userDataDir: userDataDir,
   });
 
   const [page] = await browser.pages();

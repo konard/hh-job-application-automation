@@ -56,8 +56,8 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       '--disable-infobars',
       '--no-first-run',
       '--no-default-browser-check',
-      '--disable-crash-restore'
-    ]
+      '--disable-crash-restore',
+    ],
   });
 
   const page = browser.pages()[0];
@@ -78,7 +78,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   await page.waitForFunction(
     (targetUrl) => !window.location.href.startsWith(targetUrl),
     TARGET_URL,
-    { timeout: 60000 } // 60 second timeout for user to click a link
+    { timeout: 60000 }, // 60 second timeout for user to click a link
   );
 
   const redirectedUrl = page.url();
@@ -92,7 +92,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   await page.waitForFunction(
     (targetUrl) => window.location.href.startsWith(targetUrl),
     TARGET_URL,
-    { timeout: 0 } // No timeout - wait indefinitely
+    { timeout: 0 }, // No timeout - wait indefinitely
   );
 
   console.log('✅ Returned to target page!');

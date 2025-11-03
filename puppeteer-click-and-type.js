@@ -32,17 +32,17 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       alias: 'u',
       type: 'string',
       description: 'URL to navigate to',
-      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
+      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist',
     })
     .option('manual-login', {
       type: 'boolean',
       description: 'Open login page and wait for manual authentication before proceeding',
-      default: false
+      default: false,
     })
     .option('user-data-dir', {
       type: 'string',
       description: 'Path to user data directory for persistent session storage',
-      default: path.join(os.homedir(), '.hh-automation', 'puppeteer-data')
+      default: path.join(os.homedir(), '.hh-automation', 'puppeteer-data'),
     })
     .help()
     .argv;
@@ -61,9 +61,9 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       '--disable-infobars',                 // Disable info bars
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
-      '--disable-crash-restore'             // Additional crash restore disable
+      '--disable-crash-restore',             // Additional crash restore disable
     ],
-    userDataDir: argv['user-data-dir']
+    userDataDir: argv['user-data-dir'],
   });
   const [page] = await browser.pages();
 
@@ -97,7 +97,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     await page.waitForFunction(
       (targetUrl) => window.location.href.startsWith(targetUrl),
       { timeout: 0 }, // No timeout - wait indefinitely for user to login
-      START_URL
+      START_URL,
     );
 
     console.log('✅ Login successful! Proceeding with automation...');
@@ -118,7 +118,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
         page.waitForNavigation({ timeout: 2000 }).catch(() => {
           // Navigation timeout is expected if modal opens instead of redirect
           // This is not an error, just means we stayed on the same page
-        })
+        }),
       ]);
       break;
     }
@@ -142,7 +142,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     await page.waitForFunction(
       (targetUrl) => window.location.href.startsWith(targetUrl),
       { timeout: 0 }, // No timeout - wait indefinitely for user to return
-      START_URL
+      START_URL,
     );
 
     console.log('✅ Returned to target page! Checking if modal is present...');

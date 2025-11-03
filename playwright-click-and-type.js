@@ -32,17 +32,17 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       alias: 'u',
       type: 'string',
       description: 'URL to navigate to',
-      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist'
+      default: process.env.npm_config_url || process.env.START_URL || 'https://hh.ru/search/vacancy?from=resumelist',
     })
     .option('manual-login', {
       type: 'boolean',
       description: 'Open login page and wait for manual authentication before proceeding',
-      default: false
+      default: false,
     })
     .option('user-data-dir', {
       type: 'string',
       description: 'Path to user data directory for persistent session storage',
-      default: path.join(os.homedir(), '.hh-automation', 'playwright-data')
+      default: path.join(os.homedir(), '.hh-automation', 'playwright-data'),
     })
     .help()
     .argv;
@@ -61,9 +61,9 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       '--disable-infobars',                 // Disable info bars (deprecated but kept for compatibility)
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
-      '--disable-crash-restore'             // Additional crash restore disable
+      '--disable-crash-restore',             // Additional crash restore disable
     ],
-    ignoreDefaultArgs: ['--enable-automation']  // Remove "Chrome is being controlled by automated test software" banner
+    ignoreDefaultArgs: ['--enable-automation'],  // Remove "Chrome is being controlled by automated test software" banner
   });
   // Use the default page created by launchPersistentContext instead of creating a new one
   // to avoid having an empty about:blank tab
@@ -99,7 +99,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     await page.waitForFunction(
       (targetUrl) => window.location.href.startsWith(targetUrl),
       START_URL,
-      { timeout: 0 } // No timeout - wait indefinitely for user to login
+      { timeout: 0 }, // No timeout - wait indefinitely for user to login
     );
 
     console.log('✅ Login successful! Proceeding with automation...');
@@ -116,7 +116,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     page.waitForNavigation({ timeout: 2000 }).catch(() => {
       // Navigation timeout is expected if modal opens instead of redirect
       // This is not an error, just means we stayed on the same page
-    })
+    }),
   ]);
 
   // Give additional time for any delayed redirects to complete
@@ -137,7 +137,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     await page.waitForFunction(
       (targetUrl) => window.location.href.startsWith(targetUrl),
       START_URL,
-      { timeout: 0 } // No timeout - wait indefinitely for user to return
+      { timeout: 0 }, // No timeout - wait indefinitely for user to return
     );
 
     console.log('✅ Returned to target page! Checking if modal is present...');

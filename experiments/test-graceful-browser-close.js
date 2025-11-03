@@ -58,8 +58,8 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       '--disable-infobars',                 // Disable info bars
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
-      '--disable-crash-restore'             // Additional crash restore disable
-    ]
+      '--disable-crash-restore',             // Additional crash restore disable
+    ],
   });
 
   const page = browser.pages()[0];
