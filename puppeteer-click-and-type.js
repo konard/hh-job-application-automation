@@ -82,11 +82,22 @@ const os = require('os');
   const links = await page.$$('a');
   for (const link of links) {
     const txt = (await page.evaluate(el => el.textContent.trim(), link)) || '';
-    if (txt === 'Откликнуться') { await link.click(); break; }
+    if (txt === 'Откликнуться') {
+      // Use Promise.race to handle both navigation and modal popup scenarios
+      await Promise.race([
+        link.click(),
+        // Wait for navigation with a timeout - if navigation happens, this resolves
+        page.waitForNavigation({ timeout: 2000 }).catch(() => {
+          // Navigation timeout is expected if modal opens instead of redirect
+          // This is not an error, just means we stayed on the same page
+        })
+      ]);
+      break;
+    }
   }
 
-  // Wait a moment for potential navigation/redirect
-  await new Promise(r => setTimeout(r, 1000));
+  // Give additional time for any delayed redirects to complete
+  await new Promise(r => setTimeout(r, 500));
 
   // Check if we're still on the target page
   const currentUrl = page.url();
