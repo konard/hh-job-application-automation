@@ -12,13 +12,12 @@ const os = require('os');
       headless: false,
       slowMo: 150,
       args: [
-        '--disable-blink-features=AutomationControlled',  // Additional automation detection prevention
         '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup (older method)
         '--hide-crash-restore-bubble',        // Hide crash restore bubble (Chrome 113+)
         '--disable-infobars',                 // Disable info bars (deprecated but kept for compatibility)
         '--no-first-run',                     // Skip first run tasks
         '--no-default-browser-check',         // Skip default browser check
-        '--disable-crash-restore',             // Additional crash restore disable
+        '--disable-crash-restore',            // Additional crash restore disable
       ],
       ignoreDefaultArgs: ['--enable-automation'],  // This removes the automation banner
     },
