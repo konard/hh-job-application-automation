@@ -16,7 +16,9 @@ const os = require('os');
     slowMo: 150
   });
 
-  const page = await browser.newPage();
+  // Use the default page created by launchPersistentContext instead of creating a new one
+  // to avoid having an empty about:blank tab
+  const page = browser.pages()[0];
   console.log('✅ Browser launched successfully with persistent storage');
 
   // Test case 2: Navigate to a test page

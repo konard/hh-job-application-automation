@@ -41,7 +41,9 @@ const os = require('os');
       '--no-default-browser-check'          // Skip default browser check
     ]
   });
-  const page = await browser.newPage();
+  // Use the default page created by launchPersistentContext instead of creating a new one
+  // to avoid having an empty about:blank tab
+  const page = browser.pages()[0];
 
   // Detect tab close event and exit gracefully
   page.on('close', () => {
