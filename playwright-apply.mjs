@@ -89,10 +89,15 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       description: 'Interval in seconds to wait between job application button clicks',
       default: 20,
     })
+    .option('message', {
+      alias: 'm',
+      type: 'string',
+      description: 'Message to send with job application',
+    })
     .help()
     .argv;
 
-  const MESSAGE = process.env.MESSAGE || `В какой форме предлагается юридическое оформление удалённой работы?
+  const MESSAGE = argv.message || process.env.MESSAGE || `В какой форме предлагается юридическое оформление удалённой работы?
 
 Посмотреть мой код на GitHub можно тут:
 
@@ -265,14 +270,48 @@ github.com/link-foundation`;
     // No redirect occurred, wait for modal to appear
     await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
 
+    // Issue #47 Fix 2: Check for 200 application limit error
+    const limitErrorSelector = '[data-qa-popup-error-code="negotiations-limit-exceeded"]';
+    const limitError = page.locator(limitErrorSelector);
+    const hasLimitError = await limitError.count() > 0;
+
+    if (hasLimitError) {
+      console.log('⚠️  Limit reached: 200 applications in 24 hours');
+      console.log('💤 Waiting 1 hour before retrying...');
+
+      // Close the modal
+      const closeButton = page.locator('[data-qa="response-popup-close"]');
+      if (await closeButton.count() > 0) {
+        await closeButton.click();
+        console.log('✅ Closed the application modal');
+      }
+
+      // Wait 1 hour (3600 seconds)
+      const oneHourInMs = 60 * 60 * 1000;
+      await new Promise(r => setTimeout(r, oneHourInMs));
+
+      console.log('🔄 Refreshing the page after wait period...');
+      await page.goto(START_URL);
+      await new Promise(r => setTimeout(r, 2000)); // Wait for page to load
+
+      // Continue to next iteration to try again
+      continue;
+    }
+
     const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное")').first();
     if (await addCover.count()) await addCover.click();
 
     const textarea = page.locator('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
     await textarea.click();
-    await textarea.type(MESSAGE);
 
-    console.log('✅ Playwright: typed message successfully');
+    // Issue #47 Fix 1: Only type if textarea is empty to prevent double typing
+    const currentValue = await textarea.inputValue();
+    if (!currentValue || currentValue.trim() === '') {
+      await textarea.type(MESSAGE);
+      console.log('✅ Playwright: typed message successfully');
+    } else {
+      console.log('⏭️  Playwright: textarea already contains text, skipping typing to prevent double entry');
+    }
 
     // Verify textarea contains the expected message
     const textareaValue = await textarea.inputValue();
