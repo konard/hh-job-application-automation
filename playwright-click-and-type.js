@@ -25,7 +25,7 @@ async function disableTranslateInPreferences(userDataDir) {
     try {
       const content = await fs.readFile(preferencesPath, 'utf8');
       preferences = JSON.parse(content);
-    } catch (err) {
+    } catch {
       // File doesn't exist yet, start with empty preferences
       console.log('📝 Creating new Preferences file...');
     }
