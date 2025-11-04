@@ -3,8 +3,46 @@ const yargs = require('yargs/yargs');
 const { hideBin } = require('yargs/helpers');
 const path = require('path');
 const os = require('os');
+const fs = require('fs').promises;
 
 let browser = null;
+
+/**
+ * Disables Chrome translate feature by modifying the Preferences file
+ * @param {string} userDataDir - Path to Chrome user data directory
+ */
+async function disableTranslateInPreferences(userDataDir) {
+  const preferencesPath = path.join(userDataDir, 'Default', 'Preferences');
+  const defaultDir = path.join(userDataDir, 'Default');
+
+  try {
+    // Ensure Default directory exists
+    await fs.mkdir(defaultDir, { recursive: true });
+
+    let preferences = {};
+
+    // Try to read existing preferences
+    try {
+      const content = await fs.readFile(preferencesPath, 'utf8');
+      preferences = JSON.parse(content);
+    } catch (err) {
+      // File doesn't exist yet, start with empty preferences
+      console.log('📝 Creating new Preferences file...');
+    }
+
+    // Set translate to disabled
+    if (!preferences.translate) {
+      preferences.translate = {};
+    }
+    preferences.translate.enabled = false;
+
+    // Write back to file
+    await fs.writeFile(preferencesPath, JSON.stringify(preferences, null, 2), 'utf8');
+    console.log('✅ Translation disabled in Preferences file');
+  } catch (error) {
+    console.error('⚠️  Warning: Could not modify Preferences file:', error.message);
+  }
+}
 
 // Handle graceful shutdown on exit signals
 async function gracefulShutdown(signal) {
@@ -62,6 +100,9 @@ github.com/linksplatform
 github.com/link-foundation`;
   const START_URL = argv.url;
 
+  // Disable translate in Preferences before launching browser
+  await disableTranslateInPreferences(argv['user-data-dir']);
+
   // Launch browser with persistent user data directory to save cookies and session data
   browser = await puppeteer.launch({
     headless: false,
@@ -74,8 +115,6 @@ github.com/link-foundation`;
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
       '--disable-crash-restore',             // Additional crash restore disable
-      '--disable-translate',                // Disable Google Translate feature
-      '--disable-features=Translate',       // Disable translate features
     ],
     userDataDir: argv['user-data-dir'],
   });

@@ -1,12 +1,55 @@
 const { chromium } = require('playwright');
 const path = require('path');
 const os = require('os');
+const fs = require('fs').promises;
+
+/**
+ * Disables Chrome translate feature by modifying the Preferences file
+ * @param {string} userDataDir - Path to Chrome user data directory
+ */
+async function disableTranslateInPreferences(userDataDir) {
+  const preferencesPath = path.join(userDataDir, 'Default', 'Preferences');
+  const defaultDir = path.join(userDataDir, 'Default');
+
+  try {
+    // Ensure Default directory exists
+    await fs.mkdir(defaultDir, { recursive: true });
+
+    let preferences = {};
+
+    // Try to read existing preferences
+    try {
+      const content = await fs.readFile(preferencesPath, 'utf8');
+      preferences = JSON.parse(content);
+    } catch (err) {
+      // File doesn't exist yet, start with empty preferences
+      console.log('📝 Creating new Preferences file...');
+    }
+
+    // Set translate to disabled
+    if (!preferences.translate) {
+      preferences.translate = {};
+    }
+    preferences.translate.enabled = false;
+
+    // Write back to file
+    await fs.writeFile(preferencesPath, JSON.stringify(preferences, null, 2), 'utf8');
+    console.log('✅ Translation disabled in Preferences file');
+  } catch (error) {
+    console.error('⚠️  Warning: Could not modify Preferences file:', error.message);
+  }
+}
 
 (async () => {
   console.log('🧪 Testing translation disable configuration in Playwright...');
 
+  const userDataDir = path.join(os.homedir(), '.hh-automation', 'playwright-test-translation');
+
+  // Disable translate in Preferences before launching browser
+  await disableTranslateInPreferences(userDataDir);
+
   const browser = await chromium.launchPersistentContext(
-    path.join(os.homedir(), '.hh-automation', 'playwright-test-translation'),
+    userDataDir,
     {
       headless: false,
       slowMo: 150,
@@ -19,8 +62,6 @@ const os = require('os');
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-crash-restore',
-        '--disable-translate',                // Disable Google Translate feature
-        '--disable-features=Translate',       // Disable translate features
       ],
       ignoreDefaultArgs: ['--enable-automation'],
     },
