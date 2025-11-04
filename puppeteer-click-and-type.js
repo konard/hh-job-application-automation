@@ -74,6 +74,8 @@ github.com/link-foundation`;
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
       '--disable-crash-restore',             // Additional crash restore disable
+      '--disable-translate',                // Disable Google Translate feature
+      '--disable-features=Translate',       // Disable translate features
     ],
     userDataDir: argv['user-data-dir'],
   });
