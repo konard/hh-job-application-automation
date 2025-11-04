@@ -1,9 +1,11 @@
-const { chromium } = require('playwright');
-const yargs = require('yargs/yargs');
-const { hideBin } = require('yargs/helpers');
-const path = require('path');
-const os = require('os');
-const fs = require('fs').promises;
+#!/usr/bin/env node
+
+import { chromium } from 'playwright';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import path from 'path';
+import os from 'os';
+import fs from 'fs/promises';
 
 let browser = null;
 

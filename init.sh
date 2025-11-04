@@ -61,8 +61,10 @@ cat > inbrowser-clicks.js <<'EOF'
 EOF
 
 # --- 2️⃣ Playwright version ---
-cat > playwright-click-and-type.js <<EOF
-const { chromium } = require('playwright');
+cat > playwright-apply.mjs <<EOF
+#!/usr/bin/env node
+
+import { chromium } from 'playwright';
 
 (async () => {
   const MESSAGE = process.env.MESSAGE || '$MSG';
@@ -90,8 +92,10 @@ const { chromium } = require('playwright');
 EOF
 
 # --- 3️⃣ Puppeteer version ---
-cat > puppeteer-click-and-type.js <<EOF
-const puppeteer = require('puppeteer');
+cat > puppeteer-apply.mjs <<EOF
+#!/usr/bin/env node
+
+import puppeteer from 'puppeteer';
 
 (async () => {
   const MESSAGE = process.env.MESSAGE || '$MSG';
@@ -134,10 +138,15 @@ EOF
 node -e '
 const fs=require("fs");
 const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+pkg.type="module";
+pkg.bin={
+  "playwright-apply":"./playwright-apply.mjs",
+  "puppeteer-apply":"./puppeteer-apply.mjs"
+};
 pkg.scripts={
-  "console":"echo 'Open hh.ru in browser → copy inbrowser-clicks.js → paste in DevTools'",
-  "playwright":"node playwright-click-and-type.js",
-  "puppeteer":"node puppeteer-click-and-type.js"
+  "console":"echo '\''Open hh.ru in browser → copy inbrowser-clicks.js → paste in DevTools'\''",
+  "playwright":"node playwright-apply.mjs",
+  "puppeteer":"node puppeteer-apply.mjs"
 };
 fs.writeFileSync("package.json", JSON.stringify(pkg,null,2));
 '

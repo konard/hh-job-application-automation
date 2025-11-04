@@ -22,6 +22,7 @@ github.com/link-foundation
 
 ### Puppeteer
 
+Using npm script:
 ```bash
 npm run puppeteer -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7
 ```
@@ -32,8 +33,19 @@ With custom message:
 npm run puppeteer -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7 --message "Your custom application message here"
 ```
 
+Direct execution:
+```bash
+./puppeteer-apply.mjs --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7
+```
+
+Using globally installed CLI (after `npm install -g`):
+```bash
+puppeteer-apply --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7
+```
+
 ### Playwright
 
+Using npm script:
 ```bash
 npm run playwright -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7
 ```
@@ -42,4 +54,14 @@ With custom message:
 
 ```bash
 npm run playwright -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7 --message "Your custom application message here"
+```
+
+Direct execution:
+```bash
+./playwright-apply.mjs --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7
+```
+
+Using globally installed CLI (after `npm install -g`):
+```bash
+playwright-apply --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 7
 ```

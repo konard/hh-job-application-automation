@@ -1,7 +1,8 @@
 // ESLint flat configuration (v9+)
-module.exports = [
+export default [
+  // CommonJS files (experiments/)
   {
-    files: ['**/*.js'],
+    files: ['experiments/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',
@@ -18,6 +19,46 @@ module.exports = [
         setInterval: 'readonly',
         clearInterval: 'readonly',
         // Browser globals - used in page.evaluate() contexts and inbrowser-clicks.js
+        window: 'readonly',
+        document: 'readonly',
+      },
+    },
+    rules: {
+      // Possible Errors
+      'no-console': 'off', // Console is used extensively for user communication
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^(playwrightCode|puppeteerCode|form|hideBin)$' }],
+      'no-undef': 'error',
+
+      // Best Practices
+      'eqeqeq': ['error', 'always'],
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-with': 'error',
+
+      // Style
+      'indent': ['error', 2],
+      'quotes': ['error', 'single', { avoidEscape: true }],
+      'semi': ['error', 'always'],
+      'comma-dangle': ['error', 'always-multiline'],
+      'no-trailing-spaces': 'error',
+      'eol-last': ['error', 'always'],
+    },
+  },
+  // ES modules files (.mjs and other .js files)
+  {
+    files: ['**/*.mjs', '*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        // Browser globals - used in page.evaluate() contexts
         window: 'readonly',
         document: 'readonly',
       },
