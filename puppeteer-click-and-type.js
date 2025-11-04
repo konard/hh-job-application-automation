@@ -87,10 +87,15 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       description: 'Interval in seconds to wait between job application button clicks',
       default: 20,
     })
+    .option('message', {
+      alias: 'm',
+      type: 'string',
+      description: 'Message to send with job application',
+    })
     .help()
     .argv;
 
-  const MESSAGE = process.env.MESSAGE || `В какой форме предлагается юридическое оформление удалённой работы?
+  const MESSAGE = argv.message || process.env.MESSAGE || `В какой форме предлагается юридическое оформление удалённой работы?
 
 Посмотреть мой код на GitHub можно тут:
 
