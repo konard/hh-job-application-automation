@@ -1,9 +1,11 @@
-const puppeteer = require('puppeteer');
-const yargs = require('yargs/yargs');
-const { hideBin } = require('yargs/helpers');
-const path = require('path');
-const os = require('os');
-const fs = require('fs').promises;
+#!/usr/bin/env node
+
+import { chromium } from 'playwright';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import path from 'path';
+import os from 'os';
+import fs from 'fs/promises';
 
 let browser = null;
 
@@ -80,7 +82,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     .option('user-data-dir', {
       type: 'string',
       description: 'Path to user data directory for persistent session storage',
-      default: path.join(os.homedir(), '.hh-automation', 'puppeteer-data'),
+      default: path.join(os.homedir(), '.hh-automation', 'playwright-data'),
     })
     .option('job-application-interval', {
       type: 'number',
@@ -100,25 +102,34 @@ github.com/linksplatform
 github.com/link-foundation`;
   const START_URL = argv.url;
 
+  // Set environment variables to suppress "Google API keys are missing" warning
+  // This prevents the infobar from appearing and causing page layout issues
+  process.env.GOOGLE_API_KEY = 'no';
+  process.env.GOOGLE_DEFAULT_CLIENT_ID = 'no';
+  process.env.GOOGLE_DEFAULT_CLIENT_SECRET = 'no';
+
   // Disable translate in Preferences before launching browser
   await disableTranslateInPreferences(argv['user-data-dir']);
 
-  // Launch browser with persistent user data directory to save cookies and session data
-  browser = await puppeteer.launch({
+  // Launch browser with persistent context to save cookies and session data
+  browser = await chromium.launchPersistentContext(argv['user-data-dir'], {
     headless: false,
-    defaultViewport: null,
+    slowMo: 150,
+    chromiumSandbox: true,  // Enable Chromium sandboxing to prevent "--no-sandbox" warning
+    viewport: null,  // Make viewport match window size (like Puppeteer's defaultViewport: null)
     args: [
-      '--start-maximized',
       '--disable-session-crashed-bubble',  // Disable the "Restore pages?" popup (older method)
       '--hide-crash-restore-bubble',        // Hide crash restore bubble (Chrome 113+)
-      '--disable-infobars',                 // Disable info bars
+      '--disable-infobars',                 // Disable info bars (deprecated but kept for compatibility)
       '--no-first-run',                     // Skip first run tasks
       '--no-default-browser-check',         // Skip default browser check
-      '--disable-crash-restore',             // Additional crash restore disable
+      '--disable-crash-restore',            // Additional crash restore disable
     ],
-    userDataDir: argv['user-data-dir'],
+    ignoreDefaultArgs: ['--enable-automation'],  // Remove "Chrome is being controlled by automated test software" banner
   });
-  const [page] = await browser.pages();
+  // Use the default page created by launchPersistentContext instead of creating a new one
+  // to avoid having an empty about:blank tab
+  const page = browser.pages()[0];
 
   // Track if page was closed by user to handle graceful shutdown
   let pageClosedByUser = false;
@@ -179,7 +190,7 @@ github.com/link-foundation`;
     console.log('🔐 Opening login page for manual authentication...');
     console.log('📍 Login URL:', loginUrl);
 
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
+    await page.goto(loginUrl);
 
     console.log('💡 The browser will automatically continue once you are redirected to:', START_URL);
 
@@ -190,7 +201,7 @@ github.com/link-foundation`;
       console.log('✅ Login successful! Proceeding with automation...');
     }
   } else {
-    await page.goto(START_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto(START_URL);
   }
 
   const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;
@@ -199,25 +210,18 @@ github.com/link-foundation`;
   // Main loop to process all "Откликнуться" buttons
   while (true) {
     // Get all "Откликнуться" buttons on the current page
-    await page.waitForSelector('a');
-    const links = await page.$$('a');
-    const openButtons = [];
-    for (const link of links) {
-      const txt = (await page.evaluate(el => el.textContent.trim(), link)) || '';
-      if (txt === 'Откликнуться') {
-        openButtons.push(link);
-      }
-    }
+    const openButtons = page.locator('a', { hasText: 'Откликнуться' });
+    const buttonCount = await openButtons.count();
 
-    if (openButtons.length === 0) {
+    if (buttonCount === 0) {
       console.log('✅ No more "Откликнуться" buttons found. Automation completed successfully.');
       break;
     }
 
-    console.log(`📋 Found ${openButtons.length} "Откликнуться" button(s). Processing next button...`);
+    console.log(`📋 Found ${buttonCount} "Откликнуться" button(s). Processing next button...`);
 
     // Always click the first available button (as processed buttons will be removed from the list)
-    const openBtn = openButtons[0];
+    const openBtn = openButtons.first();
 
     // Use Promise.race to handle both navigation and modal popup scenarios
     await Promise.race([
@@ -259,32 +263,27 @@ github.com/link-foundation`;
     }
 
     // No redirect occurred, wait for modal to appear
-    await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]', { visible: true });
+    await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
 
-    // Click "Добавить сопроводительное"
-    const nodes = await page.$$('button, a, span');
-    for (const el of nodes) {
-      const txt = (await page.evaluate(el => el.textContent.trim(), el)) || '';
-      if (txt === 'Добавить сопроводительное') { await el.click(); break; }
-    }
+    const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное")').first();
+    if (await addCover.count()) await addCover.click();
 
-    // Activate textarea and type
-    await page.waitForSelector('textarea[data-qa="vacancy-response-popup-form-letter-input"]', { visible: true });
-    await page.click('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
-    await page.type('textarea[data-qa="vacancy-response-popup-form-letter-input"]', MESSAGE);
+    const textarea = page.locator('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
+    await textarea.click();
+    await textarea.type(MESSAGE);
 
-    console.log('✅ Puppeteer: typed message successfully');
+    console.log('✅ Playwright: typed message successfully');
 
     // Verify textarea contains the expected message
-    const textareaValue = await page.$eval('textarea[data-qa="vacancy-response-popup-form-letter-input"]', el => el.value);
+    const textareaValue = await textarea.inputValue();
     if (textareaValue === MESSAGE) {
-      console.log('✅ Puppeteer: verified textarea contains target message');
+      console.log('✅ Playwright: verified textarea contains target message');
 
       // Click the "Откликнуться" submit button
-      await page.click('[data-qa="vacancy-response-submit-popup"]');
-      console.log('✅ Puppeteer: clicked submit button');
+      await page.locator('[data-qa="vacancy-response-submit-popup"]').click();
+      console.log('✅ Playwright: clicked submit button');
     } else {
-      console.error('❌ Puppeteer: textarea value does not match expected message');
+      console.error('❌ Playwright: textarea value does not match expected message');
       console.error('Expected:', MESSAGE);
       console.error('Actual:', textareaValue);
     }
