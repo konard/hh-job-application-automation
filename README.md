@@ -1,6 +1,8 @@
 # hh-job-application-automation
 Automation of job application in hh.ru
 
+Video demonstration:
+
 https://github.com/user-attachments/assets/6884b2fe-e322-4358-aab8-7f3c20ccdc46
 
 Application message example:
