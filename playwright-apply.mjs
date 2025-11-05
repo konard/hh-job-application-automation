@@ -268,7 +268,23 @@ github.com/link-foundation`;
     }
 
     // No redirect occurred, wait for modal to appear
-    await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
+    // Issue #53 Fix: Handle timeout gracefully when modal doesn't appear
+    let modalAppeared = false;
+    try {
+      await page.waitForSelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]', {
+        timeout: 10000, // 10 second timeout
+      });
+      modalAppeared = true;
+    } catch {
+      console.log('⚠️  Modal did not appear within timeout. This may be a different type of vacancy response.');
+      console.log('💡 Skipping this button and moving to the next one...');
+      // Continue to next iteration to try the next button
+      continue;
+    }
+
+    if (!modalAppeared) {
+      continue; // Safety check, should not reach here
+    }
 
     // Issue #47 Fix 2: Check for 200 application limit error
     const limitErrorSelector = '[data-qa-popup-error-code="negotiations-limit-exceeded"]';
