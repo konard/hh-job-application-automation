@@ -342,11 +342,12 @@ github.com/link-foundation`;
       process.exit(1);
     }
 
-    // Click "Добавить сопроводительное"
-    const nodes = await page.$$('button, a, span');
+    // Click "Добавить сопроводительное" or element with data-qa="add-cover-letter"
+    const nodes = await page.$$('button, a, span, div');
     for (const el of nodes) {
       const txt = (await page.evaluate(el => el.textContent.trim(), el)) || '';
-      if (txt === 'Добавить сопроводительное') { await el.click(); break; }
+      const dataQa = (await page.evaluate(el => el.getAttribute('data-qa'), el)) || '';
+      if (txt === 'Добавить сопроводительное' || dataQa === 'add-cover-letter') { await el.click(); break; }
     }
 
     // Activate textarea and type
