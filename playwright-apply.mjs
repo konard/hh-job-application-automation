@@ -314,6 +314,36 @@ github.com/link-foundation`;
       continue;
     }
 
+    // Issue #55 Fix: Check if submit button is disabled
+    const submitButton = page.locator('[data-qa="vacancy-response-submit-popup"]');
+    const isButtonDisabled = await submitButton.evaluate(el => el.hasAttribute('disabled') || el.classList.contains('disabled'));
+
+    if (isButtonDisabled) {
+      console.error('❌ Application button is disabled!');
+
+      // Try to extract the error/warning message from the modal
+      try {
+        // Get all text content from the modal to find the reason
+        const modalForm = page.locator('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
+        const modalText = await modalForm.innerText();
+
+        // Log the reason from the modal
+        console.error('📋 Reason from modal:');
+        console.error(modalText);
+      } catch {
+        console.error('⚠️  Could not extract detailed error message from modal');
+      }
+
+      console.error('');
+      console.error('💡 Please resolve this issue and try again.');
+
+      // Close browser and exit with error
+      if (browser) {
+        await browser.close();
+      }
+      process.exit(1);
+    }
+
     const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное")').first();
     if (await addCover.count()) await addCover.click();
 
