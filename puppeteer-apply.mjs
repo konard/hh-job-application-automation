@@ -169,8 +169,14 @@ github.com/link-foundation`;
         if (pageClosedByUser) {
           return;
         }
-        // Log error but continue retrying (transient errors are expected)
-        console.log(`⚠️  Temporary error while checking URL: ${error.message.substring(0, 100)}... (retrying)`);
+        // Silently ignore detached frame errors - these occur when user switches tabs
+        // and are expected behavior. The loop will continue checking and will succeed
+        // once the user returns to the main tab.
+        const isDetachedFrameError = error.message && error.message.includes('detached Frame');
+        if (!isDetachedFrameError) {
+          // Only log non-detached-frame errors
+          console.log(`⚠️  Temporary error while checking URL: ${error.message.substring(0, 100)}... (retrying)`);
+        }
       }
 
       // Wait before next check
