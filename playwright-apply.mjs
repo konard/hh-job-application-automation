@@ -344,7 +344,7 @@ github.com/link-foundation`;
       process.exit(1);
     }
 
-    const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное"), [data-qa="add-cover-letter"]').first();
+    const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное"), [data-qa="add-cover-letter"], [data-qa="vacancy-response-letter-toggle"]').first();
     if (await addCover.count()) await addCover.click();
 
     const textarea = page.locator('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
