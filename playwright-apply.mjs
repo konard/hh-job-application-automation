@@ -226,6 +226,22 @@ github.com/link-foundation`;
   async function handleVacancyResponsePage() {
     console.log('📝 Detected vacancy_response page, handling application form...');
 
+    // First, try to click the toggle button to expand the cover letter section if it's collapsed
+    try {
+      const toggleButton = page.locator('[data-qa="vacancy-response-letter-toggle"]');
+      const toggleExists = await toggleButton.count() > 0;
+      if (toggleExists) {
+        console.log('🔘 Cover letter section is collapsed, clicking toggle to expand...');
+        await toggleButton.click();
+        // Wait a moment for the expand animation to complete
+        await new Promise(r => setTimeout(r, 500));
+        console.log('✅ Cover letter section expanded');
+      }
+    } catch {
+      // Toggle button might not exist if the section is already expanded
+      console.log('💡 Toggle button not found, cover letter section may already be expanded');
+    }
+
     // Wait for the textarea to be visible
     const textarea = page.locator('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
     try {
