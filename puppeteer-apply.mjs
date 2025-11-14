@@ -318,36 +318,6 @@ github.com/link-foundation`;
       continue;
     }
 
-    // Issue #55 Fix: Check if submit button is disabled
-    const submitButton = await page.$('[data-qa="vacancy-response-submit-popup"]');
-    const isButtonDisabled = await page.evaluate(el => el.hasAttribute('disabled') || el.classList.contains('disabled'), submitButton);
-
-    if (isButtonDisabled) {
-      console.error('❌ Application button is disabled!');
-
-      // Try to extract the error/warning message from the modal
-      try {
-        // Get all text content from the modal to find the reason
-        const modalForm = await page.$('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
-        const modalText = await page.evaluate(el => el.innerText, modalForm);
-
-        // Log the reason from the modal
-        console.error('📋 Reason from modal:');
-        console.error(modalText);
-      } catch {
-        console.error('⚠️  Could not extract detailed error message from modal');
-      }
-
-      console.error('');
-      console.error('💡 Please resolve this issue and try again.');
-
-      // Close browser and exit with error
-      if (browser) {
-        await browser.close();
-      }
-      process.exit(1);
-    }
-
     // Click "Добавить сопроводительное" or element with data-qa="add-cover-letter" or data-qa="vacancy-response-letter-toggle"
     const nodes = await page.$$('button, a, span, div');
     for (const el of nodes) {
@@ -373,15 +343,47 @@ github.com/link-foundation`;
     const textareaValue = await page.$eval('textarea[data-qa="vacancy-response-popup-form-letter-input"]', el => el.value);
     if (textareaValue === MESSAGE) {
       console.log('✅ Puppeteer: verified textarea contains target message');
-
-      // Click the "Откликнуться" submit button
-      await page.click('[data-qa="vacancy-response-submit-popup"]');
-      console.log('✅ Puppeteer: clicked submit button');
     } else {
       console.error('❌ Puppeteer: textarea value does not match expected message');
       console.error('Expected:', MESSAGE);
       console.error('Actual:', textareaValue);
     }
+
+    // Issue #63 Fix: Check if submit button is disabled AFTER entering the message
+    // This is important because some vacancies require a cover letter, and the button
+    // is disabled until the message is entered
+    const submitButton = await page.$('[data-qa="vacancy-response-submit-popup"]');
+    const isButtonDisabled = await page.evaluate(el => el.hasAttribute('disabled') || el.classList.contains('disabled'), submitButton);
+
+    if (isButtonDisabled) {
+      console.error('❌ Application button is still disabled after entering the message!');
+
+      // Try to extract the error/warning message from the modal
+      try {
+        // Get all text content from the modal to find the reason
+        const modalForm = await page.$('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]');
+        const modalText = await page.evaluate(el => el.innerText, modalForm);
+
+        // Log the reason from the modal
+        console.error('📋 Reason from modal:');
+        console.error(modalText);
+      } catch {
+        console.error('⚠️  Could not extract detailed error message from modal');
+      }
+
+      console.error('');
+      console.error('💡 Please resolve this issue and try again.');
+
+      // Close browser and exit with error
+      if (browser) {
+        await browser.close();
+      }
+      process.exit(1);
+    }
+
+    // Click the "Откликнуться" submit button
+    await page.click('[data-qa="vacancy-response-submit-popup"]');
+    console.log('✅ Puppeteer: clicked submit button');
 
     // Wait for the modal to close after submission
     await new Promise(r => setTimeout(r, 2000));
