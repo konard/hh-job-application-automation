@@ -320,12 +320,39 @@ github.com/link-foundation`;
       continue;
     }
 
-    // Issue #55 Fix: Check if submit button is disabled
+    const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное"), [data-qa="add-cover-letter"], [data-qa="vacancy-response-letter-toggle"]').first();
+    if (await addCover.count()) await addCover.click();
+
+    const textarea = page.locator('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
+    await textarea.click();
+
+    // Issue #47 Fix 1: Only type if textarea is empty to prevent double typing
+    const currentValue = await textarea.inputValue();
+    if (!currentValue || currentValue.trim() === '') {
+      await textarea.type(MESSAGE);
+      console.log('✅ Playwright: typed message successfully');
+    } else {
+      console.log('⏭️  Playwright: textarea already contains text, skipping typing to prevent double entry');
+    }
+
+    // Verify textarea contains the expected message
+    const textareaValue = await textarea.inputValue();
+    if (textareaValue === MESSAGE) {
+      console.log('✅ Playwright: verified textarea contains target message');
+    } else {
+      console.error('❌ Playwright: textarea value does not match expected message');
+      console.error('Expected:', MESSAGE);
+      console.error('Actual:', textareaValue);
+    }
+
+    // Issue #63 Fix: Check if submit button is disabled AFTER entering the message
+    // This is important because some vacancies require a cover letter, and the button
+    // is disabled until the message is entered
     const submitButton = page.locator('[data-qa="vacancy-response-submit-popup"]');
     const isButtonDisabled = await submitButton.evaluate(el => el.hasAttribute('disabled') || el.classList.contains('disabled'));
 
     if (isButtonDisabled) {
-      console.error('❌ Application button is disabled!');
+      console.error('❌ Application button is still disabled after entering the message!');
 
       // Try to extract the error/warning message from the modal
       try {
@@ -350,34 +377,9 @@ github.com/link-foundation`;
       process.exit(1);
     }
 
-    const addCover = page.locator('button:has-text("Добавить сопроводительное"), a:has-text("Добавить сопроводительное"), [data-qa="add-cover-letter"], [data-qa="vacancy-response-letter-toggle"]').first();
-    if (await addCover.count()) await addCover.click();
-
-    const textarea = page.locator('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
-    await textarea.click();
-
-    // Issue #47 Fix 1: Only type if textarea is empty to prevent double typing
-    const currentValue = await textarea.inputValue();
-    if (!currentValue || currentValue.trim() === '') {
-      await textarea.type(MESSAGE);
-      console.log('✅ Playwright: typed message successfully');
-    } else {
-      console.log('⏭️  Playwright: textarea already contains text, skipping typing to prevent double entry');
-    }
-
-    // Verify textarea contains the expected message
-    const textareaValue = await textarea.inputValue();
-    if (textareaValue === MESSAGE) {
-      console.log('✅ Playwright: verified textarea contains target message');
-
-      // Click the "Откликнуться" submit button
-      await page.locator('[data-qa="vacancy-response-submit-popup"]').click();
-      console.log('✅ Playwright: clicked submit button');
-    } else {
-      console.error('❌ Playwright: textarea value does not match expected message');
-      console.error('Expected:', MESSAGE);
-      console.error('Actual:', textareaValue);
-    }
+    // Click the "Откликнуться" submit button
+    await page.locator('[data-qa="vacancy-response-submit-popup"]').click();
+    console.log('✅ Playwright: clicked submit button');
 
     // Wait for the modal to close after submission
     await new Promise(r => setTimeout(r, 2000));
