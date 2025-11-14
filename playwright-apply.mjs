@@ -216,7 +216,79 @@ github.com/link-foundation`;
   }
 
   const targetPagePattern = /^https:\/\/hh\.ru\/search\/vacancy/;
+  const vacancyResponsePattern = /^https:\/\/hh\.ru\/applicant\/vacancy_response\?vacancyId=/;
   const BUTTON_CLICK_INTERVAL = argv['job-application-interval'] * 1000; // Convert seconds to milliseconds
+
+  /**
+   * Handle the vacancy_response page by prefilling the message and optionally clicking submit
+   * Issue #65: Prefill message on vacancy_response page and only auto-click if no other text fields exist
+   */
+  async function handleVacancyResponsePage() {
+    console.log('📝 Detected vacancy_response page, handling application form...');
+
+    // Wait for the textarea to be visible
+    const textarea = page.locator('textarea[data-qa="vacancy-response-popup-form-letter-input"]');
+    try {
+      await textarea.waitFor({ state: 'visible', timeout: 5000 });
+    } catch {
+      console.log('⚠️  Cover letter textarea not found on vacancy_response page');
+      return;
+    }
+
+    // Check if textarea is already filled
+    const currentValue = await textarea.inputValue();
+    if (!currentValue || currentValue.trim() === '') {
+      // Click on textarea to activate it
+      await textarea.click();
+      // Type the message
+      await textarea.type(MESSAGE);
+      console.log('✅ Prefilled cover letter message');
+    } else {
+      console.log('⏭️  Cover letter already contains text, skipping prefill');
+    }
+
+    // Count all textareas on the page
+    const allTextareas = page.locator('textarea');
+    const textareaCount = await allTextareas.count();
+
+    console.log(`📊 Found ${textareaCount} textarea(s) on the page`);
+
+    // Only auto-click submit if there is exactly 1 textarea (the cover letter one)
+    if (textareaCount === 1) {
+      console.log('✅ Only one textarea found, safe to auto-submit');
+
+      // Check if submit button is disabled
+      const submitButton = page.locator('[data-qa="vacancy-response-submit-popup"]');
+      const buttonExists = await submitButton.count() > 0;
+      if (!buttonExists) {
+        console.log('⚠️  Submit button not found');
+        return;
+      }
+
+      const isButtonDisabled = await submitButton.evaluate(el => el.hasAttribute('disabled') || el.classList.contains('disabled'));
+
+      if (isButtonDisabled) {
+        console.log('⚠️  Submit button is disabled, manual action required');
+      } else {
+        // Click the submit button
+        await submitButton.click();
+        console.log('✅ Clicked submit button');
+
+        // Wait for submission to complete
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    } else {
+      console.log('⚠️  Multiple textareas found, manual submission required to avoid errors');
+      console.log('💡 Please review and submit the form manually when ready');
+    }
+  }
+
+  // Check if we're already on a vacancy_response page at startup
+  const currentUrl = page.url();
+  if (vacancyResponsePattern.test(currentUrl)) {
+    await handleVacancyResponsePage();
+    console.log('✅ Initial vacancy_response page handled. Script will continue monitoring...');
+  }
 
   // Main loop to process all "Откликнуться" buttons
   while (true) {
@@ -252,25 +324,53 @@ github.com/link-foundation`;
 
     if (!targetPagePattern.test(currentUrl)) {
       console.log('⚠️  Redirected to a different page:', currentUrl);
-      console.log('💡 This appears to be a separate application form page.');
-      console.log('💡 Please fill out the form manually. Take as much time as you need.');
-      console.log('💡 Once done, navigate back to:', START_URL);
 
-      // Wait indefinitely for user to navigate back to target page
-      await waitForUrlCondition(START_URL, 'Waiting for you to return to the target page');
+      // Check if it's a vacancy_response page (Issue #65)
+      if (vacancyResponsePattern.test(currentUrl)) {
+        console.log('💡 This is a vacancy_response page, handling automatically...');
+        await handleVacancyResponsePage();
 
-      // If page was closed by user, exit
-      if (pageClosedByUser) {
-        return;
+        // Wait for potential redirect or manual navigation back
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Check if we're back on the target page or still on vacancy_response
+        const newUrl = page.url();
+        if (targetPagePattern.test(newUrl)) {
+          console.log('✅ Back on search page after submission');
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        } else if (vacancyResponsePattern.test(newUrl)) {
+          // Still on vacancy_response page (manual submission required)
+          console.log('💡 Waiting for you to complete and navigate back to:', START_URL);
+          await waitForUrlCondition(START_URL, 'Waiting for you to return to the target page');
+          if (pageClosedByUser) {
+            return;
+          }
+          console.log('✅ Returned to target page! Continuing with button loop...');
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+      } else {
+        console.log('💡 This appears to be a separate application form page.');
+        console.log('💡 Please fill out the form manually. Take as much time as you need.');
+        console.log('💡 Once done, navigate back to:', START_URL);
+
+        // Wait indefinitely for user to navigate back to target page
+        await waitForUrlCondition(START_URL, 'Waiting for you to return to the target page');
+
+        // If page was closed by user, exit
+        if (pageClosedByUser) {
+          return;
+        }
+
+        console.log('✅ Returned to target page! Continuing with button loop...');
+
+        // Give time for page to fully load after navigation
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Continue to next iteration to get fresh button list
+        continue;
       }
-
-      console.log('✅ Returned to target page! Continuing with button loop...');
-
-      // Give time for page to fully load after navigation
-      await new Promise(r => setTimeout(r, 1000));
-
-      // Continue to next iteration to get fresh button list
-      continue;
     }
 
     // No redirect occurred, wait for modal to appear
