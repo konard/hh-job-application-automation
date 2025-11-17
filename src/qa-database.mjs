@@ -1,8 +1,8 @@
 /**
- * Q&A Database module using links-notation parser
+ * Q&A Database module with multiline support
  * Manages reading and writing Q&A pairs from qa.lino file
+ * Supports both single-line and multiline questions and answers
  */
-import { Parser } from 'links-notation';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -56,29 +56,65 @@ export async function readQADatabase() {
     // Try to read the file
     const content = await fs.readFile(QA_FILE_PATH, 'utf8');
 
-    // Parse using links-notation
-    const parser = new Parser();
-    const links = parser.parse(content);
-
-    // Extract Q&A pairs from parsed links
-    // We look for links with _isFromPathCombination flag
-    // which represent the parent-child relationship (question-answer)
+    // Parse using custom indentation-based parser
+    // Format:
+    // - Lines without indentation (or starting at column 0) are questions
+    // - Lines starting with exactly 2 spaces are answers
+    // - Multiple consecutive lines at same level are joined with newlines
     const qaMap = new Map();
+    const lines = content.split('\n');
 
-    for (const link of links) {
-      if (link._isFromPathCombination && link.values && link.values.length === 2) {
-        // First value is the question, second is the answer
-        const questionLink = link.values[0];
-        const answerLink = link.values[1];
+    let currentQuestion = null;
+    let currentAnswer = null;
+    let questionLines = [];
+    let answerLines = [];
 
-        // Reconstruct the question text
-        const question = extractText(questionLink);
-        const answer = extractText(answerLink);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
 
-        if (question && answer) {
-          qaMap.set(question, answer);
+      // Skip empty lines
+      if (trimmedLine === '') {
+        // Empty line ends current Q&A pair
+        if (currentQuestion !== null && currentAnswer !== null) {
+          qaMap.set(currentQuestion, currentAnswer);
+          currentQuestion = null;
+          currentAnswer = null;
+          questionLines = [];
+          answerLines = [];
         }
+        continue;
       }
+
+      // Determine line type by indentation
+      const indent = line.length - line.trimStart().length;
+
+      if (indent === 0) {
+        // This is a question line
+        // Save previous Q&A pair if complete
+        if (currentQuestion !== null && currentAnswer !== null) {
+          qaMap.set(currentQuestion, currentAnswer);
+          // Reset for new Q&A pair
+          currentQuestion = null;
+          currentAnswer = null;
+          questionLines = [];
+          answerLines = [];
+        }
+
+        // Add to current question
+        questionLines.push(trimmedLine);
+        currentQuestion = questionLines.join('\n');
+      } else if (indent === 2) {
+        // This is an answer line
+        answerLines.push(trimmedLine);
+        currentAnswer = answerLines.join('\n');
+      }
+      // Lines with other indentation levels are ignored
+    }
+
+    // Don't forget the last Q&A pair
+    if (currentQuestion !== null && currentAnswer !== null) {
+      qaMap.set(currentQuestion, currentAnswer);
     }
 
     return qaMap;
@@ -102,10 +138,20 @@ export async function writeQADatabase(qaMap) {
     await fs.mkdir(path.dirname(QA_FILE_PATH), { recursive: true });
 
     // Format as indented Q&A pairs
+    // Support multiline questions and answers
     const lines = [];
     for (const [question, answer] of qaMap.entries()) {
-      lines.push(question);
-      lines.push(`  ${answer}`);
+      // Handle multiline questions - each line should be at indent 0
+      const questionLines = question.split('\n');
+      for (const qLine of questionLines) {
+        lines.push(qLine);
+      }
+
+      // Handle multiline answers - each line should be indented with 2 spaces
+      const answerLines = answer.split('\n');
+      for (const aLine of answerLines) {
+        lines.push(`  ${aLine}`);
+      }
     }
 
     const content = lines.join('\n') + '\n';
@@ -143,31 +189,4 @@ export async function addOrUpdateQA(question, answer) {
 export async function getAnswer(question) {
   const qaMap = await readQADatabase();
   return qaMap.get(question) || null;
-}
-
-/**
- * Extracts text from a Link object
- * Handles both simple links and compound links
- * @param {Link} link - The link to extract text from
- * @returns {string} The extracted text
- */
-function extractText(link) {
-  if (!link) return '';
-
-  // If link has an id and no values, return the id
-  if (link.id && (!link.values || link.values.length === 0)) {
-    return link.id;
-  }
-
-  // If link has values but no id, reconstruct from values
-  if (!link.id && link.values && link.values.length > 0) {
-    return link.values.map(v => extractText(v)).join(' ');
-  }
-
-  // If link has both id and values, prefer id
-  if (link.id) {
-    return link.id;
-  }
-
-  return '';
 }

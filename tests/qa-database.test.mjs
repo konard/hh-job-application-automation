@@ -530,4 +530,307 @@ What about paths?
       assert.equal(result.get('Test?'), 'Answer');
     });
   });
+
+  describe('Multiline questions and answers', () => {
+    test('should read multiline questions correctly', async () => {
+      await cleanup();
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+      const content = `Line 1 of question
+Line 2 of question
+Line 3 of question
+  Single line answer
+`;
+      await fs.writeFile(TEST_QA_FILE, content, 'utf8');
+
+      const result = await readQADatabase();
+      assert.equal(result.size, 1);
+      const question = 'Line 1 of question\nLine 2 of question\nLine 3 of question';
+      assert.equal(result.get(question), 'Single line answer');
+      await cleanup();
+    });
+
+    test('should read multiline answers correctly', async () => {
+      await cleanup();
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+      const content = `Single line question?
+  Line 1 of answer
+  Line 2 of answer
+  Line 3 of answer
+`;
+      await fs.writeFile(TEST_QA_FILE, content, 'utf8');
+
+      const result = await readQADatabase();
+      assert.equal(result.size, 1);
+      const answer = 'Line 1 of answer\nLine 2 of answer\nLine 3 of answer';
+      assert.equal(result.get('Single line question?'), answer);
+      await cleanup();
+    });
+
+    test('should read both multiline questions and answers correctly', async () => {
+      await cleanup();
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+      const content = `Line 1 of question
+Line 2 of question
+  Line 1 of answer
+  Line 2 of answer
+`;
+      await fs.writeFile(TEST_QA_FILE, content, 'utf8');
+
+      const result = await readQADatabase();
+      assert.equal(result.size, 1);
+      const question = 'Line 1 of question\nLine 2 of question';
+      const answer = 'Line 1 of answer\nLine 2 of answer';
+      assert.equal(result.get(question), answer);
+      await cleanup();
+    });
+
+    test('should write multiline questions correctly', async () => {
+      await cleanup();
+      const qaMap = new Map([
+        ['Line 1\nLine 2\nLine 3', 'Answer'],
+      ]);
+      await writeQADatabase(qaMap);
+
+      const content = await fs.readFile(TEST_QA_FILE, 'utf8');
+      const lines = content.split('\n');
+      assert.equal(lines[0], 'Line 1');
+      assert.equal(lines[1], 'Line 2');
+      assert.equal(lines[2], 'Line 3');
+      assert.equal(lines[3], '  Answer');
+      await cleanup();
+    });
+
+    test('should write multiline answers correctly', async () => {
+      await cleanup();
+      const qaMap = new Map([
+        ['Question?', 'Line 1\nLine 2\nLine 3'],
+      ]);
+      await writeQADatabase(qaMap);
+
+      const content = await fs.readFile(TEST_QA_FILE, 'utf8');
+      const lines = content.split('\n');
+      assert.equal(lines[0], 'Question?');
+      assert.equal(lines[1], '  Line 1');
+      assert.equal(lines[2], '  Line 2');
+      assert.equal(lines[3], '  Line 3');
+      await cleanup();
+    });
+
+    test('should write and read back multiline Q&A pairs correctly', async () => {
+      await cleanup();
+      const original = new Map([
+        ['Q1 line1\nQ1 line2', 'A1 line1\nA1 line2'],
+        ['Q2 single', 'A2 line1\nA2 line2\nA2 line3'],
+        ['Q3 line1\nQ3 line2\nQ3 line3', 'A3 single'],
+      ]);
+
+      await writeQADatabase(original);
+      const readBack = await readQADatabase();
+
+      assert.equal(readBack.size, original.size);
+      for (const [question, answer] of original) {
+        assert.equal(readBack.get(question), answer);
+      }
+      await cleanup();
+    });
+
+    test('should handle the exact format from qa.lino lines 19-30', async () => {
+      await cleanup();
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+      // This is the exact multiline format from the qa.lino file
+      const content = `- Работали ли с async io на питоне (есть ли опыт работы с асинхронным кодом), какие задачи решали
+- Приходилось ли работать на проектах с микросервисной архитектурой? Если да, сколько было микросервисов, примерно.
+- Какой был размер самой крупной команды, где вам удалось поработать (примерно)?Сколько было разработчиков? Был ли BA, QA отдел?
+- Был ли опыт управления командой? Если был, то сколько человек было в команде?
+- Какие плюсы и минусы Python вы видите при разработке больших и высоконагруженных проектов?
+- Какой был размер (или количество записей) в самой большой таблице с которой удалось столкнутся в работе? Что хранила таблица? Можете ли привести какой-то пример кроме таблицы с логами?
+  - Да, работал, в основном при разработке ботов для VK, Telegram.
+  - Да, десятки микросервисов
+  - Работал в командах до 40 разработчиков. QA отдел был.
+  - Был опыт управления командой до 10 разработчиков.
+  - Python имеет очень низкую производительность, я предпочитаю JavaScript или Rust. Из плюсов Python имеет высокую популярность среди разработчиков, это значит что легко находить сотрудников на такую вакансию.
+  - 150 млн туров было в самой большой таблице с которой я работал. Это была поисковая система туров в AlpOnline.
+`;
+      await fs.writeFile(TEST_QA_FILE, content, 'utf8');
+
+      const result = await readQADatabase();
+      assert.equal(result.size, 1);
+
+      const expectedQuestion = `- Работали ли с async io на питоне (есть ли опыт работы с асинхронным кодом), какие задачи решали
+- Приходилось ли работать на проектах с микросервисной архитектурой? Если да, сколько было микросервисов, примерно.
+- Какой был размер самой крупной команды, где вам удалось поработать (примерно)?Сколько было разработчиков? Был ли BA, QA отдел?
+- Был ли опыт управления командой? Если был, то сколько человек было в команде?
+- Какие плюсы и минусы Python вы видите при разработке больших и высоконагруженных проектов?
+- Какой был размер (или количество записей) в самой большой таблице с которой удалось столкнутся в работе? Что хранила таблица? Можете ли привести какой-то пример кроме таблицы с логами?`;
+
+      const expectedAnswer = `- Да, работал, в основном при разработке ботов для VK, Telegram.
+- Да, десятки микросервисов
+- Работал в командах до 40 разработчиков. QA отдел был.
+- Был опыт управления командой до 10 разработчиков.
+- Python имеет очень низкую производительность, я предпочитаю JavaScript или Rust. Из плюсов Python имеет высокую популярность среди разработчиков, это значит что легко находить сотрудников на такую вакансию.
+- 150 млн туров было в самой большой таблице с которой я работал. Это была поисковая система туров в AlpOnline.`;
+
+      assert.equal(result.get(expectedQuestion), expectedAnswer);
+      await cleanup();
+    });
+
+    test('should handle multiple multiline Q&A pairs in sequence', async () => {
+      await cleanup();
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+      const content = `Question 1 line 1
+Question 1 line 2
+  Answer 1 line 1
+  Answer 1 line 2
+Question 2 line 1
+Question 2 line 2
+  Answer 2 line 1
+  Answer 2 line 2
+`;
+      await fs.writeFile(TEST_QA_FILE, content, 'utf8');
+
+      const result = await readQADatabase();
+      assert.equal(result.size, 2);
+      assert.equal(
+        result.get('Question 1 line 1\nQuestion 1 line 2'),
+        'Answer 1 line 1\nAnswer 1 line 2',
+      );
+      assert.equal(
+        result.get('Question 2 line 1\nQuestion 2 line 2'),
+        'Answer 2 line 1\nAnswer 2 line 2',
+      );
+      await cleanup();
+    });
+
+    test('should handle mix of single-line and multiline Q&A pairs', async () => {
+      await cleanup();
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+      const content = `Single question?
+  Single answer
+Multiline question line 1
+Multiline question line 2
+  Multiline answer line 1
+  Multiline answer line 2
+Another single?
+  Another single answer
+`;
+      await fs.writeFile(TEST_QA_FILE, content, 'utf8');
+
+      const result = await readQADatabase();
+      assert.equal(result.size, 3);
+      assert.equal(result.get('Single question?'), 'Single answer');
+      assert.equal(
+        result.get('Multiline question line 1\nMultiline question line 2'),
+        'Multiline answer line 1\nMultiline answer line 2',
+      );
+      assert.equal(result.get('Another single?'), 'Another single answer');
+      await cleanup();
+    });
+  });
+
+  describe('Real qa.lino database coverage', () => {
+    test('should correctly parse all entries from actual qa.lino file', async () => {
+      // This test verifies that all actual Q&A pairs from the real qa.lino file
+      // can be read correctly, including the multiline one
+
+      // First ensure the qa.lino file exists by creating a test version
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+
+      // Create a test qa.lino with known content including multiline
+      const testContent = `Чем вы любите заниматься в свободное время?
+  Программированием
+Использовал а ли ты SQLAlchemy как основной инструмент работы c БД? На проектах был core или orm?
+  Я не использовал SQLAlchemy. На проектах был orm в основном на других языках.
+- Работали ли с async io на питоне (есть ли опыт работы с асинхронным кодом), какие задачи решали
+- Приходилось ли работать на проектах с микросервисной архитектурой? Если да, сколько было микросервисов, примерно.
+- Какой был размер самой крупной команды, где вам удалось поработать (примерно)?Сколько было разработчиков? Был ли BA, QA отдел?
+- Был ли опыт управления командой? Если был, то сколько человек было в команде?
+- Какие плюсы и минусы Python вы видите при разработке больших и высоконагруженных проектов?
+- Какой был размер (или количество записей) в самой большой таблице с которой удалось столкнутся в работе? Что хранила таблица? Можете ли привести какой-то пример кроме таблицы с логами?
+  - Да, работал, в основном при разработке ботов для VK, Telegram.
+  - Да, десятки микросервисов
+  - Работал в командах до 40 разработчиков. QA отдел был.
+  - Был опыт управления командой до 10 разработчиков.
+  - Python имеет очень низкую производительность, я предпочитаю JavaScript или Rust. Из плюсов Python имеет высокую популярность среди разработчиков, это значит что легко находить сотрудников на такую вакансию.
+  - 150 млн туров было в самой большой таблице с которой я работал. Это была поисковая система туров в AlpOnline.
+`;
+      await fs.writeFile(TEST_QA_FILE, testContent, 'utf8');
+
+      const result = await readQADatabase();
+
+      // Should have 3 entries
+      assert.ok(result.size >= 3, `Expected at least 3 entries, got ${result.size}`);
+
+      // Check a few known entries exist (single-line examples)
+      assert.ok(
+        result.get('Чем вы любите заниматься в свободное время?') === 'Программированием',
+      );
+
+      // Check the multiline entry exists
+      const multilineQuestion = `- Работали ли с async io на питоне (есть ли опыт работы с асинхронным кодом), какие задачи решали
+- Приходилось ли работать на проектах с микросервисной архитектурой? Если да, сколько было микросервисов, примерно.
+- Какой был размер самой крупной команды, где вам удалось поработать (примерно)?Сколько было разработчиков? Был ли BA, QA отдел?
+- Был ли опыт управления командой? Если был, то сколько человек было в команде?
+- Какие плюсы и минусы Python вы видите при разработке больших и высоконагруженных проектов?
+- Какой был размер (или количество записей) в самой большой таблице с которой удалось столкнутся в работе? Что хранила таблица? Можете ли привести какой-то пример кроме таблицы с логами?`;
+
+      const multilineAnswer = result.get(multilineQuestion);
+      assert.ok(
+        multilineAnswer !== null && multilineAnswer !== undefined,
+        'Multiline Q&A pair from lines 19-30 should be found',
+      );
+
+      // Verify it's a multiline answer
+      assert.ok(
+        multilineAnswer.includes('\n'),
+        'Multiline answer should contain newlines',
+      );
+      assert.ok(
+        multilineAnswer.includes('VK, Telegram') ||
+        multilineAnswer.includes('микросервисов'),
+        'Multiline answer should contain expected content',
+      );
+
+      await cleanup();
+    });
+
+    test('should preserve all data through write/read cycle', async () => {
+      await fs.mkdir(TEST_DATA_DIR, { recursive: true });
+
+      // Create test data
+      const original = new Map([
+        ['Q1?', 'A1'],
+        ['Q2 line1\nQ2 line2', 'A2 line1\nA2 line2'],
+        ['Q3?', 'A3'],
+      ]);
+
+      await writeQADatabase(original);
+      const originalSize = original.size;
+
+      // Create backup
+      const backupPath = path.join(TEST_DATA_DIR, 'qa.lino.backup-test');
+      await fs.copyFile(TEST_QA_FILE, backupPath);
+
+      try {
+        // Write and read back
+        await writeQADatabase(original);
+        const readBack = await readQADatabase();
+
+        // Verify size
+        assert.equal(readBack.size, originalSize);
+
+        // Verify all entries match
+        for (const [question, answer] of original) {
+          assert.equal(
+            readBack.get(question),
+            answer,
+            `Question "${question.substring(0, 50)}..." should have same answer`,
+          );
+        }
+      } finally {
+        // Cleanup
+        await fs.unlink(backupPath).catch(() => {});
+        await cleanup();
+      }
+    });
+  });
 });
