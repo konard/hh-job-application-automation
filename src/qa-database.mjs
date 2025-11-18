@@ -125,40 +125,7 @@ export async function readQADatabase() {
       return new Map();
     }
 
-    // Issue #78: If parse error occurs, try to recover from backup
-    if (error.message && error.message.includes('Parse error')) {
-      console.error('Error reading Q&A database:', error);
-      console.error('⚠️  Parse error detected! Attempting to recover from backup...');
 
-      try {
-        const backupPath = `${QA_FILE_PATH}.backup`;
-        const backupContent = await fs.readFile(backupPath, 'utf8');
-        const parser = new Parser();
-        const links = parser.parse(backupContent);
-
-        const qaMap = new Map();
-        for (const link of links) {
-          if (link._isFromPathCombination && link.values && link.values.length === 2) {
-            const question = extractText(link.values[0]);
-            const answer = extractText(link.values[1]);
-            if (question && answer) {
-              qaMap.set(question, answer);
-            }
-          }
-        }
-
-        console.error('✅ Successfully recovered data from backup!');
-        // Restore the corrupted file with the backup
-        await fs.copyFile(backupPath, QA_FILE_PATH);
-        return qaMap;
-      } catch (backupError) {
-        console.error('❌ Could not recover from backup:', backupError.message);
-        console.error('⚠️  WARNING: Q&A database is corrupted and could not be recovered!');
-        console.error(`⚠️  Please manually fix ${QA_FILE_PATH} or restore from backup.`);
-        // Return empty map to prevent crashes, but log the issue clearly
-        return new Map();
-      }
-    }
 
     console.error('Error reading Q&A database:', error);
     return new Map();
@@ -253,7 +220,6 @@ export async function writeQADatabase(qaMap) {
         lines.push(`  ${escapeForLinksNotation(aLine)}`);
       }
     }
-    }
 
     const content = lines.join('\n') + '\n';
     await fs.writeFile(QA_FILE_PATH, content, 'utf8');
@@ -291,35 +257,7 @@ export async function getAnswer(question) {
   const qaMap = await readQADatabase();
   return qaMap.get(question) || null;
 }
-<<<<<<< HEAD
-=======
 
-/**
- * Extracts text from a Link object
- * Handles both simple links and compound links
- * @param {Link} link - The link to extract text from
- * @returns {string} The extracted text
- */
-function extractText(link) {
-  if (!link) return '';
-
-  // If link has an id and no values, return the id
-  if (link.id && (!link.values || link.values.length === 0)) {
-    return link.id;
-  }
-
-  // If link has values but no id, reconstruct from values
-  if (!link.id && link.values && link.values.length > 0) {
-    return link.values.map(v => extractText(v)).join(' ');
-  }
-
-  // If link has both id and values, prefer id
-  if (link.id) {
-    return link.id;
-  }
-
-  return '';
-}
 
 /**
  * Calculate Levenshtein distance between two strings
@@ -476,4 +414,3 @@ export function findBestMatch(question, qaDatabase, threshold = 0.4) {
 
   return bestMatch;
 }
->>>>>>> origin/main
