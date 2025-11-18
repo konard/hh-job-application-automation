@@ -6,8 +6,8 @@ import { readQADatabase, addOrUpdateQA, getAnswer } from '../src/qa-database.mjs
 async function test() {
   console.log('Testing QA Database Module\n');
 
-  // Test 1: Read existing qa.lino
-  console.log('Test 1: Reading existing qa.lino...');
+  // Test 1: Read existing qa.test.lino
+  console.log('Test 1: Reading existing qa.test.lino...');
   let qaMap = await readQADatabase();
   console.log('Found', qaMap.size, 'Q&A pairs:');
   for (const [question, answer] of qaMap.entries()) {

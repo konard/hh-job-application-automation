@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 /**
  * Experiment to demonstrate the race condition in qa-database
- * This simulates concurrent writes to qa.lino file
+ * This simulates concurrent writes to qa.test.lino file
  */
 
 import { addOrUpdateQA, readQADatabase } from '../src/qa-database.mjs';
 import fs from 'fs/promises';
 import path from 'path';
 
-const QA_FILE_PATH = path.join(process.cwd(), 'data', 'qa.lino');
-const BACKUP_PATH = path.join(process.cwd(), 'data', 'qa.lino.backup');
+const QA_FILE_PATH = path.join(process.cwd(), 'data', 'qa.test.lino');
+const BACKUP_PATH = path.join(process.cwd(), 'data', 'qa.test.lino.backup');
 
 async function main() {
   console.log('🧪 Testing for race condition in qa-database...\n');
 
-  // Backup existing qa.lino
+  // Backup existing qa.test.lino
   try {
     await fs.copyFile(QA_FILE_PATH, BACKUP_PATH);
-    console.log('✅ Backed up existing qa.lino\n');
+    console.log('✅ Backed up existing qa.test.lino\n');
   } catch {
-    console.log('⚠️  No existing qa.lino to backup\n');
+    console.log('⚠️  No existing qa.test.lino to backup\n');
   }
 
   // Test 1: Sequential writes (should work fine)
@@ -67,7 +67,7 @@ async function main() {
   try {
     await fs.copyFile(BACKUP_PATH, QA_FILE_PATH);
     await fs.unlink(BACKUP_PATH);
-    console.log('\n✅ Restored original qa.lino from backup');
+    console.log('\n✅ Restored original qa.test.lino from backup');
   } catch {
     console.log('\n⚠️  Could not restore backup');
   }

@@ -3,7 +3,7 @@
  */
 import { Parser } from 'links-notation';
 
-// Test parsing existing qa.lino format
+// Test parsing existing qa.test.lino format
 const testInput = `Чем вы любите заниматься в свободное время?
   Программированием
 Какой ваш любимый язык программирования?

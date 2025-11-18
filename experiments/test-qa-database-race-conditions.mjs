@@ -10,8 +10,8 @@ import { readQADatabase, writeQADatabase, addOrUpdateQA, getAnswer } from '../sr
 import fs from 'fs/promises';
 import path from 'path';
 
-const QA_FILE_PATH = path.join(process.cwd(), 'data', 'qa.lino');
-const TEST_BACKUP_PATH = path.join(process.cwd(), 'data', 'qa.lino.test-backup');
+const QA_FILE_PATH = path.join(process.cwd(), 'data', 'qa.test.lino');
+const TEST_BACKUP_PATH = path.join(process.cwd(), 'data', 'qa.test.lino.test-backup');
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -22,9 +22,9 @@ let testsFailed = 0;
 async function backupQAFile() {
   try {
     await fs.copyFile(QA_FILE_PATH, TEST_BACKUP_PATH);
-    console.log('✅ Backed up qa.lino');
+    console.log('✅ Backed up qa.test.lino');
   } catch {
-    console.log('⚠️  No existing qa.lino to backup');
+    console.log('⚠️  No existing qa.test.lino to backup');
   }
 }
 
@@ -32,7 +32,7 @@ async function restoreQAFile() {
   try {
     await fs.copyFile(TEST_BACKUP_PATH, QA_FILE_PATH);
     await fs.unlink(TEST_BACKUP_PATH);
-    console.log('✅ Restored qa.lino from backup\n');
+    console.log('✅ Restored qa.test.lino from backup\n');
   } catch {
     console.log('⚠️  Could not restore backup\n');
   }

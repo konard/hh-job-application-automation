@@ -10,13 +10,13 @@ import { Parser } from 'links-notation';
 import fs from 'fs/promises';
 import path from 'path';
 
-const QA_FILE_PATH = path.join(process.cwd(), 'data', 'qa.lino');
+const QA_FILE_PATH = path.join(process.cwd(), 'data', 'qa.test.lino');
 
 async function testQADatabase() {
   console.log('🧪 Testing Q&A Database functionality\n');
 
-  // Test 1: Read existing qa.lino file
-  console.log('📖 Test 1: Reading existing qa.lino file...');
+  // Test 1: Read existing qa.test.lino file
+  console.log('📖 Test 1: Reading existing qa.test.lino file...');
   try {
     const content = await fs.readFile(QA_FILE_PATH, 'utf8');
     console.log('File contents:');

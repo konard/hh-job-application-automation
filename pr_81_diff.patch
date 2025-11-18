@@ -1,0 +1,279 @@
+diff --git a/data/qa.lino b/data/qa.lino
+index b9de3ae..a0e1fe6 100644
+--- a/data/qa.lino
++++ b/data/qa.lino
+@@ -1,69 +1,2 @@
+-Чем вы любите заниматься в свободное время?
+-  Программированием
+-Использовал а ли ты SQLAlchemy как основной инструмент работы c БД? На проектах был core или orm?
+-  Я не использовал SQLAlchemy. На проектах был orm в основном на других языках.
+-Как ты относишься к использованию AI инструментов в работе? Опиши свой опыт, если он был.
+-  Положительно, я активно использую Claude Code CLI для ускорения разработки.
+-Укажите ваши ожидания по заработной плате
+-  От 450000 рублей в месяц на руки.
+-Сколько времени займет дорога до офиса на м. Добрынинская от вашего места жительства?
+-  Я живу в Гоа, в Индии. Я рассматриваю только удалённую работу.
+-Укажите размер заработной платы, от которого вы рассматриваете предложения.
+-  От 450000 рублей в месяц на руки.
+-Опишите свой опыт работы по требованиям вакансии
+-  Опыт написания на С/C++ у меня был в Asgard Ro разрабатывал сервер eAthena , а так же при разработке LinksPlatform мы разрабатывали свой собственную ассоциативную СУБД.
+-Какая ваша локация на данный момент? Планируете ли переезд?
+-  Я нахожусь в Гоа, Индии, планирую переезд во Вьетнам.
+-От какой суммы вы рассматриваете предложения $/net ?
+-  От $5500 ежемесячно на руки.
+-'- Работали ли с async io на питоне (есть ли опыт работы с асинхронным кодом), какие задачи решали 
+-- Приходилось ли работать на проектах с микросервисной архитектурой? Если да, сколько было микросервисов, примерно.  
+-- Какой был размер самой крупной команды, где вам удалось поработать (примерно)?Сколько было разработчиков? Был ли BA, QA отдел?
+-- Был ли опыт управления командой? Если был, то сколько человек было в команде?
+-- Какие плюсы и минусы Python вы видите при разработке больших и высоконагруженных проектов?
+-- Какой был размер (или количество записей) в самой большой таблице с которой удалось столкнутся в работе? Что хранила таблица? Можете ли привести какой-то пример кроме таблицы с логами?'
+-  '- Да, работал, в основном при разработке ботов для VK, Telegram.
+-  - Да, десятки микросервисов
+-  - Работал в командах до 40 разработчиков. QA отдел был.
+-  - Был опыт управления командой до 10 разработчиков.
+-  - Python имеет очень низкую производительность, я предпочитаю JavaScript или Rust. Из плюсов Python имеет высокую популярность среди разработчиков, это значит что легко находить сотрудников на такую вакансию.'
+-- Какой был размер или количество записей в самой большой таблице с которой удалось столкнутся в работе? Что хранила таблица? Можете ли привести какой-то пример кроме таблицы с логами?
+-  - 150 млн туров было в самой большой таблице с которой я работал. Это была поисковая система туров в AlpOnline.
+-Если все сложится, когда вы сможете выйти на новое место работы?
+-  Я смогу выйти на новое место работы сразу после принятия о решении, что ваш офер мне подходит.
+-Расскажи чуть детальнее о проекте, пожалуйста.
+-  Детальнее не получится, NDA.
+-От какой суммы сейчас отталкиваешься на руки ?
+-  От 450000 рублей в месяц на руки.
+-Территориально где находишься на данный момент?
+-  В Гоа, в Индии.
+-Расскажите о вашем опыте выстраивания или изменения процессов в команде разработки.
+-  Я предпочитаю создавать атмосферу взаимной поддержки в команде, где любой участник команды может обратиться к любому за помощью, а так же ко мне как к руководителю. Я так же поддерживаю быстрый темп разработки тем, что нахожу проблемы, которые блокируют быструю доставку ценности и устраняю эти проблемы в каждом конкретном случае. Таким образом в команде постепенно накапливается опыт максимально быстрой итеративности и доставки ценности.
+-Занимались ли вы увольнением, наймом, мотивацией, развитием сотрудников в командах разработки?
+-  Да, занимался.
+-Сколько проектов вы вели одновременно? Какой длительности были эти проекты?
+-  До двух проектов одновременно на горизонте в несколько лет.
+-Подходим ли мы вам?
+-  Да, если по КЭДО.
+-Участились случаи, когда кандидаты накручивают опыт или указывают совсем ложный. На финальном этапе перед оффером мы проверяем данный факт.
+-  Да, подтверждён.
+-'Какой оклад "на руки" вам интересен?
+-Безусловно, к моменту оффера вы сможете скорректировать свои пожелания, на основе уже имеющихся офферов или точного представления о нашей позиции. Но очень просим указать примерную сумму или диапазон.'
+-  От 450000 рублей в месяц на руки
+-"Работали ли вы с hls.js? (или аналогами, тогда какими)"
+-  Нет, разве что использовал video элемент в html.
+-"Какой опыт работы использования фреймворков и библиотек: React, Redux (Thunk,saga)?
+-(Пожалуйста, напишите пару предложений о вашем опыте)"
+-  Есть опыт с React, Redux, верстал сайты, веб приложения и мобильные приложения на Capacitor, а так же десктопные на Electron.
+-"Каков Ваш уровень понимания JavaScript, какую оценку себе дадите? (расскажите немного об опыте)"
+-  Эксперт.
+-Как Вы относитесь к верстке? Готовы самостоятельно этим заниматься?
+-  К вёрстке отношусь положительно, готов самостоятельно этим заниматься.
+-"Каков опыт работы с typescript? (расскажите немного об опыте)"
+-  Я предпочитаю JavaScript для быстрой разработки, но могу работать и с TypeScript, просто чуть дольше, если нужно поддерживать всю типизацию в актуальном состоянии после каждой правки.
+-"Какой был состав команды и какую роль Вы в ней занимали? (можно взять за пример последнее/текущее место)"
+-  Я был Архитектором ПО, CTO, тим лидом, а так же senior разработчиком в разных компаниях.
+-"Как было устроено код-ревью? (можно взять за пример последнее/текущее место)"
+-  На последнем месте работы код-ревью обычно проводил тим-лид / руководитель команды разработчиков, но в целом ревью мог провести любой senior программист.
+-Укажите, пожалуйста, свои зарплатные ожидания
+-  От 450000 рублей в месяц на руки.
++"Question: with colon"
++  "Answer: also with colon"
+diff --git a/src/playwright-apply.mjs b/src/playwright-apply.mjs
+index 73427e2..3c8ceeb 100755
+--- a/src/playwright-apply.mjs
++++ b/src/playwright-apply.mjs
+@@ -223,18 +223,19 @@ github.com/link-foundation`;
+   /**
+    * Setup Q&A auto-fill and auto-save for all textareas on the page
+    * Issue #68: Automatically remember and prefill answers to repetitive questions
++   * Issue #80: Use proper typing simulation instead of direct value assignment
+    */
+   async function setupQAHandling() {
+     try {
+       // Read the Q&A database
+       const qaMap = await readQADatabase();
+ 
+-      // Extract all questions from the page
++      // Extract all questions and their corresponding textarea selectors
+       const pageQuestions = await page.evaluate(() => {
+         const questions = [];
+         const textareas = document.querySelectorAll('textarea');
+ 
+-        textareas.forEach((textarea) => {
++        textareas.forEach((textarea, index) => {
+           const taskBody = textarea.closest('[data-qa="task-body"]');
+           if (!taskBody) return;
+ 
+@@ -243,7 +244,9 @@ github.com/link-foundation`;
+ 
+           const question = questionEl.textContent.trim();
+           if (question) {
+-            questions.push(question);
++            // Create a unique selector for this textarea
++            const selector = `textarea:nth-of-type(${index + 1})`;
++            questions.push({ question, selector, index });
+           }
+         });
+ 
+@@ -253,17 +256,38 @@ github.com/link-foundation`;
+       // Use fuzzy matching to find answers for each question
+       // Issue #74: Questions on forms may be phrased differently than in database
+       const questionToAnswer = new Map();
+-      for (const pageQuestion of pageQuestions) {
+-        const match = findBestMatch(pageQuestion, qaMap);
++      for (const { question, selector, index } of pageQuestions) {
++        const match = findBestMatch(question, qaMap);
+         if (match) {
+-          questionToAnswer.set(pageQuestion, match.answer);
+-          console.log(`[QA] Fuzzy match for "${pageQuestion}" (score: ${match.score.toFixed(3)})`);
++          questionToAnswer.set(question, { answer: match.answer, selector, index });
++          console.log(`[QA] Fuzzy match for "${question}" (score: ${match.score.toFixed(3)})`);
+           console.log(`[QA] Matched to: "${match.question}"`);
+           console.log(`[QA] Answer: "${match.answer}"`);
+         }
+       }
+ 
+-      // Inject client-side script to handle Q&A functionality
++      // Prefill textareas using Playwright's type() method for proper event triggering
++      // Issue #80: Direct value assignment doesn't work with hh.ru's framework
++      for (const [question, { answer, selector }] of questionToAnswer) {
++        try {
++          const textarea = page.locator(selector);
++          const currentValue = await textarea.inputValue();
++
++          if (!currentValue || currentValue.trim() === '') {
++            // Use click() + type() method to simulate real user input like cover letter filling
++            // This triggers all necessary events that hh.ru framework expects
++            await textarea.click();
++            await textarea.type(answer);
++            console.log(`[QA] Prefilled answer for: ${question}`);
++          } else {
++            console.log(`[QA] Textarea already has content for: ${question}`);
++          }
++        } catch (error) {
++          console.error(`[QA] Error prefilling textarea for "${question}":`, error.message);
++        }
++      }
++
++      // Inject client-side script to handle Q&A saving functionality
+       await page.evaluate((qaData) => {
+         // Convert Map entries to object for serialization
+         const qaObj = Object.fromEntries(qaData);
+@@ -282,18 +306,8 @@ github.com/link-foundation`;
+           const question = questionEl.textContent.trim();
+           if (!question) return;
+ 
+-          // Check if we have a known answer for this question
+-          const knownAnswer = qaObj[question];
+-          if (knownAnswer && (!textarea.value || textarea.value.trim() === '')) {
+-            // Prefill the textarea with the known answer
+-            textarea.value = knownAnswer;
+-            console.log('[QA] Prefilled answer for:', question);
+-
+-            // Trigger input event to notify any listeners
+-            const inputEvent = document.createEvent('Event');
+-            inputEvent.initEvent('input', true, true);
+-            textarea.dispatchEvent(inputEvent);
+-          }
++          // Get the known answer for this question
++          const knownAnswer = qaObj[question]?.answer;
+ 
+           // Add blur event listener to save Q&A when user finishes editing
+           textarea.addEventListener('blur', async () => {
+diff --git a/src/puppeteer-apply.mjs b/src/puppeteer-apply.mjs
+index 745fbca..da5090b 100755
+--- a/src/puppeteer-apply.mjs
++++ b/src/puppeteer-apply.mjs
+@@ -244,18 +244,19 @@ github.com/link-foundation`;
+   /**
+    * Setup Q&A auto-fill and auto-save for all textareas on the page
+    * Issue #68: Automatically remember and prefill answers to repetitive questions
++   * Issue #80: Use proper typing simulation instead of direct value assignment
+    */
+   async function setupQAHandling() {
+     try {
+       // Read the Q&A database
+       const qaMap = await readQADatabase();
+ 
+-      // Extract all questions from the page
++      // Extract all questions and their corresponding textarea selectors
+       const pageQuestions = await page.evaluate(() => {
+         const questions = [];
+         const textareas = document.querySelectorAll('textarea');
+ 
+-        textareas.forEach((textarea) => {
++        textareas.forEach((textarea, index) => {
+           const taskBody = textarea.closest('[data-qa="task-body"]');
+           if (!taskBody) return;
+ 
+@@ -264,7 +265,9 @@ github.com/link-foundation`;
+ 
+           const question = questionEl.textContent.trim();
+           if (question) {
+-            questions.push(question);
++            // Create a unique selector for this textarea
++            const selector = `textarea:nth-of-type(${index + 1})`;
++            questions.push({ question, selector, index });
+           }
+         });
+ 
+@@ -274,17 +277,37 @@ github.com/link-foundation`;
+       // Use fuzzy matching to find answers for each question
+       // Issue #74: Questions on forms may be phrased differently than in database
+       const questionToAnswer = new Map();
+-      for (const pageQuestion of pageQuestions) {
+-        const match = findBestMatch(pageQuestion, qaMap);
++      for (const { question, selector, index } of pageQuestions) {
++        const match = findBestMatch(question, qaMap);
+         if (match) {
+-          questionToAnswer.set(pageQuestion, match.answer);
+-          console.log(`[QA] Fuzzy match for "${pageQuestion}" (score: ${match.score.toFixed(3)})`);
++          questionToAnswer.set(question, { answer: match.answer, selector, index });
++          console.log(`[QA] Fuzzy match for "${question}" (score: ${match.score.toFixed(3)})`);
+           console.log(`[QA] Matched to: "${match.question}"`);
+           console.log(`[QA] Answer: "${match.answer}"`);
+         }
+       }
+ 
+-      // Inject client-side script to handle Q&A functionality
++      // Prefill textareas using Puppeteer's type() method for proper event triggering
++      // Issue #80: Direct value assignment doesn't work with hh.ru's framework
++      for (const [question, { answer, selector }] of questionToAnswer) {
++        try {
++          const currentValue = await page.$eval(selector, el => el.value);
++
++          if (!currentValue || currentValue.trim() === '') {
++            // Use click() + type() method to simulate real user input like cover letter filling
++            // This triggers all necessary events that hh.ru framework expects
++            await page.click(selector);
++            await page.type(selector, answer);
++            console.log(`[QA] Prefilled answer for: ${question}`);
++          } else {
++            console.log(`[QA] Textarea already has content for: ${question}`);
++          }
++        } catch (error) {
++          console.error(`[QA] Error prefilling textarea for "${question}":`, error.message);
++        }
++      }
++
++      // Inject client-side script to handle Q&A saving functionality
+       await page.evaluate((qaData) => {
+         // Convert Map entries to object for serialization
+         const qaObj = Object.fromEntries(qaData);
+@@ -303,18 +326,8 @@ github.com/link-foundation`;
+           const question = questionEl.textContent.trim();
+           if (!question) return;
+ 
+-          // Check if we have a known answer for this question
+-          const knownAnswer = qaObj[question];
+-          if (knownAnswer && (!textarea.value || textarea.value.trim() === '')) {
+-            // Prefill the textarea with the known answer
+-            textarea.value = knownAnswer;
+-            console.log('[QA] Prefilled answer for:', question);
+-
+-            // Trigger input event to notify any listeners
+-            const inputEvent = document.createEvent('Event');
+-            inputEvent.initEvent('input', true, true);
+-            textarea.dispatchEvent(inputEvent);
+-          }
++          // Get the known answer for this question
++          const knownAnswer = qaObj[question]?.answer;
+ 
+           // Add blur event listener to save Q&A when user finishes editing
+           textarea.addEventListener('blur', async () => {
