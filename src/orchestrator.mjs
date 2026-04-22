@@ -342,6 +342,7 @@ export function createOrchestrator({
           commander,
           MESSAGE,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
+          addIgnoredVacancyId: qaDB.addIgnoredVacancyId,
           targetPagePattern,
           vacancyResponsePattern,
           handleVacancyResponsePage: handleVacancyResponsePageWrapper,

@@ -15,7 +15,7 @@ import {
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
 import { log } from './logging.mjs';
-import { SELECTORS } from './hh-selectors.mjs';
+import { SELECTORS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { isNavigationError, isTimeoutError } from 'browser-commander';
 
 /**
@@ -438,6 +438,7 @@ export async function handleVacancyResponsePage({
   vacancyResponsePattern,
   readQADatabase,
   addOrUpdateQA,
+  addIgnoredVacancyId,
   autoSubmitEnabled,
   ignoreVacanciesWithQuestionnaire,
   returnUrl,
@@ -469,6 +470,16 @@ export async function handleVacancyResponsePage({
       if (questionnaireFields.length > 0 && !submitWithoutTestSelector) {
         console.log(`⚠️  Detected ${questionnaireFields.length} questionnaire field(s) on vacancy_response page`);
         console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
+
+        const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
+        if (vacancyId) {
+          const wasAdded = await addIgnoredVacancyId(vacancyId);
+          console.log(
+            wasAdded
+              ? `💾 Saved ignored questionnaire vacancy ID: ${vacancyId}`
+              : `💾 Questionnaire vacancy ID already persisted: ${vacancyId}`,
+          );
+        }
 
         const destinationUrl = returnUrl || 'https://hh.ru/search/vacancy?from=resumelist';
         console.log(`Returning to: ${destinationUrl}`);

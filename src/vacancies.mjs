@@ -38,6 +38,8 @@ export async function processModalApplication({
   commander,
   MESSAGE,
   ignoreVacanciesWithQuestionnaire = false,
+  vacancyId = null,
+  addIgnoredVacancyId = async () => false,
 }) {
   // Check if textarea is already visible (cover letter might be mandatory)
   const modalTextareaSelector = 'textarea[data-qa="vacancy-response-popup-form-letter-input"]';
@@ -144,6 +146,15 @@ export async function processModalApplication({
   if (ignoreVacanciesWithQuestionnaire && hasQuestionnaire) {
     console.log('⚠️  Detected questionnaire fields in modal application form');
     console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
+
+    if (vacancyId) {
+      const wasAdded = await addIgnoredVacancyId(vacancyId);
+      console.log(
+        wasAdded
+          ? `💾 Saved ignored questionnaire vacancy ID: ${vacancyId}`
+          : `💾 Questionnaire vacancy ID already persisted: ${vacancyId}`,
+      );
+    }
 
     const closed = await closeModalIfPresent({ commander });
     if (closed) {
@@ -914,12 +925,20 @@ async function waitForApplicationModal({ commander }) {
  * @param {string} options.MESSAGE - Cover letter message
  * @returns {Promise<{success: boolean, limitError: boolean, status?: string, reason?: string}>}
  */
-async function submitModalApplication({ commander, MESSAGE, ignoreVacanciesWithQuestionnaire = false }) {
+async function submitModalApplication({
+  commander,
+  MESSAGE,
+  ignoreVacanciesWithQuestionnaire = false,
+  vacancyId = null,
+  addIgnoredVacancyId = async () => false,
+}) {
   // Process modal application
   const result = await processModalApplication({
     commander,
     MESSAGE,
     ignoreVacanciesWithQuestionnaire,
+    vacancyId,
+    addIgnoredVacancyId,
   });
 
   if (!result.success) {
@@ -946,6 +965,7 @@ export async function findAndProcessVacancyButton({
   commander,
   MESSAGE,
   ignoreVacanciesWithQuestionnaire = false,
+  addIgnoredVacancyId = async () => false,
   targetPagePattern,
   vacancyResponsePattern,
   handleVacancyResponsePage,
@@ -1052,6 +1072,8 @@ export async function findAndProcessVacancyButton({
     commander,
     MESSAGE,
     ignoreVacanciesWithQuestionnaire,
+    vacancyId,
+    addIgnoredVacancyId,
   });
 
   if (!submitResult.success) {

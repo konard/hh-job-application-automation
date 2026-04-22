@@ -12,6 +12,7 @@
 
 import path from 'path';
 import { createQADatabase } from './qa-database.mjs';
+import { createIgnoredVacanciesDatabase } from './ignored-vacancies-db.mjs';
 import {
   isNavigationError,
   isTimeoutError,
@@ -23,13 +24,17 @@ import { enableDebugLevel } from './logging.mjs';
 import { createConfig, getUserDataDir } from './config.mjs';
 import { URL_PATTERNS } from './hh-selectors.mjs';
 import { createOrchestrator } from './orchestrator.mjs';
+import { markVacancyAsProcessed } from './vacancies.mjs';
 
 // Create QA database instance with explicit production file path
 const QA_DB_PATH = path.join(process.cwd(), 'data', 'qa.lino');
 const qaDB = createQADatabase(QA_DB_PATH);
+const IGNORED_VACANCIES_DB_PATH = path.join(process.cwd(), 'data', 'ignored-vacancy-ids.txt');
+const ignoredVacanciesDB = createIgnoredVacanciesDatabase(IGNORED_VACANCIES_DB_PATH);
 
 // Extract methods from database instance
 const { readQADatabase, addOrUpdateQA } = qaDB;
+const { readIgnoredVacancyIds, addIgnoredVacancyId } = ignoredVacanciesDB;
 
 let browser = null;
 let commander = null;
@@ -83,6 +88,17 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   const MESSAGE = argv.message;
   const START_URL = argv.url;
 
+  if (argv.ignoreVacanciesWithQuestionnaire) {
+    const ignoredVacancyIds = await readIgnoredVacancyIds();
+    for (const vacancyId of ignoredVacancyIds) {
+      markVacancyAsProcessed(vacancyId);
+    }
+
+    if (ignoredVacancyIds.size > 0) {
+      console.log(`Loaded ${ignoredVacancyIds.size} ignored questionnaire vacancy ID(s) from disk`);
+    }
+  }
+
   // Launch browser with default configuration from browser-commander
   const { browser: launchedBrowser, page } = await launchBrowser({
     engine: argv.engine,
@@ -118,6 +134,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       vacancyResponsePattern,
       readQADatabase,
       addOrUpdateQA,
+      addIgnoredVacancyId,
       autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
       ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
       returnUrl: lastSearchPageUrl,
@@ -133,7 +150,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     argv,
     START_URL,
     MESSAGE,
-    qaDB: { readQADatabase, addOrUpdateQA },
+    qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
     targetPagePattern,
     vacancyResponsePattern,
     vacancyPagePattern,
