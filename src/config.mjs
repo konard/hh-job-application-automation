@@ -9,29 +9,25 @@
 
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
 import { makeConfig } from 'lino-arguments';
 
 /**
  * Default cover letter message
  */
-const DEFAULT_MESSAGE = `Здравствуйте,
+const DEFAULT_MESSAGE = '';
 
-Мне понравилась ваша компания, я думаю моя кандидатура будет вам полезна и я смогу привнести ценность в работу компании.
+function loadMessageFromFile(filePath) {
+  if (!filePath) {
+    return '';
+  }
 
-В какой форме предлагается юридическое оформление удалённой работы?
+  const resolvedPath = path.resolve(filePath);
+  const fileContents = fs.readFileSync(resolvedPath, 'utf8');
 
-Посмотреть мой код на GitHub можно тут:
-
-github.com/konard
-github.com/deep-assistant
-github.com/link-assistant
-github.com/linksplatform
-github.com/link-foundation
-
-Для оперативной связи предлагаю использовать мой Telegram: @drakonard (+79582000567).
-
-С уважением,
-Константин Дьяченко`;
+  // Normalize line endings and drop a single trailing newline from text files.
+  return fileContents.replace(/\r\n/g, '\n').replace(/\n$/, '');
+}
 
 /**
  * Create configuration from CLI arguments and environment variables
@@ -44,7 +40,7 @@ github.com/link-foundation
  * @returns {Object} Configuration object with camelCase keys
  */
 export function createConfig() {
-  return makeConfig({
+  const config = makeConfig({
     yargs: ({ yargs, getenv }) =>
       yargs
         .option('engine', {
@@ -78,7 +74,12 @@ export function createConfig() {
           alias: 'm',
           type: 'string',
           description: 'Message to send with job application',
-          default: getenv('MESSAGE', DEFAULT_MESSAGE),
+          default: getenv('MESSAGE', ''),
+        })
+        .option('message-file', {
+          type: 'string',
+          description: 'Path to a UTF-8 text file with the message to send',
+          default: getenv('MESSAGE_FILE', ''),
         })
         .option('verbose', {
           type: 'boolean',
@@ -90,8 +91,17 @@ export function createConfig() {
           description: 'Auto-submit vacancy response forms when all questions are answered (default: false for safety)',
           default: getenv('AUTO_SUBMIT_VACANCY_RESPONSE_FORM', false),
         })
+        .option('ignore-vacancies-with-questionnaire', {
+          type: 'boolean',
+          description: 'Skip vacancies that require additional questionnaire fields beyond the cover letter',
+          default: getenv('IGNORE_VACANCIES_WITH_QUESTIONNAIRE', false),
+        })
         .help(),
   });
+
+  config.message = config.message || loadMessageFromFile(config.messageFile) || DEFAULT_MESSAGE;
+
+  return config;
 }
 
 /**

@@ -37,6 +37,7 @@ export async function handleLimitError({ commander, START_URL }) {
 export async function processModalApplication({
   commander,
   MESSAGE,
+  ignoreVacanciesWithQuestionnaire = false,
 }) {
   // Check if textarea is already visible (cover letter might be mandatory)
   const modalTextareaSelector = 'textarea[data-qa="vacancy-response-popup-form-letter-input"]';
@@ -131,13 +132,25 @@ export async function processModalApplication({
     console.error('Actual:', textareaValue);
   }
 
-  // Check for UNANSWERED test questions in modal (after potential auto-fill)
-  // Count unanswered questions in modal using qa.mjs
+  // Count questionnaire fields in modal using qa.mjs
   const modalStats = await countUnansweredQuestions({
     evaluate: commander.evaluate,
     containerSelector: SELECTORS.applicationForm,
   });
   const modalUnansweredTestQuestionCount = modalStats.unansweredCount;
+  const modalTextareaCount = await commander.count({ selector: `${SELECTORS.applicationForm} textarea` });
+  const hasQuestionnaire = modalStats.totalCount > 0 || modalTextareaCount > 1;
+
+  if (ignoreVacanciesWithQuestionnaire && hasQuestionnaire) {
+    console.log('⚠️  Detected questionnaire fields in modal application form');
+    console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
+
+    const closed = await closeModalIfPresent({ commander });
+    if (closed) {
+      console.log('✅ Closed the application modal');
+    }
+    return { success: false, reason: 'questionnaire_ignored' };
+  }
 
   if (modalUnansweredTestQuestionCount > 0) {
     console.log(`⚠️  Found ${modalUnansweredTestQuestionCount} UNANSWERED test question(s) in modal`);
@@ -901,11 +914,12 @@ async function waitForApplicationModal({ commander }) {
  * @param {string} options.MESSAGE - Cover letter message
  * @returns {Promise<{success: boolean, limitError: boolean, status?: string, reason?: string}>}
  */
-async function submitModalApplication({ commander, MESSAGE }) {
+async function submitModalApplication({ commander, MESSAGE, ignoreVacanciesWithQuestionnaire = false }) {
   // Process modal application
   const result = await processModalApplication({
     commander,
     MESSAGE,
+    ignoreVacanciesWithQuestionnaire,
   });
 
   if (!result.success) {
@@ -931,6 +945,7 @@ async function submitModalApplication({ commander, MESSAGE }) {
 export async function findAndProcessVacancyButton({
   commander,
   MESSAGE,
+  ignoreVacanciesWithQuestionnaire = false,
   targetPagePattern,
   vacancyResponsePattern,
   handleVacancyResponsePage,
@@ -1033,7 +1048,11 @@ export async function findAndProcessVacancyButton({
   }
 
   // Submit modal application
-  const submitResult = await submitModalApplication({ commander, MESSAGE });
+  const submitResult = await submitModalApplication({
+    commander,
+    MESSAGE,
+    ignoreVacanciesWithQuestionnaire,
+  });
 
   if (!submitResult.success) {
     return { status: submitResult.status, reason: submitResult.reason };

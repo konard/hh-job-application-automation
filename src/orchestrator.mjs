@@ -19,6 +19,10 @@ import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
 import { SESSION_KEYS } from './helpers/session-tracker.mjs';
 import { setupPageTriggers } from './page-triggers.mjs';
 
+function getRandomIntInclusive(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 /**
  * Create the URL condition wait function
  * @param {Object} options
@@ -162,6 +166,7 @@ export function createOrchestrator({
   vacancyPagePattern,
   BUTTON_CLICK_INTERVAL,
   handleVacancyResponsePageWrapper,
+  onSearchPageUrlChange = () => {},
 }) {
   // State variables
   // Note: Most state is now managed by pageTriggers in page-triggers.mjs
@@ -178,7 +183,10 @@ export function createOrchestrator({
   const getIsNavigating = () => isNavigating;
   const setIsNavigating = (value) => { isNavigating = value; };
   const getLastSearchPageUrl = () => lastSearchPageUrl;
-  const setLastSearchPageUrl = (value) => { lastSearchPageUrl = value; };
+  const setLastSearchPageUrl = (value) => {
+    lastSearchPageUrl = value;
+    onSearchPageUrlChange(value);
+  };
 
   // Create waitForUrlCondition function
   const waitForUrlCondition = createWaitForUrlCondition({
@@ -333,6 +341,7 @@ export function createOrchestrator({
         const result = await findAndProcessVacancyButton({
           commander,
           MESSAGE,
+          ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
           targetPagePattern,
           vacancyResponsePattern,
           handleVacancyResponsePage: handleVacancyResponsePageWrapper,
@@ -384,10 +393,16 @@ export function createOrchestrator({
         }
 
         if (result.status === 'success') {
-          console.log(`Waiting ${BUTTON_CLICK_INTERVAL / 1000} seconds before processing next button...`);
+          const randomExtraDelaySeconds = getRandomIntInclusive(1, 5);
+          const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
+
+          console.log(
+            `Waiting ${totalWaitMs / 1000} seconds before processing next button ` +
+            `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)...`,
+          );
 
           const intervalWait = await commander.wait({
-            ms: BUTTON_CLICK_INTERVAL,
+            ms: totalWaitMs,
             reason: 'interval before next application',
           });
 

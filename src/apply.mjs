@@ -108,6 +108,7 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   const vacancyResponsePattern = URL_PATTERNS.vacancyResponse;
   const vacancyPagePattern = URL_PATTERNS.vacancyPage;
   const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
+  let lastSearchPageUrl = START_URL;
 
   // Wrapper function to pass all dependencies to handleVacancyResponsePage
   const handleVacancyResponsePageWrapper = async () => {
@@ -118,6 +119,8 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
       readQADatabase,
       addOrUpdateQA,
       autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
+      ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
+      returnUrl: lastSearchPageUrl,
       verbose: argv.verbose,
     });
   };
@@ -136,6 +139,9 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     vacancyPagePattern,
     BUTTON_CLICK_INTERVAL,
     handleVacancyResponsePageWrapper,
+    onSearchPageUrlChange: (url) => {
+      lastSearchPageUrl = url;
+    },
   });
 
   await orchestrator.start();

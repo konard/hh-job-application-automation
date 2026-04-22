@@ -344,6 +344,23 @@ async function findSubmitButton({ commander }) {
 }
 
 /**
+ * Find the special "Откликнуться без теста" button if present
+ * @param {Object} options
+ * @param {Object} options.commander - Browser commander instance
+ * @returns {Promise<string | null>}
+ */
+async function findSubmitWithoutTestButton({ commander }) {
+  const directSelector = SELECTORS.submitButtonWithoutQuestions;
+  const directCount = await commander.count({ selector: directSelector });
+  if (directCount > 0) {
+    console.log('Found special submit button "Откликнуться без теста" by data-qa selector');
+    return directSelector;
+  }
+
+  return null;
+}
+
+/**
  * Get submit button state
  * @param {Object} options
  * @param {Object} options.commander - Browser commander instance
@@ -422,6 +439,8 @@ export async function handleVacancyResponsePage({
   readQADatabase,
   addOrUpdateQA,
   autoSubmitEnabled,
+  ignoreVacanciesWithQuestionnaire,
+  returnUrl,
   verbose,
 }) {
   try {
@@ -440,6 +459,27 @@ export async function handleVacancyResponsePage({
       // This is a direct application vacancy, we should skip it
       // Return early to allow the automation to continue with the next vacancy
       return;
+    }
+
+    const submitWithoutTestSelector = await findSubmitWithoutTestButton({ commander });
+
+    if (ignoreVacanciesWithQuestionnaire) {
+      const questionnaireFields = await extractPageQuestions({ evaluate: commander.evaluate });
+
+      if (questionnaireFields.length > 0 && !submitWithoutTestSelector) {
+        console.log(`⚠️  Detected ${questionnaireFields.length} questionnaire field(s) on vacancy_response page`);
+        console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
+
+        const destinationUrl = returnUrl || 'https://hh.ru/search/vacancy?from=resumelist';
+        console.log(`Returning to: ${destinationUrl}`);
+        await commander.goto({ url: destinationUrl, waitForStableUrlBefore: false });
+        return;
+      }
+
+      if (questionnaireFields.length > 0 && submitWithoutTestSelector) {
+        console.log('Detected questionnaire fields, but "Откликнуться без теста" is available');
+        console.log('Using the special no-questions submit path instead of skipping');
+      }
     }
 
     // Log all textareas for debugging
@@ -523,6 +563,18 @@ export async function handleVacancyResponsePage({
       console.log('Cover letter already contains text, skipping prefill');
     }
 
+    if (submitWithoutTestSelector) {
+      console.log('Using special "Откликнуться без теста" flow');
+      await commander.clickButton({
+        selector: submitWithoutTestSelector,
+        scrollIntoView: true,
+        smoothScroll: true,
+      });
+      console.log('Clicked "Откликнуться без теста" button');
+      await commander.wait({ ms: 2000, reason: 'submit without test to complete' });
+      return;
+    }
+
     // Count textareas
     const textareaCount = await commander.count({ selector: 'textarea' });
     console.log(`Found ${textareaCount} textarea(s) on the page`);
@@ -559,6 +611,16 @@ export async function handleVacancyResponsePage({
     // Check if there are test questions
     const hasTestQuestions = testQuestionStats.totalCount > 0 || textareaCount > 1;
     const hasUnansweredQuestions = testQuestionStats.unansweredCount > 0;
+
+    if (ignoreVacanciesWithQuestionnaire && hasTestQuestions) {
+      console.log('⚠️  Detected questionnaire fields on vacancy_response page');
+      console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
+
+      const destinationUrl = returnUrl || 'https://hh.ru/search/vacancy?from=resumelist';
+      console.log(`Returning to: ${destinationUrl}`);
+      await commander.goto({ url: destinationUrl, waitForStableUrlBefore: false });
+      return;
+    }
 
     log.debug(() => `hasTestQuestions=${hasTestQuestions} (radioCheckbox=${testQuestionStats.totalCount}, textareas=${textareaCount})`);
     log.debug(() => `hasUnansweredQuestions=${hasUnansweredQuestions}`);

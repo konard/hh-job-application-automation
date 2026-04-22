@@ -28,13 +28,18 @@
 # If not set, defaults to ~/.hh-automation/{engine}-data
 # USER_DATA_DIR: ./user-data
 
-# Interval in seconds to wait between job application button clicks
+# Base interval in seconds between job application button clicks
+# The app also adds a random 1-5 second delay to each wait
 # Default: 20 (seconds)
 # JOB_APPLICATION_INTERVAL: 20
 
 # Custom message to send with job application
-# If not set, uses the default Russian cover letter from config.mjs
+# If not set, uses MESSAGE_FILE or the default cover letter from config.mjs
 # MESSAGE: Здравствуйте, я заинтересован в данной вакансии...
+
+# Path to a UTF-8 text file with a multi-line application message
+# Used when MESSAGE is not set
+# MESSAGE_FILE: ./message.txt
 
 # Enable verbose logging for debugging
 # Default: false
@@ -43,3 +48,7 @@
 # Auto-submit vacancy response forms when all questions are answered
 # Default: false (manual review recommended for safety)
 # AUTO_SUBMIT_VACANCY_RESPONSE_FORM: true
+
+# Skip vacancies that require questionnaire fields beyond the cover letter
+# Default: false
+# IGNORE_VACANCIES_WITH_QUESTIONNAIRE: true

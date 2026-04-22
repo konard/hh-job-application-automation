@@ -69,11 +69,15 @@ The application supports configuration via `.lenv` files using the [lino-argumen
    # Enable verbose logging by default
    VERBOSE: true
 
-   # Set custom interval between applications
+   # Set base interval between applications
+   # The app also adds a random 1-5 second delay
    JOB_APPLICATION_INTERVAL: 30
 
    # Set your resume URL
    START_URL: https://hh.ru/search/vacancy?resume=YOUR_RESUME_ID&from=resumelist
+
+   # Load a multi-line application message from a UTF-8 text file
+   MESSAGE_FILE: ./message.txt
    ```
 
 3. Run the application (it will automatically load `.lenv`):
@@ -113,6 +117,16 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 
 **Safety Note:** The default behavior (manual review) is recommended to ensure test answers are correct before submission.
 
+### Ignore Questionnaire Vacancies
+
+If you want to skip vacancies that require any additional questionnaire fields beyond the cover letter, use:
+
+```bash
+bun run apply -- --ignore-vacancies-with-questionnaire --verbose
+```
+
+This works for both modal response forms and full `vacancy_response` pages. The vacancy will be skipped as soon as the script detects extra questionnaire fields.
+
 ### Using Playwright (default)
 
 Using bun script (with verbose logging for debugging):
@@ -141,6 +155,12 @@ With custom message:
 
 ```bash
 bun run apply -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --message "Your custom application message here" --verbose
+```
+
+With multi-line message from file:
+
+```bash
+bun run apply -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --message-file ./message.txt --verbose
 ```
 
 Direct execution:
