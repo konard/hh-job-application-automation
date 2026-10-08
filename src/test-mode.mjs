@@ -1,8 +1,9 @@
 /**
- * Test mode: one application, every click and typed value confirmed first.
+ * Test mode: one application, every value entered into a form field confirmed first.
  *
- * Before each step the action is printed and the run waits for a line on stdin:
- * `y` performs it, `q` stops the run.
+ * Buttons are clicked without asking. Before text is typed or a radio/checkbox
+ * option is chosen, the value is printed and the run waits for a line on stdin:
+ * `y` enters it, `q` stops the run.
  *
  * @module test-mode
  */
@@ -86,7 +87,7 @@ function describeElement(commander, selector) {
 }
 
 /**
- * Wrap a commander so that clicks and typing wait for confirmation in test mode
+ * Wrap a commander so that entered values wait for confirmation in test mode
  * @param {Object} commander - Browser commander instance
  * @returns {Object} The same commander outside test mode
  */
@@ -100,8 +101,14 @@ export function withConfirmations(commander) {
     args: [selector],
   }).catch(() => false);
 
-  const confirmed = (method, describe) => async (options) => {
-    if (!UNCONFIRMED_SELECTORS.has(options.selector) && !await isFilled(options)) {
+  // Only clicks that choose a form value (radio/checkbox) are entries; buttons are just clicked
+  const isFormField = ({ selector }) => typeof selector === 'string' && commander.evaluate({
+    fn: (sel) => Boolean(document.querySelector(sel)?.matches('input, textarea, select')),
+    args: [selector],
+  }).catch(() => false);
+
+  const confirmed = (method, describe, needsConfirmation) => async (options) => {
+    if (await needsConfirmation(options)) {
       await confirmStep(await describe(options));
     }
     const result = await method(options);
@@ -109,11 +116,15 @@ export function withConfirmations(commander) {
     return result;
   };
   const wrapped = {
-    clickButton: confirmed(commander.clickButton, async ({ selector }) =>
-      `Click ${await describeElement(commander, selector)}`),
+    clickButton: confirmed(
+      commander.clickButton,
+      async ({ selector }) => `Choose ${await describeElement(commander, selector)}`,
+      async (options) => !UNCONFIRMED_SELECTORS.has(options.selector) && await isFormField(options),
+    ),
     fillTextArea: confirmed(
       (options) => commander.fillTextArea({ ...options, simulateTyping: true }),
       async ({ selector, text }) => `Type into ${await describeElement(commander, selector)}:\n   >>> ${text}`,
+      async (options) => !await isFilled(options),
     ),
   };
   return new Proxy(commander, { get: (target, key) => wrapped[key] ?? target[key] });

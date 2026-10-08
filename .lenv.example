@@ -40,7 +40,7 @@
 # Default: 9322
 # BROWSER_PORT: 9322
 
-# Apply to one vacancy only, confirming every click and typed value in the terminal
+# Apply to one vacancy only, confirming every value entered into the form in the terminal
 # Default: false
 # TEST_MODE: true
 

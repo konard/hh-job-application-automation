@@ -19,7 +19,7 @@ src/
 ├── login.mjs                 # Detect logins in installed browsers, sign in to hh.ru
 ├── resumes.mjs               # Pick the most recently updated resume, its suggested vacancies
 ├── tracing.mjs               # browser-commander trace + network log in logs/traces
-├── test-mode.mjs             # Confirm each click and typed value, one application only
+├── test-mode.mjs             # Confirm each entered form value, one application only
 ├── orchestrator.mjs          # Main coordination logic and state machine
 ├── page-triggers.mjs         # Declarative page handlers (browser-commander pageTrigger)
 ├── page-handlers.mjs         # Redirect safety check used by the main loop
@@ -152,7 +152,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--keep-browser-open` | Keep Chrome running after exit, reuse it next run | false |
 | `--browser-idle-timeout` | Minutes before a kept-open Chrome closes when unused | 30 |
 | `--browser-port` | Remote debugging port of the automation Chrome | 9322 |
-| `--test-mode` | One application; confirm every click and typed value on stdin | false |
+| `--test-mode` | One application; confirm every value entered into the form on stdin | false |
 | `--trace` | Record a browser-commander trace in `logs/traces` | true |
 | `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |
 | `--message` | Default cover letter message | - |

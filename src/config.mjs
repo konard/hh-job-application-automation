@@ -77,7 +77,7 @@ export function createConfig() {
         })
         .option('test-mode', {
           type: 'boolean',
-          description: 'Apply to a single vacancy, asking on stdin to confirm every click and typed value',
+          description: 'Apply to a single vacancy, asking on stdin to confirm every value entered into the form',
           default: getenv('TEST_MODE', false),
         })
         .option('trace', {

@@ -79,7 +79,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
 
   if (argv.testMode) {
     enableTestMode({ onStop: () => shutdown('Test mode stopped by the user') });
-    console.log('🧪 Test mode: one application, every click and typed value is confirmed first');
+    console.log('🧪 Test mode: one application, every value entered into the form is confirmed first');
   }
 
   commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose });
