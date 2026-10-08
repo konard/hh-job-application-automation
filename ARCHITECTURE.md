@@ -152,15 +152,15 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--keep-browser-open` | Keep Chrome running after exit, reuse it next run | false |
 | `--browser-idle-timeout` | Minutes before a kept-open Chrome closes when unused | 30 |
 | `--browser-port` | Remote debugging port of the automation Chrome | 9322 |
-| `--test-mode` | Preset: `--max-applications 1 --confirm answers,send` | false |
-| `--confirm` | Steps to confirm on stdin: answers, cover-letter, send, popup | - |
+| `--test-mode` | Preset: `--max-applications 1`, also confirm answers | false |
+| `--confirm` | Steps to confirm on stdin: answers, cover-letter, send, popup, or none | send |
 | `--on-missing-answers` | `wait` for the user or `skip` the vacancy | wait |
 | `--max-applications` | Stop after this many applications (0 = no limit) | 0 |
 | `--trace` | Record a browser-commander trace in `logs/traces` | true |
 | `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |
-| `--message` | Default cover letter message | - |
+| `--message` / `--message-file` | Cover letter (one of them is required) | - |
 | `--verbose` | Enable debug logging | false |
-| `--job-application-interval` | Minimum seconds between applications (plus random up to the same) | 60 |
+| `--job-application-interval` | Minimum seconds between opened vacancies (plus random up to the same) | 180 |
 | `--auto-submit-vacancy-response-form` | Auto-submit forms whose questions are all answered | false |
 
 ## Startup Flow
@@ -174,7 +174,8 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
    login when needed, and copies the hh.ru cookies into the automation browser.
 3. `resumes.mjs` reads the resumes on the profile page and opens the suggested vacancies of the most
    recently updated one. hh.ru shows no update date now, so its list order is used.
-4. The orchestrator applies with 1-2 intervals between applications.
+4. The orchestrator opens vacancies 1-2 intervals apart, pauses while a captcha is shown and
+   stops when hh.ru does not confirm an application.
 
 ## Logging
 

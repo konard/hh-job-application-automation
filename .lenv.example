@@ -40,12 +40,12 @@
 # Default: 9322
 # BROWSER_PORT: 9322
 
-# Supervised run preset: MAX_APPLICATIONS 1 and CONFIRM answers,send unless set
+# Supervised run preset: MAX_APPLICATIONS 1 and also confirm answers
 # Default: false
 # TEST_MODE: true
 
-# Steps to confirm on stdin: answers, cover-letter, send, popup (comma-separated)
-# Default: none
+# Steps to confirm on stdin: answers, cover-letter, send, popup (comma-separated), or none
+# Default: send (forms with questions are sent after you confirm)
 # CONFIRM: answers,send
 
 # Questions without a saved answer: wait (for you to answer them) or skip (the vacancy)
@@ -64,17 +64,17 @@
 # Default: ~/.hh-automation/chrome-profile
 # USER_DATA_DIR: ./user-data
 
-# Minimum seconds between applications; a random extra of up to the same amount is added
-# Default: 60 (seconds)
-# JOB_APPLICATION_INTERVAL: 60
+# Minimum seconds between opened vacancies; a random extra of up to the same amount is added
+# Default: 180 (seconds)
+# JOB_APPLICATION_INTERVAL: 180
 
-# Custom message to send with job application
-# If not set, uses MESSAGE_FILE (default: data/cover-letter.txt, the cover letter shown in README)
+# Cover letter sent with every application: MESSAGE or MESSAGE_FILE is required
+# (data/cover-letter.txt holds the cover letter shown in README)
 # MESSAGE: Здравствуйте, я заинтересован в данной вакансии...
 
 # Path to a UTF-8 text file with a multi-line application message
 # Used when MESSAGE is not set
-# MESSAGE_FILE: ./message.txt
+# MESSAGE_FILE: data/cover-letter.txt
 
 # Enable verbose logging for debugging
 # Default: false

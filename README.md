@@ -7,8 +7,13 @@ https://github.com/user-attachments/assets/6884b2fe-e322-4358-aab8-7f3c20ccdc46
 
 ## Application message example
 
-The Russian version is the default cover letter (`data/cover-letter.txt`); set `MESSAGE` or
-`MESSAGE_FILE` to send another one.
+The cover letter is always your choice: pass `--message-file <file>` (`MESSAGE_FILE`) or
+`--message "<text>"` (`MESSAGE`); the run does not start without one. The Russian version below
+is in `data/cover-letter.txt`:
+
+```bash
+bun run apply -- --message-file data/cover-letter.txt
+```
 
 Russian version:
 ```
@@ -93,8 +98,8 @@ applies to the vacancies hh.ru suggests for it:
    # Enable verbose logging by default
    VERBOSE: true
 
-   # Minimum seconds between applications (a random extra up to the same is added)
-   JOB_APPLICATION_INTERVAL: 90
+   # Minimum seconds between opened vacancies (default 180; a random extra up to the same is added)
+   JOB_APPLICATION_INTERVAL: 240
 
    # Keep the browser open between runs (closed after 30 idle minutes)
    KEEP_BROWSER_OPEN: true
@@ -151,12 +156,14 @@ To check what will be sent, apply to a single vacancy step by step:
 bun run apply -- --test-mode
 ```
 
-`--test-mode` is a preset: `--max-applications 1 --confirm answers,send`. Each part can be set
+By default the run asks before sending a form with questions (`--confirm send`) and waits
+for you when a question has no saved answer. `--test-mode` is a preset: `--max-applications 1`
+and also confirm `answers`. Each part can be set
 on its own:
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--confirm` | `answers`, `cover-letter`, `send`, `popup` (comma-separated) | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends a form with questions (full form or popup; forms with only a cover letter are sent right away), everything in the short popup form |
+| `--confirm` | `answers`, `cover-letter`, `send` (default), `popup` (comma-separated), or `none` | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends a form with questions (full form or popup; forms with only a cover letter are sent right away), everything in the short popup form |
 | `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy |
 | `--max-applications` | number, `0` = no limit | Stop after sending this many applications |
 
@@ -170,7 +177,7 @@ A continuous supervised run, which only asks before sending forms with questions
 answer is missing:
 
 ```bash
-bun run apply -- --confirm send --keep-browser-open
+bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 ```
 
 You can also send a form yourself in the browser: the run notices the sent application (it
@@ -205,7 +212,7 @@ because it holds personal data:
 - **Unconfirmed application**: if hh.ru does not mark a vacancy as responded after sending,
   the run waits for you (or stops in unattended runs) instead of opening the next vacancy.
 - **Pauses**: after every opened vacancy, sent or not, the next one waits 1-2
-  `--job-application-interval`s, so hh.ru sees few requests.
+  `--job-application-interval`s (default 180 s, so 3-6 minutes), so hh.ru sees few requests.
 - **Chat panel**: hh.ru opens the employer chat after an application; the run closes it.
 
 ### Ignore Questionnaire Vacancies

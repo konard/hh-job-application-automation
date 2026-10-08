@@ -10,12 +10,8 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { makeConfig } from 'lino-arguments';
 import { CONFIRM_STEPS } from './confirmations.mjs';
-
-// The cover letter sent with every application unless MESSAGE or MESSAGE_FILE is set
-const DEFAULT_MESSAGE_FILE = fileURLToPath(new URL('../data/cover-letter.txt', import.meta.url));
 
 function loadMessageFromFile(filePath) {
   if (!filePath) {
@@ -82,13 +78,13 @@ export function createConfig() {
         })
         .option('test-mode', {
           type: 'boolean',
-          description: 'Preset for a supervised run: --max-applications 1 and --confirm answers,send unless given',
+          description: 'Preset for a supervised run: --max-applications 1 and also confirm answers',
           default: getenv('TEST_MODE', false),
         })
         .option('confirm', {
           type: 'string',
-          description: `Steps to confirm on stdin, comma-separated: ${CONFIRM_STEPS.join(', ')}`,
-          default: getenv('CONFIRM', ''),
+          description: `Steps to confirm on stdin, comma-separated: ${CONFIRM_STEPS.join(', ')}, or none`,
+          default: getenv('CONFIRM', 'send'),
         })
         .option('on-missing-answers', {
           type: 'string',
@@ -113,19 +109,19 @@ export function createConfig() {
         })
         .option('job-application-interval', {
           type: 'number',
-          description: 'Minimum seconds between applications; a random extra of up to the same amount is added',
-          default: getenv('JOB_APPLICATION_INTERVAL', 60),
+          description: 'Minimum seconds between opened vacancies; a random extra of up to the same amount is added',
+          default: getenv('JOB_APPLICATION_INTERVAL', 180),
         })
         .option('message', {
           alias: 'm',
           type: 'string',
-          description: 'Message to send with job application',
+          description: 'Cover letter to send with every application (this or --message-file is required)',
           default: getenv('MESSAGE', ''),
         })
         .option('message-file', {
           type: 'string',
-          description: 'Path to a UTF-8 text file with the message to send',
-          default: getenv('MESSAGE_FILE', DEFAULT_MESSAGE_FILE),
+          description: 'Path to a UTF-8 text file with the cover letter, e.g. data/cover-letter.txt',
+          default: getenv('MESSAGE_FILE', ''),
         })
         .option('verbose', {
           type: 'boolean',
@@ -146,11 +142,16 @@ export function createConfig() {
   });
 
   config.message ||= loadMessageFromFile(config.messageFile);
+  // The cover letter is the user's choice; nothing is sent without one
+  if (!config.message.trim() && !config.help) {
+    throw new Error('Choose a cover letter: --message-file <file> (e.g. data/cover-letter.txt) or --message "<text>"');
+  }
+  config.confirmSteps = config.confirm === 'none' ? []
+    : config.confirm.split(',').map((step) => step.trim()).filter(Boolean);
   if (config.testMode) {
-    config.confirm ||= 'answers,send';
+    config.confirmSteps = [...new Set(['answers', ...config.confirmSteps, 'send'])];
     config.maxApplications ||= 1;
   }
-  config.confirmSteps = config.confirm.split(',').map((step) => step.trim()).filter(Boolean);
   const unknownSteps = config.confirmSteps.filter((step) => !CONFIRM_STEPS.includes(step));
   if (unknownSteps.length > 0) {
     throw new Error(`Unknown --confirm step(s): ${unknownSteps.join(', ')}; use ${CONFIRM_STEPS.join(', ')}`);
