@@ -243,4 +243,9 @@ describe('Subject terms (technology and role names)', () => {
   test('a question in dollars does not take the answer in rubles', () => {
     assert.equal(findBestMatch('Какие ваши зарплатные ожидания в $?', db), null);
   });
+
+  test('sharing only generic question words is not a match', () => {
+    const cities = new Map([['Подскажите, в каком городе Вы проживаете?', 'В Гоа, в Индии.']]);
+    assert.equal(findBestMatch('Подскажите, пожалуйста, на каком стеке вы разрабатываете?', cities), null);
+  });
 });

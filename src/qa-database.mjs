@@ -433,6 +433,14 @@ const STOPWORDS = new Set([
   'чуть', 'данный', 'момент',
 ]);
 
+// Words every question uses; sharing only these says nothing about the subject
+const GENERIC_QUESTION_WORDS = new Set([
+  'подскажите', 'укажите', 'напишите', 'расскажите', 'опишите', 'поделитесь',
+  'какой', 'какая', 'какое', 'какие', 'каком', 'какую', 'каких', 'какого', 'каким',
+  'ваш', 'ваша', 'ваше', 'ваши', 'вашей', 'вашего', 'вам', 'вас', 'вами', 'твой', 'тебя', 'тебе',
+  'есть', 'ли', 'был', 'была', 'было', 'были', 'у',
+]);
+
 /**
  * Extract key words (plus 5-char stems of long words) from a question
  * @param {string} question - Question string
@@ -488,6 +496,19 @@ export function extractSubjectTerms(question) {
     .join(',');
 }
 
+/**
+ * Whether two questions share a keyword other than the generic question words
+ * @returns {boolean}
+ */
+export function sharesSubjectWord(a, b) {
+  // Keywords include 5-letter stems of long words, so stems of generic words are generic too
+  const isGeneric = (word) => GENERIC_QUESTION_WORDS.has(word) ||
+    (word.length === 5 && [...GENERIC_QUESTION_WORDS].some((generic) => generic.length > 6 && generic.startsWith(word)));
+  const subjectWords = (question) => [...extractKeywords(question)].filter((word) => !isGeneric(word));
+  const wordsB = new Set(subjectWords(b));
+  return subjectWords(a).some((word) => wordsB.has(word));
+}
+
 export const extractKeywordsCaseSensitive = (question) => extractKeywords(question, { caseSensitive: true });
 export const keywordSimilarityCaseSensitive = (a, b) => keywordSimilarity(a, b, { caseSensitive: true });
 
@@ -531,6 +552,10 @@ export function findBestMatch(question, qaDatabase, options = {}) {
     );
 
     const kwSimilarity = keywordSimilarity(question, dbQuestion, { caseSensitive });
+    // Similar wording alone ("на каком стеке" vs "в каком городе") is not a match
+    if (threshold > 0 && !sharesSubjectWord(question, dbQuestion)) {
+      continue;
+    }
 
     const combinedScore = (editSimilarity * 0.4) + (kwSimilarity * 0.6);
 
