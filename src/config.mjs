@@ -12,6 +12,7 @@ import os from 'os';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { makeConfig } from 'lino-arguments';
+import { CONFIRM_STEPS } from './confirmations.mjs';
 
 // The cover letter sent with every application unless MESSAGE or MESSAGE_FILE is set
 const DEFAULT_MESSAGE_FILE = fileURLToPath(new URL('../data/cover-letter.txt', import.meta.url));
@@ -81,8 +82,24 @@ export function createConfig() {
         })
         .option('test-mode', {
           type: 'boolean',
-          description: 'Apply to a single vacancy, asking on stdin to confirm every value entered into the form',
+          description: 'Preset for a supervised run: --max-applications 1 and --confirm answers,send unless given',
           default: getenv('TEST_MODE', false),
+        })
+        .option('confirm', {
+          type: 'string',
+          description: `Steps to confirm on stdin, comma-separated: ${CONFIRM_STEPS.join(', ')}`,
+          default: getenv('CONFIRM', ''),
+        })
+        .option('on-missing-answers', {
+          type: 'string',
+          choices: ['wait', 'skip'],
+          description: 'Questions without a saved answer: wait for the user to answer them, or skip the vacancy',
+          default: getenv('ON_MISSING_ANSWERS', 'wait'),
+        })
+        .option('max-applications', {
+          type: 'number',
+          description: 'Stop after sending this many applications (0 = no limit)',
+          default: getenv('MAX_APPLICATIONS', 0),
         })
         .option('trace', {
           type: 'boolean',
@@ -129,6 +146,15 @@ export function createConfig() {
   });
 
   config.message ||= loadMessageFromFile(config.messageFile);
+  if (config.testMode) {
+    config.confirm ||= 'answers,send';
+    config.maxApplications ||= 1;
+  }
+  config.confirmSteps = config.confirm.split(',').map((step) => step.trim()).filter(Boolean);
+  const unknownSteps = config.confirmSteps.filter((step) => !CONFIRM_STEPS.includes(step));
+  if (unknownSteps.length > 0) {
+    throw new Error(`Unknown --confirm step(s): ${unknownSteps.join(', ')}; use ${CONFIRM_STEPS.join(', ')}`);
+  }
 
   return config;
 }

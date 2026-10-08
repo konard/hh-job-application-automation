@@ -57,6 +57,7 @@ export const SELECTORS = {
 
   // Cookies policy banner
   cookiesAccept: '[data-qa="cookies-policy-informer-accept"]',
+  vacancyResponded: '[data-qa="vacancy-serp__vacancy_responded"]',
   additionalDataClose: '[data-qa="additional-data-collector__popup-close"]',
 
   // Resumes on the profile page

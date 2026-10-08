@@ -140,10 +140,10 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 
 **Safety Note:** The default behavior (manual review) is recommended to ensure test answers are correct before submission.
 
-With this flag the run is unattended: forms with questions that the QA database cannot answer are
-skipped instead of waiting for you.
+Questions that the QA database cannot answer are never skipped by default: the form waits for
+you (`--on-missing-answers wait`). Use `--on-missing-answers skip` for fully unattended runs.
 
-### Test Mode
+### Test Mode and Confirmations
 
 To check what will be sent, apply to a single vacancy step by step:
 
@@ -151,10 +151,20 @@ To check what will be sent, apply to a single vacancy step by step:
 bun run apply -- --test-mode
 ```
 
-Buttons are clicked right away, except the one that sends the application. Before it and before every value entered into the form (typed text, a chosen
-radio/checkbox option) the field is scrolled into view (nothing is drawn on the page, so screenshots
-and recordings stay clean), and the terminal shows the field and the exact value. Type `y`
-to enter it or `q` to stop. The run ends after that one application.
+`--test-mode` is a preset: `--max-applications 1 --confirm answers,send`. Each part can be set
+on its own:
+
+| Option | Values | Effect |
+|--------|--------|--------|
+| `--confirm` | `answers`, `cover-letter`, `send`, `popup` (comma-separated) | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends it, everything in the short popup form |
+| `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy |
+| `--max-applications` | number, `0` = no limit | Stop after sending this many applications |
+
+Other buttons are clicked right away. Before a confirmed step the field is scrolled into view
+(nothing is drawn on the page, so screenshots and recordings stay clean), and the terminal shows
+the field and the exact value. Type `y` to go on or `q` to stop. When confirmations are on and a
+question has no saved answer, the run lists it and waits until you have answered it in the
+browser; your answers are saved to `data/qa.lino`.
 
 ### Ignore Questionnaire Vacancies
 

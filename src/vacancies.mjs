@@ -9,7 +9,7 @@ import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './help
 import { findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
-import { isTestMode } from './test-mode.mjs';
+import { isInteractive, waitForUser } from './confirmations.mjs';
 
 /**
  * Handle limit error when detected
@@ -114,8 +114,18 @@ export async function processModalApplication({
     return skipModal({ commander, reason: 'questionnaire_ignored' });
   }
 
-  if (unansweredCount > 0) {
-    console.log(`⚠️  Found ${unansweredCount} UNANSWERED test question(s) in modal`);
+  // In interactive runs the user answers instead of the vacancy being skipped
+  let open = unansweredCount;
+  while (open > 0 && isInteractive()) {
+    await waitForUser(`Answer the ${open} open question(s) in the application popup`);
+    ({ unansweredCount: open } = await countUnansweredQuestions({
+      evaluate: commander.evaluate,
+      containerSelector: SELECTORS.applicationForm,
+    }));
+  }
+
+  if (open > 0) {
+    console.log(`⚠️  Found ${open} UNANSWERED test question(s) in modal`);
     console.log('💡 Skipping this vacancy - cannot auto-submit when test questions remain unanswered');
     return skipModal({ commander, reason: 'unanswered_questions' });
   }
@@ -126,6 +136,11 @@ export async function processModalApplication({
     await logModalText({ commander, title: '📋 Modal content:' });
     console.error('💡 Closing modal and skipping this vacancy...');
     return skipModal({ commander, reason: 'button_not_found' });
+  }
+
+  while (isInteractive() && !await isButtonEnabled(commander, submitButtonSelector)) {
+    await logModalText({ commander, title: '📋 The send button is disabled; the popup says:' });
+    await waitForUser('Fix the application popup so it can be sent');
   }
 
   if (!await isButtonEnabled(commander, submitButtonSelector)) {
@@ -149,7 +164,33 @@ export async function processModalApplication({
   }
 
   await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
+  if (vacancyId && !await isVacancyCardResponded({ commander, vacancyId })) {
+    console.log(`⚠️  hh.ru did not mark vacancy ${vacancyId} as responded, manual check required`);
+    return { success: false, reason: 'not_confirmed' };
+  }
+  console.log(`✅ Application sent for vacancy ${vacancyId}`);
   return { success: true };
+}
+
+/**
+ * Whether the vacancy card on the list shows "Вы откликнулись", waiting up to 10 s
+ * @returns {Promise<boolean>}
+ */
+async function isVacancyCardResponded({ commander, vacancyId }) {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { value } = await commander.safeEvaluate({
+      fn: (id, respondedSelector) => Boolean(document.querySelector(`a[href*="/vacancy/${id}"]`)
+        ?.closest('[data-qa^="vacancy-serp__vacancy"]')?.querySelector(respondedSelector)),
+      args: [vacancyId, SELECTORS.vacancyResponded],
+      defaultValue: false,
+      operationName: 'responded vacancy check',
+    });
+    if (value) {
+      return true;
+    }
+    await commander.wait({ ms: 1000, reason: 'vacancy card to show the response' });
+  }
+  return false;
 }
 
 /**
@@ -467,7 +508,7 @@ export async function findAndProcessVacancyButton({
     log.debug(() => `🔍 Marked vacancy ID ${vacancyId} as processed (total: ${processedVacancyIds.size})`);
   }
 
-  if (isTestMode()) {
+  if (isInteractive()) {
     console.log(`🧪 Applying to ${await describeVacancyCard({ commander, selector, buttonIndex })}`);
   }
 

@@ -22,6 +22,7 @@ import { findSuggestedVacanciesUrl } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
+import { isInteractive } from './confirmations.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -96,8 +97,9 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
     readQADatabase: qaDB.readQADatabase,
     addOrUpdateQA: qaDB.addOrUpdateQA,
     addIgnoredVacancyId: qaDB.addIgnoredVacancyId,
-    // In test mode every step is confirmed, so the form is submitted after confirmation
-    autoSubmitEnabled: argv.autoSubmitVacancyResponseForm || argv.testMode,
+    // In interactive runs the user answers on stdin, so the form is submitted after that
+    autoSubmitEnabled: argv.autoSubmitVacancyResponseForm || isInteractive(),
+    onMissingAnswers: argv.onMissingAnswers,
     ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
     returnUrl: lastSearchPageUrl,
     onApplicationSent: afterApplicationSent,

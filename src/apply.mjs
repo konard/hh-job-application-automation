@@ -20,7 +20,7 @@ import { createOrchestrator } from './orchestrator.mjs';
 import { markVacancyAsProcessed } from './vacancies.mjs';
 import { connectOrLaunchBrowser } from './browser-session.mjs';
 import { startTracing, stopTracing } from './tracing.mjs';
-import { enableTestMode, withConfirmations } from './test-mode.mjs';
+import { enableConfirmations, withConfirmations } from './confirmations.mjs';
 
 const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
@@ -77,10 +77,15 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     idleTimeoutMinutes: argv.browserIdleTimeout,
   });
 
-  if (argv.testMode) {
-    enableTestMode({ onStop: () => shutdown('Test mode stopped by the user') });
-    console.log('🧪 Test mode: one application, every value entered into the form is confirmed first');
+  // Someone answers on stdin when steps are confirmed, so missing answers can be asked for too
+  if (argv.confirmSteps.length > 0) {
+    enableConfirmations({ steps: argv.confirmSteps, onStop: () => shutdown('Stopped by the user') });
+    console.log(`🧪 Confirming on stdin: ${argv.confirmSteps.join(', ')}`);
   }
+  if (argv.maxApplications > 0) {
+    console.log(`🧪 Stopping after ${argv.maxApplications} application(s)`);
+  }
+  let applicationsSent = 0;
 
   commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose });
   console.log(`Using ${commander.engine} automation engine`);
@@ -95,7 +100,8 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     argv,
     qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
     onPageClosed: () => shutdown('Tab close detected'),
-    onApplicationSent: () => argv.testMode && shutdown('Test mode: the application was sent'),
+    onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
+      shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),
   });
 
   await orchestrator.start();

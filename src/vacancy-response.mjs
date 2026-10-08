@@ -16,6 +16,7 @@ import {
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
 import { log } from './logging.mjs';
+import { isInteractive, waitForUser } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import {
@@ -162,6 +163,26 @@ async function prepareCoverLetterTextarea({ commander }) {
 }
 
 /**
+ * Questions on the form that still have no answer
+ * @returns {Promise<string[]>}
+ */
+async function listOpenQuestions(commander) {
+  const items = await extractPageQuestions({ evaluate: commander.evaluate });
+  const choices = new Map(items.filter(({ type }) => type !== 'textarea').map((item) => [item.question, item]));
+  const open = items.filter((item) => {
+    if (item.type !== 'textarea') {
+      return !item.options.some(({ checked }) => checked);
+    }
+    const choice = choices.get(item.question);
+    // The text box of a choice question needs text only for its "Свой вариант" option
+    return choice
+      ? choice.options.some(({ checked, value }) => checked && value === 'open') && !item.currentValue
+      : !item.currentValue;
+  });
+  return [...new Set(open.map(({ question }) => question))];
+}
+
+/**
  * "1 choice, 3 text" style summary of the test questions on the form
  */
 function describeQuestionCounts(choiceCount, textareaCount) {
@@ -208,6 +229,7 @@ export async function handleVacancyResponsePage({
   ignoreVacanciesWithQuestionnaire,
   returnUrl = DEFAULT_RETURN_URL,
   onApplicationSent = async () => {},
+  onMissingAnswers = 'wait',
   verbose,
 }) {
   const skipQuestionnaireVacancy = async () => {
@@ -292,26 +314,26 @@ export async function handleVacancyResponsePage({
       return skipQuestionnaireVacancy();
     }
 
-    // Unattended (auto-submit) runs move on instead of waiting for manual answers
-    const skipOrWaitForUser = async (instruction) => {
-      if (!autoSubmitEnabled) {
-        console.log(instruction);
+    // By default a vacancy is not skipped for missing answers: the user decides what to write
+    const isFormComplete = async () =>
+      (await countUnansweredQuestions({ evaluate: commander.evaluate })).unansweredCount === 0 &&
+      await countEmptyTestTextareas({ commander }) === 0;
+
+    if (unansweredCount > 0 || !await isFormComplete()) {
+      const open = await listOpenQuestions(commander);
+      console.log(`Questions without a saved answer:\n${open.map((question) => `   • ${question}`).join('\n')}`);
+      if (onMissingAnswers === 'skip') {
+        console.log(`Skipping this vacancy (--on-missing-answers skip), returning to: ${returnUrl}`);
+        await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
         return;
       }
-      console.log(`Skipping this vacancy, returning to: ${returnUrl}`);
-      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
-    };
-
-    if (unansweredCount > 0) {
-      console.log(`Found ${unansweredCount} of ${totalCount} radio/checkbox test question(s) UNANSWERED`);
-      console.log('Cannot auto-submit when test questions remain unanswered - manual submission required');
-      return skipOrWaitForUser('Please answer the remaining questions and submit the form manually when ready');
-    }
-
-    if (await countEmptyTestTextareas({ commander }) > 0) {
-      console.log('Found EMPTY test question textarea(s)');
-      console.log('Cannot auto-submit when test textareas are empty - manual submission required');
-      return skipOrWaitForUser('Please fill the empty textarea(s) and submit the form manually when ready');
+      if (!isInteractive()) {
+        console.log('Please answer them and submit the form manually when ready');
+        return;
+      }
+      do {
+        await waitForUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)');
+      } while (!await isFormComplete());
     }
 
     if (!hasTestQuestions) {

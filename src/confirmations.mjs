@@ -1,55 +1,67 @@
 /**
- * Test mode: one application, every value entered into a form field confirmed first.
+ * Interactive confirmations on stdin, configured per step.
  *
- * Buttons are clicked without asking, except the one that sends the application.
- * Before text is typed, a radio/checkbox option is chosen or the application is
- * sent, the step is printed and the run waits for a line on stdin: `y` does it,
- * `q` stops the run.
+ * Steps (`--confirm`, comma-separated):
+ * - `answers`      - text typed into a question and radio/checkbox choices on the full form
+ * - `cover-letter` - the cover letter typed into the full form
+ * - `send`         - the click that sends the full form
+ * - `popup`        - everything in the short application popup on the vacancy list
  *
- * @module test-mode
+ * Before a confirmed step the field is scrolled into view, the step is printed and the
+ * run waits for a line on stdin: `y` does it, `q` stops the run. Other buttons are
+ * clicked without asking. In interactive runs the user is also asked to answer
+ * questions that have no saved answer, instead of the vacancy being skipped.
+ *
+ * @module confirmations
  */
 
 import readline from 'readline';
-import { SELECTORS } from './hh-selectors.mjs';
+import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
+
+export const CONFIRM_STEPS = ['answers', 'cover-letter', 'send', 'popup'];
 
 // Clicks that only dismiss overlays enter no data
 const UNCONFIRMED_SELECTORS = new Set([SELECTORS.cookiesAccept, SELECTORS.additionalDataClose]);
-// The click that sends the application waits too, so the filled form can be reviewed first
 const SUBMIT_SELECTORS = new Set([
   SELECTORS.submitButtonPopup,
   SELECTORS.submitButtonLetter,
   SELECTORS.submitButtonWithoutQuestions,
   'button[type="submit"]',
 ]);
+const COVER_LETTER_SELECTORS = new Set([SELECTORS.coverLetterTextareaPopup, SELECTORS.coverLetterTextareaForm]);
 const STEP_PAUSE_MS = 2000;
 
-let enabled = false;
+let interactive = false;
+let steps = new Set();
 let stop = () => {};
 let lines = null;
 
 /**
- * Turn test mode on
+ * Turn interactive confirmations on
  * @param {Object} options
+ * @param {string[]} options.steps - Steps to confirm (see CONFIRM_STEPS)
  * @param {Function} options.onStop - Called when the user answers `q`
  */
-export function enableTestMode({ onStop }) {
-  enabled = true;
+export function enableConfirmations({ steps: confirmSteps, onStop }) {
+  interactive = true;
+  steps = new Set(confirmSteps);
   stop = onStop;
 }
 
-export const isTestMode = () => enabled;
+/** Whether someone answers on stdin, so the run can wait for them */
+export const isInteractive = () => interactive;
 
 /**
- * Print a step and wait for its confirmation (no-op outside test mode)
+ * Print a message and wait until the user types `y` (no-op in unattended runs)
  * @param {string} description
  */
-export async function confirmStep(description) {
-  if (!enabled) {
+export async function waitForUser(description) {
+  if (!interactive) {
     return;
   }
   lines ??= readline.createInterface({ input: process.stdin })[Symbol.asyncIterator]();
   for (;;) {
-    console.log(`❓ [test mode] ${description}\n   Type y to do it, q to stop:`);
+    console.log(`❓ ${description}\n   Type y to continue, q to stop:`);
     const { value, done } = await lines.next();
     const answer = done ? 'q' : value.trim().toLowerCase();
     if (answer === 'y') {
@@ -59,6 +71,17 @@ export async function confirmStep(description) {
       await stop();
       return new Promise(() => {});
     }
+  }
+}
+
+/**
+ * Wait for confirmation of a step when that step is configured
+ * @param {string} step - One of CONFIRM_STEPS
+ * @param {string} description
+ */
+export async function confirmStep(step, description) {
+  if (steps.has(step)) {
+    await waitForUser(description);
   }
 }
 
@@ -95,33 +118,57 @@ function describeElement(commander, selector) {
 }
 
 /**
- * Wrap a commander so that entered values wait for confirmation in test mode
+ * Wrap a commander so that configured steps wait for confirmation
  * @param {Object} commander - Browser commander instance
- * @returns {Object} The same commander outside test mode
+ * @returns {Object} The same commander when nothing is confirmed
  */
 export function withConfirmations(commander) {
-  if (!enabled) {
+  if (steps.size === 0) {
     return commander;
   }
+  // The short application popup is opened over the vacancy list
+  const inPopup = () => URL_PATTERNS.searchVacancy.test(commander.getUrl());
+
   // fillTextArea with checkEmpty leaves a non-empty textarea alone, so there is nothing to confirm
   const isFilled = ({ selector, checkEmpty }) => checkEmpty && typeof selector === 'string' && commander.evaluate({
     fn: (sel) => Boolean(document.querySelector(sel)?.value?.trim()),
     args: [selector],
   }).catch(() => false);
 
-  // Only clicks that choose a form value (radio/checkbox) are entries; buttons are just clicked
+  // Clicks that choose a form value (radio/checkbox) are answers; other buttons are just clicked
   const isFormField = ({ selector }) => typeof selector === 'string' && commander.evaluate({
     fn: (sel) => Boolean(document.querySelector(sel)?.matches('input, textarea, select')),
     args: [selector],
   }).catch(() => false);
 
-  const confirmed = (method, describe, needsConfirmation) => async (options) => {
-    if (await needsConfirmation(options)) {
-      await confirmStep(await describe(options));
+  const clickStep = async (options) => {
+    if (SUBMIT_SELECTORS.has(options.selector)) {
+      return inPopup() ? 'popup' : 'send';
     }
-    const result = await method(options);
-    await commander.wait({ ms: STEP_PAUSE_MS, reason: 'test mode pause after a step' });
-    return result;
+    if (UNCONFIRMED_SELECTORS.has(options.selector) || !await isFormField(options)) {
+      return null;
+    }
+    return inPopup() ? 'popup' : 'answers';
+  };
+  const fillStep = async (options) => {
+    if (await isFilled(options)) {
+      return null;
+    }
+    if (inPopup()) {
+      return 'popup';
+    }
+    return COVER_LETTER_SELECTORS.has(options.selector) ? 'cover-letter' : 'answers';
+  };
+
+  const confirmed = (method, describe, stepOf) => async (options) => {
+    const step = await stepOf(options);
+    if (steps.has(step)) {
+      await confirmStep(step, await describe(options));
+      const result = await method(options);
+      await commander.wait({ ms: STEP_PAUSE_MS, reason: 'pause after a confirmed step' });
+      return result;
+    }
+    return method(options);
   };
   const wrapped = {
     clickButton: confirmed(
@@ -129,13 +176,12 @@ export function withConfirmations(commander) {
       async ({ selector }) => (SUBMIT_SELECTORS.has(selector)
         ? `Send the application: click ${await describeElement(commander, selector)}`
         : `Choose ${await describeElement(commander, selector)}`),
-      async (options) => SUBMIT_SELECTORS.has(options.selector) ||
-        (!UNCONFIRMED_SELECTORS.has(options.selector) && await isFormField(options)),
+      clickStep,
     ),
     fillTextArea: confirmed(
       (options) => commander.fillTextArea({ ...options, simulateTyping: true }),
       async ({ selector, text }) => `Type into ${await describeElement(commander, selector)}:\n   >>> ${text}`,
-      async (options) => !await isFilled(options),
+      fillStep,
     ),
   };
   return new Proxy(commander, { get: (target, key) => wrapped[key] ?? target[key] });

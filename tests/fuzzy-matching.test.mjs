@@ -3,7 +3,7 @@
  * Issue #74: Saved questions are not filled on vacancy response page form
  */
 import { describe, test, assert } from 'test-anywhere';
-import { findBestMatch } from '../src/qa-database.mjs';
+import { extractSubjectTerms, findBestMatch } from '../src/qa-database.mjs';
 
 // Test data simulating real Q&A database
 const qaDatabase = new Map([
@@ -212,4 +212,35 @@ describe('Fuzzy Question Matching', () => {
     }
   });
 
+});
+
+describe('Subject terms (technology and role names)', () => {
+  const db = new Map([
+    ['Сколько у вас лет коммерческого опыта разработки на Go?', 'Больше 3-х лет.'],
+    ['Сколько лет коммерческого опыта с С#?', 'Более 5 лет'],
+    ['Есть ли у вас опыт работы с Docker?', '4 (Опыт 3-6 лет)'],
+    ['Какие ваши зарплатные ожидания?', 'От 450000 рублей в месяц на руки.'],
+  ]);
+
+  test('a question about C# does not take the answer about Go', () => {
+    const match = findBestMatch('Сколько лет коммерческого опыта разработки у вас на C#?', db);
+    assert.equal(match?.answer, 'Более 5 лет');
+  });
+
+  test('Cyrillic С# and Latin C# are the same name', () => {
+    assert.equal(extractSubjectTerms('опыт с С#?'), extractSubjectTerms('опыт с C#?'));
+  });
+
+  test('different technologies do not match', () => {
+    assert.equal(findBestMatch('Подскажите, пожалуйста, у вас есть опыт работы с MongoDB?', db), null);
+    assert.equal(findBestMatch('Подскажите, пожалуйста, у вас есть опыт работы с AWS/Kubernetes?', db), null);
+  });
+
+  test('a role name does not match a technology', () => {
+    assert.equal(findBestMatch('Сколько лет коммерческого опыта у вас на позиции Lead?', db), null);
+  });
+
+  test('a question in dollars does not take the answer in rubles', () => {
+    assert.equal(findBestMatch('Какие ваши зарплатные ожидания в $?', db), null);
+  });
 });

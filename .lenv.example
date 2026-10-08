@@ -40,9 +40,21 @@
 # Default: 9322
 # BROWSER_PORT: 9322
 
-# Apply to one vacancy only, confirming every value entered into the form in the terminal
+# Supervised run preset: MAX_APPLICATIONS 1 and CONFIRM answers,send unless set
 # Default: false
 # TEST_MODE: true
+
+# Steps to confirm on stdin: answers, cover-letter, send, popup (comma-separated)
+# Default: none
+# CONFIRM: answers,send
+
+# Questions without a saved answer: wait (for you to answer them) or skip (the vacancy)
+# Default: wait
+# ON_MISSING_ANSWERS: wait
+
+# Stop after sending this many applications (0 = no limit)
+# Default: 0
+# MAX_APPLICATIONS: 10
 
 # Record a browser-commander trace of each run in logs/traces
 # Default: true
@@ -68,8 +80,7 @@
 # Default: false
 # VERBOSE: true
 
-# Auto-submit vacancy response forms when all questions are answered;
-# forms that cannot be fully answered are skipped (unattended mode)
+# Auto-submit vacancy response forms when all questions are answered
 # Default: false (manual review recommended for safety)
 # AUTO_SUBMIT_VACANCY_RESPONSE_FORM: true
 

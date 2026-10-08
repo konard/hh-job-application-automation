@@ -471,6 +471,23 @@ export function keywordSimilarity(a, b, options) {
   return intersection.length / union.size;
 }
 
+// Cyrillic letters that look like Latin ones, as in "С#" typed with a Cyrillic С
+const LATIN_LOOKALIKES = { а: 'a', в: 'b', е: 'e', к: 'k', м: 'm', н: 'h', о: 'o', р: 'p', с: 'c', т: 't', у: 'y', х: 'x' };
+
+/**
+ * Names a question is about: words with Latin letters, # or + (C#, Go, MongoDB, AWS, Lead, net, $).
+ * Two questions about different names need different answers, however similar the wording.
+ * @param {string} question
+ * @returns {string} Sorted, comma-joined names
+ */
+export function extractSubjectTerms(question) {
+  return [...new Set(question.toLowerCase().split(/[\s,.;:!?()«»"'/]+/)
+    .filter((word) => /[a-z#+$]/.test(word))
+    .map((word) => word.replace(/[а-яё]/g, (letter) => LATIN_LOOKALIKES[letter] ?? letter)))]
+    .sort()
+    .join(',');
+}
+
 export const extractKeywordsCaseSensitive = (question) => extractKeywords(question, { caseSensitive: true });
 export const keywordSimilarityCaseSensitive = (a, b) => keywordSimilarity(a, b, { caseSensitive: true });
 
@@ -500,8 +517,14 @@ export function findBestMatch(question, qaDatabase, options = {}) {
   }
 
   const matches = [];
+  const subjectTerms = extractSubjectTerms(question);
 
   for (const [dbQuestion, answer] of qaDatabase.entries()) {
+    // "опыт на C#" must not take the answer of "опыт на Go" (threshold 0 still lists everything)
+    if (threshold > 0 && extractSubjectTerms(dbQuestion) !== subjectTerms) {
+      continue;
+    }
+
     const editSimilarity = stringSimilarity(
       normalize(question),
       normalize(dbQuestion),
