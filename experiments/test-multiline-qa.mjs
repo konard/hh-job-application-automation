@@ -25,7 +25,6 @@ async function main() {
   // Test 1: Short multiline answer (what the test expects to be an array)
   const question1 = 'What are your GitHub profiles?';
   const multilineAnswer = `github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation`;

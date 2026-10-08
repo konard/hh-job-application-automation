@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 import { makeConfig } from 'lino-arguments';
 
 // The cover letter sent with every application unless MESSAGE or MESSAGE_FILE is set
-const DEFAULT_MESSAGE_FILE = fileURLToPath(new URL('../data/message.txt', import.meta.url));
+const DEFAULT_MESSAGE_FILE = fileURLToPath(new URL('../data/cover-letter.txt', import.meta.url));
 
 function loadMessageFromFile(filePath) {
   if (!filePath) {

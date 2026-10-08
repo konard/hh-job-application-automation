@@ -55,7 +55,6 @@ TeamLead/Senior Full-stack Developer
 Посмотреть мой код на GitHub можно тут:
 
 github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation

@@ -57,7 +57,7 @@
 # JOB_APPLICATION_INTERVAL: 60
 
 # Custom message to send with job application
-# If not set, uses MESSAGE_FILE (default: data/message.txt, the cover letter shown in README)
+# If not set, uses MESSAGE_FILE (default: data/cover-letter.txt, the cover letter shown in README)
 # MESSAGE: Здравствуйте, я заинтересован в данной вакансии...
 
 # Path to a UTF-8 text file with a multi-line application message

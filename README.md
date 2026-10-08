@@ -7,7 +7,7 @@ https://github.com/user-attachments/assets/6884b2fe-e322-4358-aab8-7f3c20ccdc46
 
 ## Application message example
 
-The Russian version is the default cover letter (`data/message.txt`); set `MESSAGE` or
+The Russian version is the default cover letter (`data/cover-letter.txt`); set `MESSAGE` or
 `MESSAGE_FILE` to send another one.
 
 Russian version:
@@ -21,7 +21,6 @@ Russian version:
 Посмотреть мой код на GitHub можно тут:
 
 github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation
@@ -43,7 +42,6 @@ In what form is the legal arrangement for remote work offered?
 You can view my code on GitHub here:
 
 github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation

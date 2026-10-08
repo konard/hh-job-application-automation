@@ -148,7 +148,6 @@ fi'
   "GIL — это глобальная блокировка интерпретатора в CPython, которая позволяет одновременно исполнять байт-код Python только одному потоку. Она упрощает управление памятью (подсчёт ссылок), но из-за неё многопоточность не ускоряет CPU-нагруженные задачи."
 "Прикрепи, пожалуйста, ссылку на пример своего кода(GitHub/ GitLab/BitBucket)"
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -188,7 +187,6 @@ github.com/link-foundation"
 "Прикрепите, пожалуйста, ссылку на профиль, который может рассказать о вас как о разработчике (например, GitHub, GitLab, Bitbucket или другой ресурс)"
   "github.com/konard
 github.com/link-assistant
-github.com/deep-assistant
 github.com/linksplatform
 github.com/link-foundation"
 Сколько у вас лет коммерческого опыта разработки на Go?
@@ -289,7 +287,6 @@ key: suricata, dpi, pcap, wireshark, zeek"
   Я нашёл вашу компанию на hh.ru
 "Добавьте, пожалуйста, ссылку на репозиторий или вышлите код в формате Google Doc или любым другим удобным способом. Если есть что показать:) Если нет, поставьте прочерк."
   github.com/konard
-  github.com/deep-assistant
   github.com/link-assistant
   github.com/linksplatform
   github.com/link-foundation
@@ -1035,7 +1032,6 @@ Deep.Foundation - ассоциативная архитектура позвол
 Можете ли предоставить портфолио на Git?
   "Да (приложу ссылку на портфолио)"
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -1127,8 +1123,7 @@ How do you ensure production reliability of your code?
   "Я не пишу код своими руками уже более 2-х лет, после 25 лет опыта программирования я считаю писать код руками неэффективно.
 
 Посмотреть на то над чем я работаю в направлении ИИ/ML можно тут:
-https://github.com/link-assistant
-https://github.com/deep-assistant"
+https://github.com/link-assistant"
 "Вам нужно добавить новую фичу в сервис (например, постобработку какого-либо промежуточного результата). Вы выберете реализацию в виде класса или функции? Почему?"
   Я предпочту использовать тот же стиль кода, который использовался в проекте до этого. Принципиальной разницы между ООП и ФП подходом нет, можно делать и так и так.
 Был ли у вас опыт разработки на чистом С ?
@@ -1265,7 +1260,6 @@ https://github.com/deep-assistant"
   От 450000 рублей в месяц на руки.
 Поделитесь ссылкой на git, если там есть актуальные примеры кода
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -1588,7 +1582,6 @@ Angular 18+, JavaScript/TypeScript, NGXS или NgRx, CI/CD, WebSocket."
 
 Примечание: Важно просто увидеть его наличие. Не более"
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -1620,7 +1613,6 @@ github.com/link-foundation"
   "Вот ссылки на мой код, однако для open-source и личных целей я предпочитаю использовать другие языки программирования. Но готов работать и на Golang.
 
 github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -1699,8 +1691,7 @@ github.com/link-foundation"
 Расскажите о вашем опыте с LLM/AI.
   "Я разрабатываю сервисы по доступу к LLM/AI, а так же своего собственного агента для написания кода, в том числе с интеграцией с GitHub. Исходный код можно посмотреть тут:
 
-github.com/link-assistant
-github.com/deep-assistant"
+github.com/link-assistant"
 "Вы готовы работать с 8:00ч. до 17:00ч. по московскому времени согласно ТК РФ, график 5/2 в удаленном формате?"
   Да.
 Есть ли у Вас опыт работы опыт работы с платформами 1С-Битрикс и Bitrix24? Были ли опыт реализации проектов интеграции с 1С? С какими конфигурациями?
@@ -1731,7 +1722,6 @@ ___________________________________
   От 550000 рублей в месяц до вычета НДФЛ.
 Прикрепи, пожалуйста, ссылки на свои пет-проекты
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -1753,7 +1743,6 @@ github.com/link-foundation"
 
 Если есть ссылка, то можно оставить здесь."
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -1807,7 +1796,6 @@ https://github.com/link-foundation/test-anywhere"
   "Именно на Go нет проектов, в основном на других языках:
 
 github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -1932,7 +1920,6 @@ Where are you located?
 
 Примечание: Важно лишь увидеть его наличие. Не более"
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
@@ -2147,7 +2134,6 @@ C новым годом."
   На последнем месте работы применял SSR на Node.js и Express.js для React-приложения с целью ускорения первой отрисовки страницы и улучшения SEO. Серверный рендер позволял отдавать пользователю готовый HTML с уже загруженными данными, после чего приложение корректно гидратировалось на клиенте.
 "Оставьте, пожалуйста, ссылку на Гит(даже если там выложен старый код)."
   "github.com/konard
-github.com/deep-assistant
 github.com/link-assistant
 github.com/linksplatform
 github.com/link-foundation"
