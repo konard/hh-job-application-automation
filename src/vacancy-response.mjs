@@ -320,6 +320,8 @@ export async function handleVacancyResponsePage({
       return;
     }
 
+    // hh.ru changes the URL after a response, so take the vacancy ID first
+    const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
     await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true });
     console.log('Clicked submit button');
     for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !await isResponseSubmitted(commander); waited += 1000) {
@@ -329,7 +331,7 @@ export async function handleVacancyResponsePage({
       console.log('⚠️  Submission was not confirmed by hh.ru, manual check required');
       return;
     }
-    console.log(`✅ Application sent for vacancy ${extractVacancyIdFromResponseUrl(commander.getUrl())}`);
+    console.log(`✅ Application sent for vacancy ${vacancyId}`);
     await onApplicationSent();
     await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
   } catch (error) {
