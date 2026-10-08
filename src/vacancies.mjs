@@ -6,7 +6,7 @@
 import { isNavigationError } from 'browser-commander';
 import { countUnansweredQuestions } from './qa.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
-import { findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
+import { closeChatPanel, findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
@@ -169,6 +169,9 @@ export async function processModalApplication({
     return { success: false, reason: 'not_confirmed' };
   }
   console.log(`✅ Application sent for vacancy ${vacancyId}`);
+  // hh.ru opens the employer chat with the cover letter after an application
+  await commander.wait({ ms: 1500, reason: 'chat panel to open after the application' });
+  await closeChatPanel(commander);
   return { success: true };
 }
 
@@ -514,21 +517,21 @@ export async function findAndProcessVacancyButton({
 
   const clickResult = await clickVacancyButton({ commander, selector, buttonIndex });
   if (!clickResult.success) {
-    return { status: clickResult.status };
+    return { status: clickResult.status, vacancyId };
   }
 
   const navigationResult = await handlePostClickNavigation({ commander, waitForUrlCondition, START_URL, pageClosedByUser });
   if (!navigationResult.onTargetPage) {
-    return { status: navigationResult.status };
+    return { status: navigationResult.status, vacancyId };
   }
 
   const modalResult = await waitForApplicationModal({ commander });
   if (modalResult.directApplication) {
     console.log(`✅ Direct application skipped, continuing with next vacancy... (${processedVacancyIds.size} vacancies processed in session)`);
-    return { status: 'direct_application_skipped' };
+    return { status: 'direct_application_skipped', vacancyId };
   }
   if (!modalResult.appeared || modalResult.limitError) {
-    return { status: modalResult.status };
+    return { status: modalResult.status, vacancyId };
   }
 
   const submitResult = await processModalApplication({
@@ -539,11 +542,11 @@ export async function findAndProcessVacancyButton({
     addIgnoredVacancyId,
   });
   if (!submitResult.success) {
-    return { status: 'modal_processing_failed', reason: submitResult.reason };
+    return { status: 'modal_processing_failed', reason: submitResult.reason, vacancyId };
   }
 
   if (await hasLimitError({ commander })) {
-    return { status: 'limit_error_after_submit' };
+    return { status: 'limit_error_after_submit', vacancyId };
   }
 
   return { status: 'success', vacancyId };

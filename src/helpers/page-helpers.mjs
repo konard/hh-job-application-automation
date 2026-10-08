@@ -99,7 +99,52 @@ const OVERLAYS = [
 ];
 
 /**
- * Dismiss hh.ru overlays that cover the page: the cookies banner and the desired salary popup
+ * Runs in the page: the close button of the open chat panel, or the panel's buttons when
+ * none is recognised. Only a visible element of the panel with "close" in its data-qa counts.
+ * @returns {{selector: string}|{buttons: string[]}|null} Null when the panel is not open
+ */
+export function findChatPanelClose({ panelSelector }) {
+  const panel = document.querySelector(panelSelector);
+  const isVisible = (element) => element.getClientRects().length > 0;
+  if (!panel || !isVisible(panel)) {
+    return null;
+  }
+  const close = [...panel.querySelectorAll('[data-qa]')]
+    .find((element) => isVisible(element) && /close/i.test(element.getAttribute('data-qa')));
+  if (close) {
+    return { selector: `${panelSelector} [data-qa="${close.getAttribute('data-qa')}"]` };
+  }
+  return {
+    buttons: [...panel.querySelectorAll('button, [role="button"]')].filter(isVisible)
+      .map((button) => button.getAttribute('data-qa') || button.getAttribute('aria-label') || button.textContent.trim().slice(0, 30)),
+  };
+}
+
+let reportedUnknownChatPanel = false;
+
+/**
+ * Close the chat panel hh.ru opens after an application, so it does not cover the vacancy list
+ * @param {Object} commander - Browser commander instance
+ */
+export async function closeChatPanel(commander) {
+  const { value } = await commander.safeEvaluate({
+    fn: findChatPanelClose,
+    args: [{ panelSelector: SELECTORS.chatPanel }],
+    defaultValue: null,
+    operationName: 'chat panel check',
+  });
+  if (value?.selector) {
+    await commander.clickButton({ selector: value.selector, scrollIntoView: false }).catch(() => {});
+    console.log('💬 Closed the chat panel');
+  } else if (value?.buttons && !reportedUnknownChatPanel) {
+    reportedUnknownChatPanel = true;
+    console.log(`⚠️  The chat panel is open but has no recognised close button; left as is. Its buttons: ${value.buttons.join(', ')}`);
+  }
+}
+
+/**
+ * Dismiss hh.ru overlays that cover the page: the cookies banner, the desired salary popup
+ * and the chat panel
  * @param {Object} commander - Browser commander instance
  */
 export async function dismissOverlays(commander) {
@@ -109,4 +154,5 @@ export async function dismissOverlays(commander) {
       console.log(message);
     }
   }
+  await closeChatPanel(commander);
 }

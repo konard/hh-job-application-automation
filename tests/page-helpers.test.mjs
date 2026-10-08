@@ -3,7 +3,7 @@
  */
 
 import { describe, test, assert } from 'test-anywhere';
-import { findFirstSelector, isResponseSubmitted } from '../src/helpers/page-helpers.mjs';
+import { findChatPanelClose, findFirstSelector, isResponseSubmitted } from '../src/helpers/page-helpers.mjs';
 import { createMutex } from '../src/helpers/mutex.mjs';
 
 describe('findFirstSelector()', () => {
@@ -50,5 +50,40 @@ describe('createMutex()', () => {
     const results = await Promise.allSettled([task('a', 20), task('b', 5, true), task('c', 1)]);
     assert.deepEqual(events, ['start a', 'end a', 'start b', 'end b', 'start c', 'end c']);
     assert.deepEqual(results.map((r) => r.status), ['fulfilled', 'rejected', 'fulfilled']);
+  });
+});
+
+describe('findChatPanelClose', () => {
+  const element = (qa, visible = true, tag = 'BUTTON') => ({
+    getAttribute: (name) => (name === 'data-qa' ? qa : null),
+    getClientRects: () => (visible ? [{}] : []),
+    textContent: qa ?? '',
+    tag,
+  });
+  const run = (panel) => {
+    globalThis.document = { querySelector: () => panel };
+    try {
+      return findChatPanelClose({ panelSelector: '[data-qa="chatik-root"]' });
+    } finally {
+      delete globalThis.document;
+    }
+  };
+  const panel = (children, visible = true) => ({
+    ...element('chatik-root', visible, 'DIV'),
+    querySelectorAll: (selector) => (selector === '[data-qa]' ? children.filter((child) => child.getAttribute('data-qa')) : children),
+  });
+
+  test('returns null when the panel is closed', () => {
+    assert.equal(run(null), null);
+    assert.equal(run(panel([element('chatik-close')], false)), null);
+  });
+
+  test('finds the visible close button of the panel', () => {
+    assert.deepEqual(run(panel([element('chatik-expand'), element('chatik-close-chat')])),
+      { selector: '[data-qa="chatik-root"] [data-qa="chatik-close-chat"]' });
+  });
+
+  test('ignores hidden close buttons and lists the buttons instead', () => {
+    assert.deepEqual(run(panel([element('chatik-close', false), element('chatik-send')])), { buttons: ['chatik-send'] });
   });
 });

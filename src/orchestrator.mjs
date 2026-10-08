@@ -22,7 +22,7 @@ import { findSuggestedVacanciesUrl } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
-import { isInteractive } from './confirmations.mjs';
+import { isInteractive, waitForUser } from './confirmations.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -79,7 +79,21 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
   let nextApplicationAt = 0;
 
   /**
-   * Count a sent application once, checkpoint the trace and schedule the next one 1-2 intervals later
+   * The next vacancy is opened 1-2 intervals from now, so the load on hh.ru stays low
+   * @param {string} reason - What was just done, for the log
+   */
+  function scheduleNextApplication(reason) {
+    const randomExtraDelaySeconds = getRandomIntInclusive(0, BUTTON_CLICK_INTERVAL / 1000);
+    const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
+    nextApplicationAt = Math.max(nextApplicationAt, Date.now() + totalWaitMs);
+    console.log(
+      `⏳ ${reason}; next vacancy in ${totalWaitMs / 1000} seconds ` +
+        `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)`,
+    );
+  }
+
+  /**
+   * Count a sent application once, checkpoint the trace and schedule the next vacancy
    * @param {string|null} vacancyId
    * @returns {Promise<boolean>} False when the application was already counted
    */
@@ -91,13 +105,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
       sentVacancyIds.add(vacancyId);
     }
     await checkpoint('application-sent');
-    const randomExtraDelaySeconds = getRandomIntInclusive(0, BUTTON_CLICK_INTERVAL / 1000);
-    const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
-    nextApplicationAt = Date.now() + totalWaitMs;
-    console.log(
-      `⏳ Next application in ${totalWaitMs / 1000} seconds ` +
-        `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)`,
-    );
+    scheduleNextApplication('Application sent');
     await onApplicationSent();
     return true;
   }
@@ -158,10 +166,24 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
     case 'success':
       await afterApplicationSent(result.vacancyId);
       return true;
+    case 'modal_processing_failed':
+      if (result.reason === 'not_confirmed') {
+        // Never move on to the next vacancy while hh.ru shows something unexpected
+        const message = `hh.ru did not confirm the application to vacancy ${result.vacancyId}. ` +
+          'Check the browser (an error, a captcha, a message)';
+        if (!isInteractive()) {
+          throw new Error(`${message}; stopping so that nothing else is sent`);
+        }
+        await waitForUser(`${message}, then`);
+      }
+      return true;
     default:
       return true;
     }
   }
+
+  /** Statuses after which no vacancy was opened, so no pause is needed */
+  const NO_VACANCY_OPENED = new Set(['not_on_target_page', 'no_buttons_found']);
 
   return {
     /**
@@ -259,6 +281,9 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
           pageClosedByUser: getPageClosedByUser,
         });
 
+        if (!NO_VACANCY_OPENED.has(result.status) && result.status !== 'success') {
+          scheduleNextApplication(`Vacancy ${result.vacancyId ?? ''} opened (${result.status}${result.reason ? `: ${result.reason}` : ''})`);
+        }
         if (!await handleResult(result)) {
           return;
         }

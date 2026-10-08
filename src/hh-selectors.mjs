@@ -59,6 +59,8 @@ export const SELECTORS = {
   cookiesAccept: '[data-qa="cookies-policy-informer-accept"]',
   vacancyResponded: '[data-qa="vacancy-serp__vacancy_responded"]',
   additionalDataClose: '[data-qa="additional-data-collector__popup-close"]',
+  // Chat panel hh.ru opens after an application (the employer chat)
+  chatPanel: '[data-qa="chatik-root"]',
 
   // Resumes on the profile page
   resume: '[data-qa="resume"]',

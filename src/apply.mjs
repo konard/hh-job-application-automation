@@ -21,6 +21,7 @@ import { markVacancyAsProcessed } from './vacancies.mjs';
 import { connectOrLaunchBrowser } from './browser-session.mjs';
 import { startTracing, stopTracing } from './tracing.mjs';
 import { enableConfirmations, withConfirmations } from './confirmations.mjs';
+import { withCaptchaGuard } from './captcha.mjs';
 
 const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
@@ -95,7 +96,8 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   }
 
   const orchestrator = createOrchestrator({
-    commander: withConfirmations(commander),
+    // Nothing touches the page while hh.ru shows a captcha; the user solves it
+    commander: withConfirmations(withCaptchaGuard(commander)),
     page: session.page,
     argv,
     qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },

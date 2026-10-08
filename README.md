@@ -198,6 +198,16 @@ because it holds personal data:
 | `resume.json` | Name, position, update date, key skills, jobs and the collected stack |
 | `stack.md` | Every technology once, key skills, "Технические навыки" categories, and per job the listed technologies ("Используемые технологии", "Использовавшиеся навыки", …) plus those only mentioned in the description |
 
+### Captcha, Pauses and the Chat Panel
+
+- **Captcha**: when hh.ru shows a captcha, the run touches nothing on the page (no clicks,
+  typing, page scripts or navigation) and waits until you have solved it in the browser.
+- **Unconfirmed application**: if hh.ru does not mark a vacancy as responded after sending,
+  the run waits for you (or stops in unattended runs) instead of opening the next vacancy.
+- **Pauses**: after every opened vacancy, sent or not, the next one waits 1-2
+  `--job-application-interval`s, so hh.ru sees few requests.
+- **Chat panel**: hh.ru opens the employer chat after an application; the run closes it.
+
 ### Ignore Questionnaire Vacancies
 
 If you want to skip vacancies that require any additional questionnaire fields beyond the cover letter, use:
