@@ -7,6 +7,9 @@ https://github.com/user-attachments/assets/6884b2fe-e322-4358-aab8-7f3c20ccdc46
 
 ## Application message example
 
+The Russian version is the default cover letter (`data/message.txt`); set `MESSAGE` or
+`MESSAGE_FILE` to send another one.
+
 Russian version:
 ```
 Здравствуйте,

@@ -152,9 +152,19 @@ async function prepareCoverLetterTextarea({ commander }) {
  */
 function countEmptyTestTextareas({ commander }) {
   return commander.evaluate({
-    fn: (coverLetterDataQa) => Array.from(document.querySelectorAll('textarea'))
-      .filter((textarea) => !coverLetterDataQa.includes(textarea.getAttribute('data-qa')) && !textarea.value.trim())
-      .length,
+    fn: (coverLetterDataQa) => {
+      // "<name>_text" next to radio/checkbox inputs "<name>" is the free-text box of their
+      // "Свой вариант" option; it needs text only while that option is chosen
+      const isUnusedCustomOption = (textarea) => {
+        const group = textarea.name?.endsWith('_text') &&
+          document.querySelectorAll(`input[name="${textarea.name.slice(0, -'_text'.length)}"]`);
+        return group?.length > 0 && ![...group].some((input) => input.checked && input.value === 'open');
+      };
+      return Array.from(document.querySelectorAll('textarea'))
+        .filter((textarea) => !coverLetterDataQa.includes(textarea.getAttribute('data-qa')) &&
+          !textarea.value.trim() && !isUnusedCustomOption(textarea))
+        .length;
+    },
     args: [COVER_LETTER_DATA_QA],
   });
 }

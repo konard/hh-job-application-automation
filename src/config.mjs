@@ -10,7 +10,11 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { makeConfig } from 'lino-arguments';
+
+// The cover letter sent with every application unless MESSAGE or MESSAGE_FILE is set
+const DEFAULT_MESSAGE_FILE = fileURLToPath(new URL('../data/message.txt', import.meta.url));
 
 function loadMessageFromFile(filePath) {
   if (!filePath) {
@@ -104,7 +108,7 @@ export function createConfig() {
         .option('message-file', {
           type: 'string',
           description: 'Path to a UTF-8 text file with the message to send',
-          default: getenv('MESSAGE_FILE', ''),
+          default: getenv('MESSAGE_FILE', DEFAULT_MESSAGE_FILE),
         })
         .option('verbose', {
           type: 'boolean',
