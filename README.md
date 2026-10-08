@@ -166,6 +166,27 @@ the field and the exact value. Type `y` to go on or `q` to stop. When confirmati
 question has no saved answer, the run lists it and waits until you have answered it in the
 browser; your answers are saved to `data/qa.lino`.
 
+### Export the Resume and Collect the Stack
+
+```bash
+bun run resume                          # the most recently updated resume
+bun run resume -- --resume <hash>       # a specific one, from https://hh.ru/resume/<hash>
+bun run resume -- --formats pdf,doc,rtf,txt --out ~/cv
+```
+
+The export runs in its own headless Chrome. It copies the hh.ru login, in memory only, from
+the automation browser on `--browser-port` (9322), so an application run in progress, with its
+half-filled answers, is left untouched. It writes to `data/resume/`, which is gitignored
+because it holds personal data:
+
+| File | Content |
+|---|---|
+| `resume.pdf`, `resume.rtf` (`resume.doc`) | hh.ru's own exports; hh.ru's "doc" is the same RTF file, so it is only downloaded on request |
+| `resume.html` | hh.ru's HTML ("txt") export |
+| `resume.md`, `resume.txt` | Markdown and plain text converted from it |
+| `resume.json` | Name, position, update date, key skills, jobs and the collected stack |
+| `stack.md` | Every technology once, key skills, "Технические навыки" categories, and per job the listed technologies ("Используемые технологии", "Использовавшиеся навыки", …) plus those only mentioned in the description |
+
 ### Ignore Questionnaire Vacancies
 
 If you want to skip vacancies that require any additional questionnaire fields beyond the cover letter, use:

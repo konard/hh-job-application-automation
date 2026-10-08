@@ -10,6 +10,7 @@
   "scripts": {
     "test": "bun --test tests/",
     "apply": "bun src/apply.mjs",
+    "resume": "bun src/resume-export.mjs",
     "playwright": "bun src/apply.mjs --engine playwright",
     "puppeteer": "bun src/apply.mjs --engine puppeteer",
     "lint": "eslint .",
@@ -29,7 +30,8 @@
     "lino-arguments": "^0.3.0",
     "log-lazy": "^1.0.4",
     "playwright": "^1.64.0",
-    "puppeteer": "^25.12.0"
+    "puppeteer": "^25.12.0",
+    "turndown": "^7.2.4"
   },
   "engines": {
     "bun": ">=1.4.2",

@@ -153,3 +153,5 @@ log.txt
 
 message.txt
 ignored-vacancy-ids.txt
+# Resume exports (personal data) written by `bun run resume`
+data/resume/
