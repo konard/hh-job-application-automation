@@ -21,7 +21,7 @@ import { URL_PATTERNS, extractVacancyId } from './hh-selectors.mjs';
  * @param {Object} options.commander - Browser commander instance
  * @param {boolean} options.isOnVacancyPageFromResponse - Whether we came to the vacancy page from vacancy_response
  * @param {string} options.returnUrl - URL to return to (last search page)
- * @param {Function} [options.onApplicationSent] - Called with the vacancy ID before returning
+ * @param {Function} [options.onApplicationSent] - Called with the vacancy ID before returning; false means it was already handled
  * @returns {Promise<boolean>} True if redirect was performed
  */
 export async function checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromResponse, returnUrl, onApplicationSent = async () => {} }) {
@@ -43,7 +43,10 @@ export async function checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromR
       return false;
     }
 
-    await onApplicationSent(extractVacancyId(currentUrl));
+    // Another handler already counted it and went back to the list
+    if (await onApplicationSent(extractVacancyId(currentUrl)) === false) {
+      return false;
+    }
     console.log(`Response submitted from vacancy page, redirecting to: ${returnUrl}`);
     await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
     return true;

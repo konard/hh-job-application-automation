@@ -45,6 +45,42 @@ export function registerPageTriggers({
   // The trigger can fire again on the same page while the handler still runs
   let isHandlingVacancyResponse = false;
 
+  /**
+   * An application was sent and hh.ru opened its vacancy page: count it once and go back
+   * to the vacancy list right away
+   */
+  const returnAfterSent = async (vacancyId) => {
+    if (lastVacancyResponseId !== vacancyId) {
+      return; // Already handled
+    }
+    lastVacancyResponseId = null;
+    // False: the form handler already counted it and returns to the list itself
+    if (await onApplicationSubmitted(vacancyId) === false) {
+      return;
+    }
+    console.log(`✅ Application sent for vacancy ${vacancyId}`);
+    const returnUrl = getReturnUrl();
+    console.log(`Returning to: ${returnUrl}`);
+    // Not awaited: the navigation stops the running page action
+    commander.goto({ url: returnUrl, waitForStableUrlBefore: false }).catch(() => {});
+  };
+
+  /**
+   * Page actions start only once the page is idle, which takes half a minute on hh.ru
+   * vacancy pages, so the sent application is detected as soon as the URL changes
+   */
+  const watchVacancyPage = async (vacancyId) => {
+    for (let second = 0; second < 30 && lastVacancyResponseId === vacancyId; second++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (extractVacancyId(commander.getUrl()) !== vacancyId) {
+        return;
+      }
+      if (await isResponseSubmitted(commander)) {
+        return returnAfterSent(vacancyId);
+      }
+    }
+  };
+
   const saveQA = async (reason) => {
     const count = await saveQAPairs({ commander, addOrUpdateQA });
     if (count > 0) {
@@ -107,20 +143,12 @@ export function registerPageTriggers({
 
       // hh.ru opens the vacancy page after the form is sent (also when the user sent it in
       // the browser), or the user sends it from here with the "Откликнуться" button
-      while (!ctx.isStopped()) {
-        const clicked = await buttonTracker.checkAndClear();
-        if (clicked) {
+      while (!ctx.isStopped() && lastVacancyResponseId === vacancyId) {
+        if (await buttonTracker.checkAndClear()) {
           console.log('Detected "Откликнуться" button was clicked on vacancy page!');
         }
         if (await isResponseSubmitted(commander)) {
-          console.log(`✅ Application sent for vacancy ${vacancyId}`);
-          lastVacancyResponseId = null;
-          await onApplicationSubmitted(vacancyId);
-          const returnUrl = getReturnUrl();
-          console.log(`Returning to: ${returnUrl}`);
-          // Not awaited: the navigation stops this action
-          commander.goto({ url: returnUrl, waitForStableUrlBefore: false }).catch(() => {});
-          return;
+          return returnAfterSent(vacancyId);
         }
         await ctx.wait(2000);
       }
@@ -139,6 +167,11 @@ export function registerPageTriggers({
   const onUrlChange = ({ newUrl }) => {
     if (URL_PATTERNS.searchVacancy.test(newUrl)) {
       onSearchPageVisited(newUrl);
+    }
+    if (lastVacancyResponseId && extractVacancyId(newUrl) === lastVacancyResponseId) {
+      watchVacancyPage(lastVacancyResponseId).catch((error) => {
+        log.debug(() => `Vacancy page watch failed: ${error.message}`);
+      });
     }
     if (lastVacancyResponseId && extractVacancyId(newUrl) !== lastVacancyResponseId &&
         !URL_PATTERNS.vacancyResponse.test(newUrl)) {

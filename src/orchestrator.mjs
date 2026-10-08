@@ -81,11 +81,12 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
   /**
    * Count a sent application once, checkpoint the trace and schedule the next one 1-2 intervals later
    * @param {string|null} vacancyId
+   * @returns {Promise<boolean>} False when the application was already counted
    */
   async function afterApplicationSent(vacancyId = null) {
     if (vacancyId) {
       if (sentVacancyIds.has(vacancyId)) {
-        return;
+        return false;
       }
       sentVacancyIds.add(vacancyId);
     }
@@ -98,6 +99,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
         `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)`,
     );
     await onApplicationSent();
+    return true;
   }
 
   /**

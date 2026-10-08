@@ -386,6 +386,12 @@ export async function handleVacancyResponsePage({
       console.log('⚠️  Page navigation detected during form handling, continuing with next vacancy');
       return;
     }
+    // A wait for an element of the form fails once the form was sent or left in the
+    // browser; the vacancy page watch counts a sent application
+    if (isTimeoutError(error) && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
+      log.debug(() => `Form left during a wait (${error.message.split('\n')[0]}), now on ${commander.getUrl()}`);
+      return;
+    }
     if (isTimeoutError(error)) {
       console.log(`⚠️  Timeout error while handling vacancy response page: ${error.message}`);
       console.log('   Skipping this vacancy and continuing with next one');
