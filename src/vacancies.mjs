@@ -373,12 +373,13 @@ async function handlePostClickNavigation({ commander, waitForUrlCondition, START
     return { onTargetPage: true };
   }
 
-  console.log('⚠️  Redirected to a different page:', currentUrl);
-
   if (URL_PATTERNS.vacancyResponse.test(currentUrl)) {
     // The vacancy-response-page trigger handles this page
+    console.log('📝 Opened the full application form:', currentUrl);
     return { onTargetPage: false, status: 'vacancy_response_detected' };
   }
+
+  console.log('⚠️  Redirected to a different page:', currentUrl);
 
   console.log('💡 This appears to be a separate application form page.');
   console.log('💡 Please fill out the form manually. Take as much time as you need.');

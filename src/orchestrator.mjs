@@ -21,6 +21,7 @@ import { ensureLoggedIn } from './login.mjs';
 import { findSuggestedVacanciesUrl } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS } from './hh-selectors.mjs';
+import { log } from './logging.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -113,7 +114,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
       console.log('Navigation detected during processing, restarting with new page context...');
       return true;
     case 'not_on_target_page':
-      console.log('Not on target page, waiting for page to be ready...');
+      log.debug(() => 'Not on the vacancy list, waiting for the page to be ready...');
       await waitForPageReady('not on target page');
       return true;
     case 'no_buttons_found': {
@@ -199,9 +200,9 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
       while (!pageClosedByUser) {
         // Ensure page is fully loaded
         if (commander.navigationManager?.isNavigating() || commander.shouldAbort()) {
-          console.log('Page is loading, waiting for it to be fully ready...');
+          log.debug(() => 'Page is loading, waiting for it to be fully ready...');
           await waitForPageReady('ensuring page is ready before automation');
-          console.log(`Page ready: ${commander.getUrl().substring(0, 80)}...`);
+          log.debug(() => `Page ready: ${commander.getUrl()}`);
           continue;
         }
 

@@ -38,16 +38,26 @@ const fillers = {
   checkbox: fillCheckboxQuestion,
 };
 
+// Answers already written in this run, so periodic saves only write what changed
+const savedAnswers = new Map();
+
 /**
- * Save Q&A pairs to the database and log them
+ * Save new or changed Q&A pairs to the database and log them
  * @returns {Promise<number>} Number of saved pairs
  */
 async function savePairs(pairs, addOrUpdateQA) {
+  let saved = 0;
   for (const { question, answer } of pairs) {
+    const key = JSON.stringify(answer);
+    if (savedAnswers.get(question) === key) {
+      continue;
+    }
     await addOrUpdateQA(question, answer);
+    savedAnswers.set(question, key);
     console.log('Saved Q&A:', question);
+    saved++;
   }
-  return pairs.length;
+  return saved;
 }
 
 /**
@@ -104,7 +114,12 @@ export async function saveQAPairs({ commander, addOrUpdateQA }) {
   try {
     return await savePairs(await extractQAPairs({ evaluate: commander.evaluate }), addOrUpdateQA);
   } catch (error) {
-    console.error('Error saving Q&A pairs:', error.message);
+    // The page navigated away while reading it; the save before navigation covers it
+    if (isNavigationError(error)) {
+      log.debug(() => `Q&A save skipped during navigation: ${error.message}`);
+    } else {
+      console.error('Error saving Q&A pairs:', error.message);
+    }
     return 0;
   }
 }
@@ -144,6 +159,13 @@ async function prepareCoverLetterTextarea({ commander }) {
 
   console.log('Cover letter textarea not found on vacancy_response page');
   return null;
+}
+
+/**
+ * "1 choice, 3 text" style summary of the test questions on the form
+ */
+function describeQuestionCounts(choiceCount, textareaCount) {
+  return `${choiceCount} choice, ${Math.max(textareaCount - 1, 0)} text field(s)`;
 }
 
 /**
@@ -225,12 +247,10 @@ export async function handleVacancyResponsePage({
       }
     }
 
+    // The questions are handled even when there is no cover letter field
     const textareaSelector = await prepareCoverLetterTextarea({ commander });
-    if (!textareaSelector) {
-      return;
-    }
 
-    if (MESSAGE) {
+    if (MESSAGE && textareaSelector) {
       const { filled } = await commander.fillTextArea({
         selector: textareaSelector,
         text: MESSAGE,
@@ -297,9 +317,9 @@ export async function handleVacancyResponsePage({
     if (!hasTestQuestions) {
       console.log('No test questions found, only cover letter - will auto-submit');
     } else if (autoSubmitEnabled) {
-      console.log(`All ${totalCount} test question(s) answered and --auto-submit-vacancy-response-form enabled - will auto-submit`);
+      console.log(`All test questions answered (${describeQuestionCounts(totalCount, textareaCount)}) - will auto-submit`);
     } else {
-      console.log(`All ${totalCount} test question(s) answered, but --auto-submit-vacancy-response-form is disabled`);
+      console.log(`All test questions answered (${describeQuestionCounts(totalCount, textareaCount)}), but --auto-submit-vacancy-response-form is disabled`);
       console.log('Please review the answers and submit the form manually when ready');
       return;
     }
