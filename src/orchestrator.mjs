@@ -15,8 +15,11 @@ import {
 } from './vacancies.mjs';
 import { handleVacancyResponsePage } from './vacancy-response.mjs';
 import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
-import { isResponseSubmitted } from './helpers/page-helpers.mjs';
+import { dismissOverlays, isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { registerPageTriggers } from './page-triggers.mjs';
+import { ensureLoggedIn } from './login.mjs';
+import { findSuggestedVacanciesUrl } from './resumes.mjs';
+import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS } from './hh-selectors.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
@@ -36,7 +39,7 @@ function getRandomIntInclusive(min, max) {
  * @returns {Object} Orchestrator with start method
  */
 export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }) {
-  const START_URL = argv.url;
+  let START_URL = argv.url;
   const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
 
   let pageClosedByUser = false;
@@ -68,6 +71,23 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }
     },
   });
 
+  /**
+   * Checkpoint the trace, then wait 1-2 intervals so the load on hh.ru stays low
+   */
+  async function afterApplicationSent() {
+    await checkpoint('application-sent');
+    const randomExtraDelaySeconds = getRandomIntInclusive(0, BUTTON_CLICK_INTERVAL / 1000);
+    const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
+    console.log(
+      `Waiting ${totalWaitMs / 1000} seconds before processing next button ` +
+        `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)...`,
+    );
+    const intervalWait = await commander.wait({ ms: totalWaitMs, reason: 'interval before next application' });
+    if (intervalWait?.aborted) {
+      console.log('Interval wait was interrupted by navigation');
+    }
+  }
+
   const vacancyResponseHandler = () => handleVacancyResponsePage({
     commander,
     MESSAGE: argv.message,
@@ -77,6 +97,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }
     autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
     ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
     returnUrl: lastSearchPageUrl,
+    onApplicationSent: afterApplicationSent,
     verbose: argv.verbose,
   });
 
@@ -108,19 +129,9 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }
     case 'direct_application_skipped':
       await commander.wait({ ms: 1000, reason: 'brief pause after skipping direct application' });
       return true;
-    case 'success': {
-      const randomExtraDelaySeconds = getRandomIntInclusive(1, 5);
-      const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
-      console.log(
-        `Waiting ${totalWaitMs / 1000} seconds before processing next button ` +
-          `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)...`,
-      );
-      const intervalWait = await commander.wait({ ms: totalWaitMs, reason: 'interval before next application' });
-      if (intervalWait?.aborted) {
-        console.log('Interval wait was interrupted by navigation');
-      }
+    case 'success':
+      await afterApplicationSent();
       return true;
-    }
     default:
       return true;
     }
@@ -136,20 +147,25 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }
         onPageClosed();
       });
 
-      if (argv.manualLogin) {
-        const backurl = encodeURIComponent(START_URL);
-        const loginUrl = `https://hh.ru/account/login?role=applicant&backurl=${backurl}&hhtmFrom=vacancy_search_list`;
-        console.log('Opening login page for manual authentication...');
-        console.log('Login URL:', loginUrl);
-        await commander.goto({ url: loginUrl, waitForStableUrlBefore: false });
-        console.log('The browser will automatically continue once you are redirected to:', START_URL);
-        await waitForUrlCondition(START_URL, 'Waiting for you to complete login');
-        if (!pageClosedByUser) {
-          console.log('Login successful! Proceeding with automation...');
+      await ensureLoggedIn({ commander, page, argv, isPageClosed: getPageClosedByUser });
+      if (pageClosedByUser) {
+        return;
+      }
+      await checkpoint('logged-in');
+
+      if (!START_URL) {
+        START_URL = URL_PATTERNS.searchVacancy.test(commander.getUrl()) && commander.getUrl().includes('resume=')
+          ? commander.getUrl() // The kept-open browser already shows suggested vacancies
+          : await findSuggestedVacanciesUrl(commander);
+        if (!START_URL) {
+          throw new Error('No resume found on hh.ru - create one or pass --url');
         }
-      } else {
+        lastSearchPageUrl = START_URL;
+      }
+      if (commander.getUrl() !== START_URL) {
         await commander.goto({ url: START_URL, waitForStableUrlBefore: false });
       }
+      await dismissOverlays(commander);
 
       // Declarative page handling (vacancy_response, vacancy and search pages)
       const cleanupTriggers = registerPageTriggers({
@@ -195,6 +211,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }
         }
 
         await commander.wait({ ms: 500, reason: 'settle before processing vacancy buttons' });
+        await dismissOverlays(commander);
         if (commander.shouldAbort()) {
           continue;
         }

@@ -19,15 +19,18 @@ import { log } from './logging.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import {
+  dismissOverlays,
   findFirstSelector,
   findCoverLetterToggle,
   isButtonEnabled,
+  isResponseSubmitted,
   rememberIgnoredVacancy,
 } from './helpers/page-helpers.mjs';
 
 const COVER_LETTER_SELECTORS = [SELECTORS.coverLetterTextareaPopup, SELECTORS.coverLetterTextareaForm];
 const COVER_LETTER_DATA_QA = ['vacancy-response-popup-form-letter-input', 'vacancy-response-form-letter-input'];
 const DEFAULT_RETURN_URL = 'https://hh.ru/search/vacancy?from=resumelist';
+const SUBMIT_CONFIRMATION_TIMEOUT_MS = 15000;
 
 const fillers = {
   textarea: fillTextareaQuestion,
@@ -172,6 +175,7 @@ export async function handleVacancyResponsePage({
   autoSubmitEnabled,
   ignoreVacanciesWithQuestionnaire,
   returnUrl = DEFAULT_RETURN_URL,
+  onApplicationSent = async () => {},
   verbose,
 }) {
   const skipQuestionnaireVacancy = async () => {
@@ -184,6 +188,14 @@ export async function handleVacancyResponsePage({
   try {
     console.log('Detected vacancy_response page, handling application form...');
     await commander.waitForSelector({ selector: 'body' });
+    await dismissOverlays(commander);
+
+    // hh.ru stays on this page after a response and offers to respond again
+    if (await isResponseSubmitted(commander)) {
+      console.log('✅ Already applied to this vacancy, returning to the vacancy list');
+      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+      return;
+    }
 
     // Direct application vacancies are applied on the employer's site - skip them
     if ((await checkAndCloseDirectApplicationModal({ commander })).isDirectApplication) {
@@ -250,18 +262,26 @@ export async function handleVacancyResponsePage({
       return skipQuestionnaireVacancy();
     }
 
+    // Unattended (auto-submit) runs move on instead of waiting for manual answers
+    const skipOrWaitForUser = async (instruction) => {
+      if (!autoSubmitEnabled) {
+        console.log(instruction);
+        return;
+      }
+      console.log(`Skipping this vacancy, returning to: ${returnUrl}`);
+      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+    };
+
     if (unansweredCount > 0) {
       console.log(`Found ${unansweredCount} of ${totalCount} radio/checkbox test question(s) UNANSWERED`);
       console.log('Cannot auto-submit when test questions remain unanswered - manual submission required');
-      console.log('Please answer the remaining questions and submit the form manually when ready');
-      return;
+      return skipOrWaitForUser('Please answer the remaining questions and submit the form manually when ready');
     }
 
     if (await countEmptyTestTextareas({ commander }) > 0) {
       console.log('Found EMPTY test question textarea(s)');
       console.log('Cannot auto-submit when test textareas are empty - manual submission required');
-      console.log('Please fill the empty textarea(s) and submit the form manually when ready');
-      return;
+      return skipOrWaitForUser('Please fill the empty textarea(s) and submit the form manually when ready');
     }
 
     if (!hasTestQuestions) {
@@ -292,7 +312,16 @@ export async function handleVacancyResponsePage({
 
     await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true });
     console.log('Clicked submit button');
-    await commander.wait({ ms: 2000, reason: 'submission to complete' });
+    for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !await isResponseSubmitted(commander); waited += 1000) {
+      await commander.wait({ ms: 1000, reason: 'submission to complete' });
+    }
+    if (!await isResponseSubmitted(commander)) {
+      console.log('⚠️  Submission was not confirmed by hh.ru, manual check required');
+      return;
+    }
+    console.log(`✅ Application sent for vacancy ${extractVacancyIdFromResponseUrl(commander.getUrl())}`);
+    await onApplicationSent();
+    await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
   } catch (error) {
     if (isNavigationError(error)) {
       console.log('⚠️  Page navigation detected during form handling, continuing with next vacancy');

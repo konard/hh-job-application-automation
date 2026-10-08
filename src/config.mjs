@@ -47,13 +47,38 @@ export function createConfig() {
         .option('url', {
           alias: 'u',
           type: 'string',
-          description: 'URL to navigate to',
-          default: getenv('START_URL', 'https://hh.ru/search/vacancy?from=resumelist'),
+          description: 'Vacancy search URL (default: suggested vacancies for the most recently updated resume)',
+          default: getenv('START_URL', ''),
         })
         .option('manual-login', {
           type: 'boolean',
-          description: 'Open login page and wait for manual authentication before proceeding',
+          description: 'Do not import logins from other browsers; wait for a manual login instead',
           default: getenv('MANUAL_LOGIN', false),
+        })
+        .option('login-from', {
+          type: 'string',
+          description: 'Only use logins from browser profiles whose name contains this text (e.g. "chrome Default")',
+          default: getenv('LOGIN_FROM', ''),
+        })
+        .option('keep-browser-open', {
+          type: 'boolean',
+          description: 'Keep the browser running after exit so the next run reuses it',
+          default: getenv('KEEP_BROWSER_OPEN', false),
+        })
+        .option('browser-idle-timeout', {
+          type: 'number',
+          description: 'Minutes after which a kept-open, unused browser is closed',
+          default: getenv('BROWSER_IDLE_TIMEOUT', 30),
+        })
+        .option('browser-port', {
+          type: 'number',
+          description: 'Remote debugging port of the automation browser',
+          default: getenv('BROWSER_PORT', 9322),
+        })
+        .option('trace', {
+          type: 'boolean',
+          description: 'Record a browser-commander trace (DOM, mutations, actions) with Links Notation export to logs/traces',
+          default: getenv('TRACE', true),
         })
         .option('user-data-dir', {
           type: 'string',
@@ -62,8 +87,8 @@ export function createConfig() {
         })
         .option('job-application-interval', {
           type: 'number',
-          description: 'Interval in seconds to wait between job application button clicks',
-          default: getenv('JOB_APPLICATION_INTERVAL', 20),
+          description: 'Minimum seconds between applications; a random extra of up to the same amount is added',
+          default: getenv('JOB_APPLICATION_INTERVAL', 60),
         })
         .option('message', {
           alias: 'm',
@@ -100,10 +125,12 @@ export function createConfig() {
 }
 
 /**
- * Get user data directory path based on engine
- * @param {string} engine - Browser engine ('playwright' or 'puppeteer')
+ * Get the automation browser profile directory.
+ * Both engines attach to the installed Chrome, so they share one profile. The older
+ * per-engine `<engine>-data` profiles were created by the engines' bundled Chromium and
+ * are left untouched.
  * @returns {string} - Path to user data directory
  */
-export function getUserDataDir(engine) {
-  return path.join(os.homedir(), '.hh-automation', `${engine}-data`);
+export function getUserDataDir() {
+  return path.join(os.homedir(), '.hh-automation', 'chrome-profile');
 }

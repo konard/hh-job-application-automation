@@ -59,7 +59,26 @@ The application supports configuration via `.lenv` files using the [lino-argumen
 
 **Requirements:** [Bun](https://bun.sh) 1.4.2 or newer (older Bun versions cannot attach Playwright
 to the browser) and an installed Google Chrome. The browser is started the way a person would start
-it (no automation infobars); the profile is kept in `~/.hh-automation/<engine>-data`.
+it (no automation infobars); the profile is kept in `~/.hh-automation/chrome-profile`.
+
+**Zero-configuration run:** `bun run apply` logs in, picks your most recently updated resume and
+applies to the vacancies hh.ru suggests for it:
+
+- **Login** - if the automation profile is not logged in yet, the browsers on this machine are
+  checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names
+  are counted). The best Chromium-based profile is opened as a temporary copy (no Keychain prompt) and
+  its hh.ru login, or a social sign-in through it, is copied into the automation profile. Use
+  `--login-from chrome` to pick a browser, or `--manual-login` to log in yourself.
+- **Resume** - the suggested vacancies of the most recently updated resume are opened, unless `--url`
+  is given.
+- **Pace** - at least `--job-application-interval` seconds (default 60) plus a random extra of up to
+  the same amount pass between applications.
+- **Browser lifecycle** - Chrome is closed when the script exits. With `--keep-browser-open` it keeps
+  running, the next run reuses it and its open page, and it closes itself after
+  `--browser-idle-timeout` minutes (default 30) without use.
+- **Debug traces** - every run records a browser-commander trace (DOM snapshots, DOM mutations,
+  interactions, console) with a Links Notation export, plus a `network.lino` request log, in
+  `logs/traces/<time>/`. Disable with `--no-trace`.
 
 **Quick setup:**
 
@@ -73,12 +92,11 @@ it (no automation infobars); the profile is kept in `~/.hh-automation/<engine>-d
    # Enable verbose logging by default
    VERBOSE: true
 
-   # Set base interval between applications
-   # The app also adds a random 1-5 second delay
-   JOB_APPLICATION_INTERVAL: 30
+   # Minimum seconds between applications (a random extra up to the same is added)
+   JOB_APPLICATION_INTERVAL: 90
 
-   # Set your resume URL
-   START_URL: https://hh.ru/search/vacancy?resume=YOUR_RESUME_ID&from=resumelist
+   # Keep the browser open between runs (closed after 30 idle minutes)
+   KEEP_BROWSER_OPEN: true
 
    # Load a multi-line application message from a UTF-8 text file
    MESSAGE_FILE: ./message.txt
@@ -120,6 +138,9 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 ```
 
 **Safety Note:** The default behavior (manual review) is recommended to ensure test answers are correct before submission.
+
+With this flag the run is unattended: forms with questions that the QA database cannot answer are
+skipped instead of waiting for you.
 
 ### Ignore Questionnaire Vacancies
 

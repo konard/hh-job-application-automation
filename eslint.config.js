@@ -18,6 +18,9 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        fetch: 'readonly',
+        URL: 'readonly',
+        WebSocket: 'readonly',
         // Browser globals - used in page.evaluate() contexts and inbrowser-clicks.js
         window: 'readonly',
         document: 'readonly',
@@ -59,6 +62,9 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        fetch: 'readonly',
+        URL: 'readonly',
+        WebSocket: 'readonly',
         // Browser globals - used in page.evaluate() contexts
         window: 'readonly',
         document: 'readonly',

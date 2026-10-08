@@ -14,6 +14,11 @@ The system automates job applications on HH.ru (HeadHunter) using browser automa
 ```
 src/
 ├── apply.mjs                 # Entry point - CLI parsing, initialization
+├── browser-session.mjs       # Start or reuse the automation Chrome (keep-open option)
+├── browser-watchdog.mjs      # Detached process closing a kept-open Chrome when idle
+├── login.mjs                 # Detect logins in installed browsers, sign in to hh.ru
+├── resumes.mjs               # Pick the most recently updated resume, its suggested vacancies
+├── tracing.mjs               # browser-commander trace + network log in logs/traces
 ├── orchestrator.mjs          # Main coordination logic and state machine
 ├── page-triggers.mjs         # Declarative page handlers (browser-commander pageTrigger)
 ├── page-handlers.mjs         # Redirect safety check used by the main loop
@@ -140,13 +145,32 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--engine` | Browser engine (playwright/puppeteer) | playwright |
-| `--url` | Starting URL for job search | - |
-| `--user-data-dir` | Browser profile directory | Auto-detected |
+| `--url` | Starting URL for job search | suggested vacancies of the most recently updated resume |
+| `--manual-login` | Skip automatic login, wait for a manual one | false |
+| `--login-from` | Only import the login from this browser/profile | any |
+| `--keep-browser-open` | Keep Chrome running after exit, reuse it next run | false |
+| `--browser-idle-timeout` | Minutes before a kept-open Chrome closes when unused | 30 |
+| `--browser-port` | Remote debugging port of the automation Chrome | 9322 |
+| `--trace` | Record a browser-commander trace in `logs/traces` | true |
+| `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |
 | `--message` | Default cover letter message | - |
 | `--verbose` | Enable debug logging | false |
-| `--manual-login` | Wait for manual login | false |
-| `--job-application-interval` | Seconds between applications | 1 |
-| `--auto-submit-vacancy-response-form` | Auto-submit forms | false |
+| `--job-application-interval` | Minimum seconds between applications (plus random up to the same) | 60 |
+| `--auto-submit-vacancy-response-form` | Auto-submit forms; skip forms that cannot be fully answered | false |
+
+## Startup Flow
+
+1. `browser-session.mjs` attaches to Chrome on `--browser-port` if it runs, or starts it detached
+   with the dedicated profile. Without `--keep-browser-open` it is closed on exit; with it, a
+   detached `browser-watchdog.mjs` closes it after `--browser-idle-timeout` unused minutes.
+2. `login.mjs` returns at once when the profile is logged in (the profile restores hh.ru's session
+   cookies across restarts). Otherwise it lists browser profiles holding hh.ru or VK/Mail.ru/OK/Google/
+   Gosuslugi cookies (names and counts only), starts a temporary snapshot of the best Chromium profile
+   (Chrome decrypts its own cookies, so there is no Keychain prompt), signs in through hh.ru's social
+   login when needed, and copies the hh.ru cookies into the automation browser.
+3. `resumes.mjs` reads the resumes on the profile page and opens the suggested vacancies of the most
+   recently updated one. hh.ru shows no update date now, so its list order is used.
+4. The orchestrator applies with 1-2 intervals between applications.
 
 ## Logging
 

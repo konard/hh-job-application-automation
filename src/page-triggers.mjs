@@ -41,6 +41,8 @@ export function registerPageTriggers({
 }) {
   // ID of the vacancy whose vacancy_response page was visited last
   let lastVacancyResponseId = null;
+  // The trigger can fire again on the same page while the handler still runs
+  let isHandlingVacancyResponse = false;
 
   const saveQA = async (reason) => {
     const count = await saveQAPairs({ commander, addOrUpdateQA });
@@ -66,12 +68,18 @@ export function registerPageTriggers({
         });
       });
 
+      if (isHandlingVacancyResponse) {
+        return;
+      }
+      isHandlingVacancyResponse = true;
       try {
         await handleVacancyResponsePage();
       } catch (error) {
         if (!commander.isActionStoppedError(error)) {
           console.error('Error in vacancy response handler:', error.message);
         }
+      } finally {
+        isHandlingVacancyResponse = false;
       }
     },
   });

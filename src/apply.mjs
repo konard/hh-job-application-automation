@@ -6,45 +6,47 @@
  *
  * This is the main entry point that:
  * 1. Parses CLI arguments
- * 2. Initializes browser and commander
- * 3. Creates and starts the orchestrator
+ * 2. Starts (or reuses) the automation browser and starts tracing
+ * 3. Creates and starts the orchestrator (login, resume selection, applications)
  */
 
 import path from 'path';
-import {
-  isNavigationError,
-  isTimeoutError,
-  launchBrowser,
-  makeBrowserCommander,
-} from 'browser-commander';
+import { isNavigationError, isTimeoutError, makeBrowserCommander } from 'browser-commander';
 import { createQADatabase } from './qa-database.mjs';
 import { createIgnoredVacanciesDatabase } from './ignored-vacancies-db.mjs';
 import { enableDebugLevel } from './logging.mjs';
 import { createConfig, getUserDataDir } from './config.mjs';
 import { createOrchestrator } from './orchestrator.mjs';
 import { markVacancyAsProcessed } from './vacancies.mjs';
+import { connectOrLaunchBrowser } from './browser-session.mjs';
+import { startTracing, stopTracing } from './tracing.mjs';
 
 const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
   path.join(process.cwd(), 'data', 'ignored-vacancy-ids.txt'),
 );
 
-let browser = null;
+let session = null;
 let commander = null;
+let shuttingDown = false;
 
 /**
- * Release browser-commander resources, close the browser and exit
+ * Finish the trace, release browser-commander resources and the browser, then exit
  */
-async function shutdown(reason) {
-  console.log(`\n${reason}, closing browser gracefully...`);
-  try {
-    await commander?.destroy();
-    await browser?.close();
-    console.log('Browser closed successfully');
-  } catch (error) {
-    console.error('Error closing browser:', error.message);
+async function shutdown(reason, exitCode = 0) {
+  if (shuttingDown) {
+    return;
   }
-  process.exit(0);
+  shuttingDown = true;
+  console.log(`\n${reason}, shutting down...`);
+  try {
+    await stopTracing();
+    await commander?.destroy();
+    await session?.release();
+  } catch (error) {
+    console.error('Error during shutdown:', error.message);
+  }
+  process.exit(exitCode);
 }
 
 process.on('SIGINT', () => shutdown('Received SIGINT'));
@@ -52,7 +54,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
 
 (async () => {
   const argv = createConfig();
-  argv.userDataDir ||= getUserDataDir(argv.engine);
+  argv.userDataDir ||= getUserDataDir();
 
   if (argv.verbose) {
     enableDebugLevel();
@@ -66,22 +68,24 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     }
   }
 
-  // Launch the installed Chrome the way a person would (no automation switches)
-  const launched = await launchBrowser({
+  session = await connectOrLaunchBrowser({
     engine: argv.engine,
     userDataDir: argv.userDataDir,
-    headless: false,
-    verbose: argv.verbose,
-    restrictions: ['no-crash-restore', 'no-translate'],
+    port: argv.browserPort,
+    keepOpen: argv.keepBrowserOpen,
+    idleTimeoutMinutes: argv.browserIdleTimeout,
   });
-  browser = launched.browser;
 
-  commander = makeBrowserCommander({ page: launched.page, verbose: argv.verbose });
+  commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose });
   console.log(`Using ${commander.engine} automation engine`);
+
+  if (argv.trace) {
+    await startTracing({ commander, page: session.page });
+  }
 
   const orchestrator = createOrchestrator({
     commander,
-    page: launched.page,
+    page: session.page,
     argv,
     qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
     onPageClosed: () => shutdown('Tab close detected'),
@@ -90,16 +94,11 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   await orchestrator.start();
 })().catch((error) => {
   if (isNavigationError(error)) {
-    console.log('Navigation-related error occurred, the automation was interrupted by page navigation.');
-    console.log('Please restart the script if needed.');
-    process.exit(0);
+    return shutdown('Navigation interrupted the automation; please restart the script if needed');
   }
-
   if (isTimeoutError(error)) {
-    console.log(`⚠️  Timeout error occurred while waiting for page elements: ${error.message}`);
-    process.exit(0);
+    return shutdown(`Timeout while waiting for page elements: ${error.message}`);
   }
-
   console.error('Error occurred:', error.message);
-  process.exit(1);
+  return shutdown('Unexpected error', 1);
 });

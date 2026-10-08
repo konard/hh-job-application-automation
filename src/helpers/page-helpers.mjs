@@ -91,3 +91,22 @@ export async function rememberIgnoredVacancy(addIgnoredVacancyId, vacancyId) {
       : `💾 Questionnaire vacancy ID already persisted: ${vacancyId}`,
   );
 }
+
+const OVERLAYS = [
+  { selector: SELECTORS.cookiesAccept, message: '🍪 Accepted the cookies policy banner' },
+  // Asks for the desired salary to save it into the resume; it blocks the response form
+  { selector: SELECTORS.additionalDataClose, message: '💬 Closed the desired salary popup' },
+];
+
+/**
+ * Dismiss hh.ru overlays that cover the page: the cookies banner and the desired salary popup
+ * @param {Object} commander - Browser commander instance
+ */
+export async function dismissOverlays(commander) {
+  for (const { selector, message } of OVERLAYS) {
+    if (await commander.isVisible({ selector }).catch(() => false)) {
+      await commander.clickButton({ selector, scrollIntoView: false }).catch(() => {});
+      console.log(message);
+    }
+  }
+}

@@ -48,6 +48,22 @@ export const SELECTORS = {
   // Navigation
   loginLink: 'a[data-qa="login"]',
 
+  // Login (inline login card on the profile page)
+  loginForm: '[data-qa="account-login-form"]',
+  loginSocialShowMore: '[data-qa="account-login-social-show-more"]',
+  loginSocial: (provider) => `a[data-qa="applicant-login-social-${provider}"]`,
+  // Social provider confirmation, e.g. VK "Продолжить как ..." / "Continue as ..."
+  providerConfirmPattern: '^(Продолжить|Разрешить|Continue|Allow)',
+
+  // Cookies policy banner
+  cookiesAccept: '[data-qa="cookies-policy-informer-accept"]',
+  additionalDataClose: '[data-qa="additional-data-collector__popup-close"]',
+
+  // Resumes on the profile page
+  resume: '[data-qa="resume"]',
+  resumeCardLink: 'a[data-qa^="resume-card-link-"]',
+  resumeRecommendations: 'a[data-qa="resume-recommendations-button"]',
+
   // Pagination
   pagerBlock: '[data-qa="pager-block"]',
   pagerPage: 'a[data-qa="pager-page"]',
