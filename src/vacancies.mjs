@@ -320,8 +320,6 @@ async function describeVacancyCard({ commander, selector, buttonIndex }) {
         card = card.parentElement;
       }
       button?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      button?.style.setProperty('outline', '4px solid #ff9800');
-      button?.style.setProperty('outline-offset', '3px');
       const text = card?.innerText.split('\n').map((line) => line.trim()).filter(Boolean).slice(0, 4).join(' | ');
       return text || null;
     },
@@ -471,7 +469,7 @@ export async function findAndProcessVacancyButton({
   }
 
   if (isTestMode()) {
-    await confirmStep(`Click "Откликнуться" (outlined) to open the application form of ${await describeVacancyCard({ commander, selector, buttonIndex })}`);
+    await confirmStep(`Click "Откликнуться" (scrolled to the middle of the window) to open the application form of ${await describeVacancyCard({ commander, selector, buttonIndex })}`);
   }
 
   const clickResult = await clickVacancyButton({ commander, selector, buttonIndex });

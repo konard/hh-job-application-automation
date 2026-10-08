@@ -67,9 +67,8 @@ function describeElement(commander, selector) {
       if (!element) {
         return sel;
       }
-      // Show the viewer what is about to change
+      // Bring the target into view; no visual markers, so recordings and screenshots stay clean
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element.style.outline = '3px solid #ff9800';
       const own = clean(element.labels?.[0]?.textContent || element.getAttribute('aria-label') ||
         (element.matches('textarea, input') ? element.placeholder : element.textContent));
       let context = '';

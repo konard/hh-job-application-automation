@@ -82,10 +82,6 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     console.log('🧪 Test mode: one application, every click and typed value is confirmed first');
   }
 
-  if (argv.testMode) {
-    await session.page.bringToFront();
-  }
-
   commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose });
   console.log(`Using ${commander.engine} automation engine`);
 

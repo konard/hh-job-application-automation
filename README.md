@@ -150,8 +150,8 @@ To check what will be sent, apply to a single vacancy step by step:
 bun run apply -- --test-mode
 ```
 
-Before every click and every typed value the target is scrolled into view and outlined in the
-browser, and the terminal shows what will happen (the vacancy, the button, the exact text). Type `y`
+Before every click and every typed value the target is scrolled into view (nothing is drawn on
+the page, so screenshots and recordings stay clean), and the terminal shows what will happen (the vacancy, the button, the exact text). Type `y`
 to do it or `q` to stop. The run ends after that one application.
 
 ### Ignore Questionnaire Vacancies
