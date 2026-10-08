@@ -38,7 +38,7 @@ function getRandomIntInclusive(min, max) {
  * @param {Function} options.onPageClosed - Called when the user closes the tab
  * @returns {Object} Orchestrator with start method
  */
-export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }) {
+export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, onApplicationSent = async () => {} }) {
   let START_URL = argv.url;
   const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
 
@@ -76,6 +76,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }
    */
   async function afterApplicationSent() {
     await checkpoint('application-sent');
+    await onApplicationSent();
     const randomExtraDelaySeconds = getRandomIntInclusive(0, BUTTON_CLICK_INTERVAL / 1000);
     const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
     console.log(
@@ -94,7 +95,8 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed }
     readQADatabase: qaDB.readQADatabase,
     addOrUpdateQA: qaDB.addOrUpdateQA,
     addIgnoredVacancyId: qaDB.addIgnoredVacancyId,
-    autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
+    // In test mode every step is confirmed, so the form is submitted after confirmation
+    autoSubmitEnabled: argv.autoSubmitVacancyResponseForm || argv.testMode,
     ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
     returnUrl: lastSearchPageUrl,
     onApplicationSent: afterApplicationSent,

@@ -142,6 +142,18 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 With this flag the run is unattended: forms with questions that the QA database cannot answer are
 skipped instead of waiting for you.
 
+### Test Mode
+
+To check what will be sent, apply to a single vacancy step by step:
+
+```bash
+bun run apply -- --test-mode
+```
+
+Before every click and every typed value the target is scrolled into view and outlined in the
+browser, and the terminal shows what will happen (the vacancy, the button, the exact text). Type `y`
+to do it or `q` to stop. The run ends after that one application.
+
 ### Ignore Questionnaire Vacancies
 
 If you want to skip vacancies that require any additional questionnaire fields beyond the cover letter, use:

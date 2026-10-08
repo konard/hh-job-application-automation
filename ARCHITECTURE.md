@@ -19,6 +19,7 @@ src/
 ├── login.mjs                 # Detect logins in installed browsers, sign in to hh.ru
 ├── resumes.mjs               # Pick the most recently updated resume, its suggested vacancies
 ├── tracing.mjs               # browser-commander trace + network log in logs/traces
+├── test-mode.mjs             # Confirm each click and typed value, one application only
 ├── orchestrator.mjs          # Main coordination logic and state machine
 ├── page-triggers.mjs         # Declarative page handlers (browser-commander pageTrigger)
 ├── page-handlers.mjs         # Redirect safety check used by the main loop
@@ -151,6 +152,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--keep-browser-open` | Keep Chrome running after exit, reuse it next run | false |
 | `--browser-idle-timeout` | Minutes before a kept-open Chrome closes when unused | 30 |
 | `--browser-port` | Remote debugging port of the automation Chrome | 9322 |
+| `--test-mode` | One application; confirm every click and typed value on stdin | false |
 | `--trace` | Record a browser-commander trace in `logs/traces` | true |
 | `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |
 | `--message` | Default cover letter message | - |
@@ -163,8 +165,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 1. `browser-session.mjs` attaches to Chrome on `--browser-port` if it runs, or starts it detached
    with the dedicated profile. Without `--keep-browser-open` it is closed on exit; with it, a
    detached `browser-watchdog.mjs` closes it after `--browser-idle-timeout` unused minutes.
-2. `login.mjs` returns at once when the profile is logged in (the profile restores hh.ru's session
-   cookies across restarts). Otherwise it lists browser profiles holding hh.ru or VK/Mail.ru/OK/Google/
+2. `login.mjs` returns at once when the profile is logged in (it stays logged in across restarts). Otherwise it lists browser profiles holding hh.ru or VK/Mail.ru/OK/Google/
    Gosuslugi cookies (names and counts only), starts a temporary snapshot of the best Chromium profile
    (Chrome decrypts its own cookies, so there is no Keychain prompt), signs in through hh.ru's social
    login when needed, and copies the hh.ru cookies into the automation browser.

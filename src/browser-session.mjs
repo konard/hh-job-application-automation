@@ -28,6 +28,11 @@ import {
 import { log } from './logging.mjs';
 
 const LAUNCH_RESTRICTIONS = ['no-crash-restore', 'no-translate'];
+// Workarounds for panels browser-commander's restrictions leave visible:
+// the "Continue where you left off" infobar, and the Translate bubble that
+// --disable-features=Translate no longer hides
+const EXTRA_DISABLED_FEATURES = ['SessionRestoreInfobar'];
+const PROFILE_PREFERENCES = { translate: { enabled: false } };
 const STARTUP_TIMEOUT_MS = 30000;
 const USAGE_MARK_INTERVAL_MS = 60000;
 const WATCHDOG_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'browser-watchdog.mjs');
@@ -49,6 +54,18 @@ function isWatchdogRunning(userDataDir) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Restriction switches with the extra disabled features merged in: Chrome reads only the
+ * last --disable-features switch
+ * @returns {string[]}
+ */
+function launchSwitches() {
+  const isFeatureSwitch = (arg) => arg.startsWith('--disable-features=');
+  const { args } = resolveRestrictions(LAUNCH_RESTRICTIONS);
+  const features = [...args.filter(isFeatureSwitch).flatMap((arg) => arg.split('=')[1].split(',')), ...EXTRA_DISABLED_FEATURES];
+  return [...args.filter((arg) => !isFeatureSwitch(arg)), `--disable-features=${features.join(',')}`];
 }
 
 /**
@@ -112,14 +129,9 @@ export async function connectOrLaunchBrowser({ engine, userDataDir, port, keepOp
   if (reused) {
     console.log(`♻️  Reusing the running browser on port ${port}`);
   } else {
-    // "Continue where you left off" keeps hh.ru's session-only auth cookies across Chrome restarts
-    await prepareUserDataDir(userDataDir, { preferences: { session: { restore_on_startup: 1 } } });
+    await prepareUserDataDir(userDataDir, { preferences: PROFILE_PREFERENCES });
     const executable = await resolveLaunchExecutable({ engine });
-    const args = [
-      `--user-data-dir=${userDataDir}`,
-      `--remote-debugging-port=${port}`,
-      ...resolveRestrictions(LAUNCH_RESTRICTIONS).args,
-    ];
+    const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, ...launchSwitches()];
     spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();
     console.log(`🚀 Started browser on port ${port} (profile: ${userDataDir})`);
   }

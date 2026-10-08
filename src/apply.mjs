@@ -20,6 +20,7 @@ import { createOrchestrator } from './orchestrator.mjs';
 import { markVacancyAsProcessed } from './vacancies.mjs';
 import { connectOrLaunchBrowser } from './browser-session.mjs';
 import { startTracing, stopTracing } from './tracing.mjs';
+import { enableTestMode, withConfirmations } from './test-mode.mjs';
 
 const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
@@ -76,6 +77,15 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     idleTimeoutMinutes: argv.browserIdleTimeout,
   });
 
+  if (argv.testMode) {
+    enableTestMode({ onStop: () => shutdown('Test mode stopped by the user') });
+    console.log('🧪 Test mode: one application, every click and typed value is confirmed first');
+  }
+
+  if (argv.testMode) {
+    await session.page.bringToFront();
+  }
+
   commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose });
   console.log(`Using ${commander.engine} automation engine`);
 
@@ -84,11 +94,12 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   }
 
   const orchestrator = createOrchestrator({
-    commander,
+    commander: withConfirmations(commander),
     page: session.page,
     argv,
     qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
     onPageClosed: () => shutdown('Tab close detected'),
+    onApplicationSent: () => argv.testMode && shutdown('Test mode: the application was sent'),
   });
 
   await orchestrator.start();

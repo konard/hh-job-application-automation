@@ -75,6 +75,11 @@ export function createConfig() {
           description: 'Remote debugging port of the automation browser',
           default: getenv('BROWSER_PORT', 9322),
         })
+        .option('test-mode', {
+          type: 'boolean',
+          description: 'Apply to a single vacancy, asking on stdin to confirm every click and typed value',
+          default: getenv('TEST_MODE', false),
+        })
         .option('trace', {
           type: 'boolean',
           description: 'Record a browser-commander trace (DOM, mutations, actions) with Links Notation export to logs/traces',

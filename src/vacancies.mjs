@@ -9,6 +9,7 @@ import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './help
 import { findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
+import { confirmStep, isTestMode } from './test-mode.mjs';
 
 /**
  * Handle limit error when detected
@@ -307,6 +308,31 @@ function withButtonAt({ commander, selector, buttonIndex, action, defaultValue }
 }
 
 /**
+ * Title and company of the vacancy card holding the button at the given index
+ * @returns {Promise<string>}
+ */
+async function describeVacancyCard({ commander, selector, buttonIndex }) {
+  const { value } = await commander.safeEvaluate({
+    fn: (baseSelector, index) => {
+      const button = document.querySelectorAll(baseSelector)[index];
+      let card = button;
+      while (card && !card.querySelector('a[href*="/vacancy/"]')) {
+        card = card.parentElement;
+      }
+      button?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      button?.style.setProperty('outline', '4px solid #ff9800');
+      button?.style.setProperty('outline-offset', '3px');
+      const text = card?.innerText.split('\n').map((line) => line.trim()).filter(Boolean).slice(0, 4).join(' | ');
+      return text || null;
+    },
+    args: [selector, buttonIndex],
+    defaultValue: null,
+    operationName: 'vacancy card description',
+  });
+  return value ? `"${value}"` : 'the next vacancy';
+}
+
+/**
  * Click the button at the given index with smooth scrolling
  * @returns {Promise<{success: boolean, status?: string}>}
  */
@@ -442,6 +468,10 @@ export async function findAndProcessVacancyButton({
   if (vacancyId) {
     markVacancyAsProcessed(vacancyId);
     log.debug(() => `🔍 Marked vacancy ID ${vacancyId} as processed (total: ${processedVacancyIds.size})`);
+  }
+
+  if (isTestMode()) {
+    await confirmStep(`Click "Откликнуться" (outlined) to open the application form of ${await describeVacancyCard({ commander, selector, buttonIndex })}`);
   }
 
   const clickResult = await clickVacancyButton({ commander, selector, buttonIndex });
