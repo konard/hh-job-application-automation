@@ -55,94 +55,31 @@ export async function extractPageQuestions(options = {}) {
 
       // Extract radio and checkbox questions (reuse taskBodies from above)
       taskBodies.forEach((taskBody) => {
-        const questionEl = taskBody.querySelector('[data-qa="task-question"]');
-        if (!questionEl) return;
-
-        const question = questionEl.textContent.trim();
+        const question = taskBody.querySelector('[data-qa="task-question"]')?.textContent.trim();
         if (!question) return;
 
-        const radioInputs = taskBody.querySelectorAll('input[type="radio"]');
-        const checkboxInputs = taskBody.querySelectorAll('input[type="checkbox"]');
-
-        if (radioInputs.length === 0 && checkboxInputs.length === 0) return;
-
-        // Group radio buttons by name
-        const radiosByName = {};
-        radioInputs.forEach((radio) => {
-          if (!radio.name) return;
-          if (!radiosByName[radio.name]) {
-            radiosByName[radio.name] = [];
-          }
-
-          const cell = radio.closest('[data-qa="cell"]');
-          let optionText = '';
-          if (cell) {
-            const textContent = cell.querySelector('[data-qa="cell-text-content"]');
-            if (textContent) {
-              optionText = textContent.textContent.trim();
-            }
-          }
-
-          radiosByName[radio.name].push({
-            value: radio.value,
-            optionText,
-            checked: radio.checked,
+        for (const type of ['radio', 'checkbox']) {
+          // Group inputs by name
+          const optionsByName = {};
+          taskBody.querySelectorAll(`input[type="${type}"]`).forEach((input) => {
+            if (!input.name) return;
+            const optionText = input.closest('[data-qa="cell"]')
+              ?.querySelector('[data-qa="cell-text-content"]')?.textContent.trim() || '';
+            (optionsByName[input.name] ??= []).push({ value: input.value, optionText, checked: input.checked });
           });
-        });
 
-        // Group checkboxes by name
-        const checkboxesByName = {};
-        checkboxInputs.forEach((checkbox) => {
-          if (!checkbox.name) return;
-          if (!checkboxesByName[checkbox.name]) {
-            checkboxesByName[checkbox.name] = [];
-          }
-
-          const cell = checkbox.closest('[data-qa="cell"]');
-          let optionText = '';
-          if (cell) {
-            const textContent = cell.querySelector('[data-qa="cell-text-content"]');
-            if (textContent) {
-              optionText = textContent.textContent.trim();
-            }
-          }
-
-          checkboxesByName[checkbox.name].push({
-            value: checkbox.value,
-            optionText,
-            checked: checkbox.checked,
+          Object.entries(optionsByName).forEach(([name, options]) => {
+            const checked = options.filter(opt => opt.checked).map(opt => opt.optionText);
+            questions.push({
+              type,
+              question,
+              name,
+              options,
+              ...(type === 'radio' ? { currentAnswer: checked[0] || '' } : { currentAnswers: checked }),
+              selector: `input[name="${name}"]`,
+            });
           });
-        });
-
-        // Add radio questions
-        Object.entries(radiosByName).forEach(([name, options]) => {
-          const checkedOption = options.find(opt => opt.checked);
-          const currentAnswer = checkedOption ? checkedOption.optionText : '';
-
-          questions.push({
-            type: 'radio',
-            question,
-            name,
-            options,
-            currentAnswer,
-            selector: `input[name="${name}"]`,
-          });
-        });
-
-        // Add checkbox questions
-        Object.entries(checkboxesByName).forEach(([name, options]) => {
-          const checkedOptions = options.filter(opt => opt.checked);
-          const currentAnswers = checkedOptions.map(opt => opt.optionText);
-
-          questions.push({
-            type: 'checkbox',
-            question,
-            name,
-            options,
-            currentAnswers,
-            selector: `input[name="${name}"]`,
-          });
-        });
+        }
       });
 
       return questions;
@@ -304,31 +241,10 @@ export async function countUnansweredQuestions(options = {}) {
  * @param {Object} options - Configuration options
  * @param {Object} options.commander - Browser commander instance
  * @param {Object} options.questionData - Question data with selector and answer
- * @param {boolean} options.verbose - Enable verbose logging
  * @returns {Promise<boolean>} - True if filled
  */
-export async function fillTextareaQuestion(options = {}) {
-  const { commander, questionData, verbose = false } = options;
-
-  // Perform fresh check of textarea content right before filling
-  // This is more reliable than the stale currentValue from extraction time
-  const freshValue = await commander.evaluate({
-    fn: (selector) => {
-      const textarea = document.querySelector(selector);
-      return textarea ? textarea.value.trim() : '';
-    },
-    args: [questionData.selector],
-  });
-
-  if (freshValue) {
-    if (verbose) {
-      console.log(`[QA] Textarea already has content for: ${questionData.question}`);
-      console.log(`[QA] Current value: "${freshValue.substring(0, 50)}..."`);
-    }
-    return false;
-  }
-
-  // fillTextArea with checkEmpty: true provides additional safety check
+export async function fillTextareaQuestion({ commander, questionData }) {
+  // checkEmpty makes fillTextArea skip textareas that already have content
   const result = await commander.fillTextArea({
     selector: questionData.selector,
     text: questionData.answer,
@@ -337,17 +253,69 @@ export async function fillTextareaQuestion(options = {}) {
     simulateTyping: true,
   });
 
-  // fillTextArea returns an object with { filled, verified, skipped, actualValue }
-  const filled = result && result.filled;
-
-  if (filled) {
+  if (result?.filled) {
     console.log(`[QA] Prefilled textarea for: ${questionData.question}`);
-  } else if (result && result.skipped) {
+  } else if (result?.skipped) {
     console.log(`[QA] Textarea was not empty, skipped: ${questionData.question}`);
   }
 
-  return filled;
+  return Boolean(result?.filled);
 }
+
+/**
+ * Find the option whose text matches the answer (fuzzy, case-insensitive)
+ * @param {Array} options - Options with optionText
+ * @param {string} answer - Answer text
+ * @returns {Object|undefined}
+ */
+function findMatchingOption(options, answer) {
+  if (!answer) return undefined;
+  const ans = answer.toLowerCase();
+  return options.find(({ optionText }) => {
+    const text = optionText?.toLowerCase();
+    return text && (text.includes(ans.substring(0, 20)) || ans.includes(text));
+  });
+}
+
+/**
+ * Select a radio/checkbox option unless it is already checked, then fill its custom text
+ * @returns {Promise<boolean>} - True if the option was clicked
+ */
+async function selectOption({ commander, questionData, option, customText, verbose }) {
+  const selector = `input[name="${questionData.name}"][value="${option.value}"]`;
+  const alreadyChecked = await commander.evaluate({
+    fn: (sel) => document.querySelector(sel)?.checked ?? false,
+    args: [selector],
+  });
+
+  if (alreadyChecked) {
+    if (verbose) {
+      console.log(`[QA] Option "${option.optionText}" already selected for: ${questionData.question}`);
+    }
+    return false;
+  }
+
+  await commander.clickButton({ selector, scrollIntoView: true, smoothScroll: true });
+  console.log(`[QA] Selected option "${option.optionText}" for: ${questionData.question}`);
+  await commander.wait({ ms: 300, reason: 'visual feedback after option selection' });
+
+  // "open" options have an extra textarea for a custom answer
+  const customSelector = `textarea[name="${questionData.name}_text"]`;
+  if (option.value === 'open' && customText && await commander.count({ selector: customSelector }) > 0) {
+    await commander.fillTextArea({
+      selector: customSelector,
+      text: customText,
+      checkEmpty: true,
+      scrollIntoView: true,
+      simulateTyping: true,
+    });
+    console.log(`[QA] Filled custom textarea for: ${questionData.question}`);
+  }
+
+  return true;
+}
+
+const toArray = (answer) => (Array.isArray(answer) ? answer : [answer]);
 
 /**
  * Auto-fill radio question
@@ -357,62 +325,19 @@ export async function fillTextareaQuestion(options = {}) {
  * @param {boolean} options.verbose - Enable verbose logging
  * @returns {Promise<boolean>} - True if filled
  */
-export async function fillRadioQuestion(options = {}) {
-  const { commander, questionData, verbose = false } = options;
+export async function fillRadioQuestion({ commander, questionData, verbose = false }) {
+  const answers = toArray(questionData.answer);
+  const answerIndex = answers.findIndex((ans) => findMatchingOption(questionData.options, ans));
 
-  const answers = Array.isArray(questionData.answer) ? questionData.answer : [questionData.answer];
-
-  // Find matching option
-  let matchingOption = null;
-  for (const ans of answers) {
-    matchingOption = questionData.options.find(opt =>
-      opt.optionText && ans &&
-      (opt.optionText.toLowerCase().includes(ans.toLowerCase().substring(0, 20)) ||
-       ans.toLowerCase().includes(opt.optionText.toLowerCase())),
-    );
-    if (matchingOption) break;
-  }
-
-  if (!matchingOption) {
+  if (answerIndex === -1) {
     if (verbose) {
       console.log(`[QA] No matching radio option found for: ${questionData.question}`);
     }
     return false;
   }
 
-  const radioSelector = `input[name="${questionData.name}"][value="${matchingOption.value}"]`;
-
-  // Check if already checked
-  const alreadyChecked = await commander.evaluate({
-    fn: (selector) => {
-      const radio = document.querySelector(selector);
-      return radio ? radio.checked : false;
-    },
-    args: [radioSelector],
-  });
-
-  if (alreadyChecked) {
-    if (verbose) {
-      console.log(`[QA] Radio option "${matchingOption.optionText}" already selected for: ${questionData.question}`);
-    }
-    return false;
-  }
-
-  await commander.clickButton({
-    selector: radioSelector,
-    scrollIntoView: true,
-    smoothScroll: true,
-  });
-
-  console.log(`[QA] Selected radio option "${matchingOption.optionText}" for: ${questionData.question}`);
-  await commander.wait({ ms: 300, reason: 'visual feedback after radio selection' });
-
-  // Handle custom text option
-  if (matchingOption.value === 'open') {
-    await fillCustomTextForOption({ commander, questionData, answers });
-  }
-
-  return true;
+  const option = findMatchingOption(questionData.options, answers[answerIndex]);
+  return selectOption({ commander, questionData, option, customText: answers[0], verbose });
 }
 
 /**
@@ -423,88 +348,17 @@ export async function fillRadioQuestion(options = {}) {
  * @param {boolean} options.verbose - Enable verbose logging
  * @returns {Promise<boolean>} - True if any filled
  */
-export async function fillCheckboxQuestion(options = {}) {
-  const { commander, questionData, verbose = false } = options;
-
-  const answers = Array.isArray(questionData.answer) ? questionData.answer : [questionData.answer];
+export async function fillCheckboxQuestion({ commander, questionData, verbose = false }) {
   let anyFilled = false;
 
-  for (const ans of answers) {
-    const matchingOption = questionData.options.find(opt =>
-      opt.optionText && ans &&
-      (opt.optionText.toLowerCase().includes(ans.toLowerCase().substring(0, 20)) ||
-       ans.toLowerCase().includes(opt.optionText.toLowerCase())),
-    );
-
-    if (!matchingOption) continue;
-
-    const checkboxSelector = `input[name="${questionData.name}"][value="${matchingOption.value}"]`;
-
-    const alreadyChecked = await commander.evaluate({
-      fn: (selector) => {
-        const checkbox = document.querySelector(selector);
-        return checkbox ? checkbox.checked : false;
-      },
-      args: [checkboxSelector],
-    });
-
-    if (alreadyChecked) {
-      if (verbose) {
-        console.log(`[QA] Option "${matchingOption.optionText}" already checked for: ${questionData.question}`);
-      }
-      continue;
+  for (const ans of toArray(questionData.answer)) {
+    const option = findMatchingOption(questionData.options, ans);
+    if (option && await selectOption({ commander, questionData, option, customText: ans, verbose })) {
+      anyFilled = true;
     }
-
-    await commander.clickButton({
-      selector: checkboxSelector,
-      scrollIntoView: true,
-      smoothScroll: true,
-    });
-
-    console.log(`[QA] Checked option "${matchingOption.optionText}" for: ${questionData.question}`);
-    await commander.wait({ ms: 300, reason: 'visual feedback after checkbox selection' });
-
-    // Handle custom text
-    if (matchingOption.value === 'open') {
-      await fillCustomTextForOption({ commander, questionData, answers: [ans] });
-    }
-
-    anyFilled = true;
   }
 
   return anyFilled;
-}
-
-/**
- * Fill custom text for "open" option (internal helper)
- * @param {Object} options - Configuration options
- * @param {Object} options.commander - Browser commander instance
- * @param {Object} options.questionData - Question data
- * @param {Array} options.answers - Answer array
- */
-async function fillCustomTextForOption(options = {}) {
-  const { commander, questionData, answers } = options;
-
-  const customTextarea = await commander.evaluate({
-    fn: (name) => {
-      const textareaName = name + '_text';
-      const textarea = document.querySelector(`textarea[name="${textareaName}"]`);
-      return textarea ? textareaName : null;
-    },
-    args: [questionData.name],
-  });
-
-  if (customTextarea) {
-    const textToFill = Array.isArray(answers) ? answers[0] : answers;
-    await commander.fillTextArea({
-      selector: `textarea[name="${customTextarea}"]`,
-      text: textToFill,
-      checkEmpty: true,
-      scrollIntoView: true,
-      simulateTyping: true,
-    });
-    console.log(`[QA] Filled custom textarea for: ${questionData.question}`);
-  }
 }
 
 /**

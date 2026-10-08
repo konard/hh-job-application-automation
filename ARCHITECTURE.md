@@ -15,7 +15,8 @@ The system automates job applications on HH.ru (HeadHunter) using browser automa
 src/
 ├── apply.mjs                 # Entry point - CLI parsing, initialization
 ├── orchestrator.mjs          # Main coordination logic and state machine
-├── page-handlers.mjs         # Navigation and click listener handlers
+├── page-triggers.mjs         # Declarative page handlers (browser-commander pageTrigger)
+├── page-handlers.mjs         # Redirect safety check used by the main loop
 ├── vacancies.mjs             # Vacancy button finding and processing
 ├── vacancy-response.mjs      # Response form handling (cover letter, Q&A)
 ├── qa.mjs                    # Q&A matching logic
@@ -23,9 +24,13 @@ src/
 ├── config.mjs                # Configuration using lino-arguments
 ├── logging.mjs               # Logging using log-lazy
 ├── hh-selectors.mjs          # Centralized CSS selectors and URL patterns
+├── ignored-vacancies-db.mjs  # Persisted IDs of vacancies with questionnaires
+├── migrate-qa.mjs            # Rewrites qa.lino in canonical format
 └── helpers/
     ├── modal-helpers.mjs     # Modal detection and closing helpers
-    └── session-tracker.mjs   # Session storage tracking for button clicks
+    ├── page-helpers.mjs      # Shared hh.ru page checks (first matching selector, sent response, ...)
+    ├── session-tracker.mjs   # Apply-button click tracking (binds browser-commander helpers)
+    └── mutex.mjs             # Serializes database file writes
 ```
 
 ## Component Architecture
@@ -119,12 +124,14 @@ src/
 ### DRY (Don't Repeat Yourself)
 - **Modal handling**: `closeModalIfPresent()` helper
 - **Logging**: Centralized through `log-lazy` library
-- **Session tracking**: `session-tracker.mjs` helper
+- **Session tracking**: `session-tracker.mjs` binds browser-commander's `installClickListener` / `checkAndClearFlag`
+- **Generic browser logic lives in browser-commander**: URL waiting (`waitForUrlCondition`),
+  toggle search (`findToggleButton`), enabled checks (`isEnabled`), page triggers and launch restrictions
 
 ### Small Units
 - Large functions split into focused helpers
-- `apply.mjs` reduced from 729 to 143 lines (80% reduction)
-- `vacancy-response.mjs` split into 6+ helper functions
+- `apply.mjs` reduced from 729 to ~100 lines
+- `src/` reduced from ~5400 to ~3000 lines by delegating generic code to dependencies
 
 ## Configuration
 

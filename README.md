@@ -57,6 +57,10 @@ Konstantin Dyachenko
 
 The application supports configuration via `.lenv` files using the [lino-arguments](https://github.com/link-foundation/lino-arguments) library. This allows you to set default values without typing them every time.
 
+**Requirements:** [Bun](https://bun.sh) 1.4.2 or newer (older Bun versions cannot attach Playwright
+to the browser) and an installed Google Chrome. The browser is started the way a person would start
+it (no automation infobars); the profile is kept in `~/.hh-automation/<engine>-data`.
+
 **Quick setup:**
 
 1. Copy the example configuration:

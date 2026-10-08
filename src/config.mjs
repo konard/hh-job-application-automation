@@ -12,11 +12,6 @@ import os from 'os';
 import fs from 'fs';
 import { makeConfig } from 'lino-arguments';
 
-/**
- * Default cover letter message
- */
-const DEFAULT_MESSAGE = '';
-
 function loadMessageFromFile(filePath) {
   if (!filePath) {
     return '';
@@ -99,7 +94,7 @@ export function createConfig() {
         .help(),
   });
 
-  config.message = config.message || loadMessageFromFile(config.messageFile) || DEFAULT_MESSAGE;
+  config.message ||= loadMessageFromFile(config.messageFile);
 
   return config;
 }
@@ -111,12 +106,4 @@ export function createConfig() {
  */
 export function getUserDataDir(engine) {
   return path.join(os.homedir(), '.hh-automation', `${engine}-data`);
-}
-
-/**
- * Get the default message
- * @returns {string}
- */
-export function getDefaultMessage() {
-  return DEFAULT_MESSAGE;
 }

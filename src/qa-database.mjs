@@ -36,6 +36,7 @@
 import { Parser } from 'links-notation';
 import fs from 'fs/promises';
 import path from 'path';
+import { createMutex } from './helpers/mutex.mjs';
 
 /**
  * Creates a Q&A database instance with the specified file path
@@ -54,41 +55,7 @@ export function createQADatabase(filePath) {
 
   const QA_FILE_PATH = filePath;
 
-  // Lock management for preventing concurrent file access
-  const locks = new Map();
-
-  /**
-   * Acquires a lock for a given key
-   * @param {string} key - The lock key
-   * @returns {Promise<Function>}
-   */
-  async function acquireLock(key) {
-    while (locks.has(key)) {
-      // Wait for the current lock to be released
-      await locks.get(key);
-    }
-
-    // Create a new lock
-    let releaseLock;
-    const lockPromise = new Promise((resolve) => {
-      releaseLock = resolve;
-    });
-
-    locks.set(key, lockPromise);
-
-    // Return the release function
-    return releaseLock;
-  }
-
-  /**
-   * Releases a lock for a given key
-   * @param {string} key - The lock key
-   * @param {Function} releaseFn - The release function returned by acquireLock
-   */
-  function releaseLock(key, releaseFn) {
-    locks.delete(key);
-    releaseFn();
-  }
+  const exclusive = createMutex();
 
   /**
    * Reads Q&A pairs from qa.lino file
@@ -317,17 +284,12 @@ export function createQADatabase(filePath) {
    * @param {string} question - The question
    * @param {string} answer - The answer
    */
-  async function addOrUpdateQA(question, answer) {
-    const lockKey = 'qa-database';
-    const release = await acquireLock(lockKey);
-
-    try {
+  function addOrUpdateQA(question, answer) {
+    return exclusive(async () => {
       const qaMap = await readQADatabase();
       qaMap.set(question, answer);
       await writeQADatabase(qaMap);
-    } finally {
-      releaseLock(lockKey, release);
-    }
+    });
   }
 
   /**
@@ -464,108 +426,53 @@ export function normalizeQuestion(question) {
     .trim();
 }
 
+const STOPWORDS = new Set([
+  'пожалуйста', 'свои', 'ваши', 'от', 'до', 'в', 'на', 'с', 'по',
+  'о', 'об', 'и', 'а', 'но', 'или', 'то', 'как', 'что', 'это',
+  'вы', 'ты', 'он', 'она', 'они', 'мы', 'я', 'к', 'для', 'при',
+  'чуть', 'данный', 'момент',
+]);
+
 /**
- * Extract key words from a question
+ * Extract key words (plus 5-char stems of long words) from a question
  * @param {string} question - Question string
+ * @param {Object} [options]
+ * @param {boolean} [options.caseSensitive=false] - Preserve case of keywords
  * @returns {Set<string>} Set of key words
  */
-export function extractKeywords(question) {
-  const stopwords = new Set([
-    'пожалуйста', 'свои', 'ваши', 'от', 'до', 'в', 'на', 'с', 'по',
-    'о', 'об', 'и', 'а', 'но', 'или', 'то', 'как', 'что', 'это',
-    'вы', 'ты', 'он', 'она', 'они', 'мы', 'я', 'к', 'для', 'при',
-    'чуть', 'данный', 'момент',
-  ]);
-
-  const normalized = normalizeQuestion(question);
-  const words = normalized.split(/\s+/);
-
-  const keywords = new Set(
-    words.filter(word => word.length > 2 && !stopwords.has(word)),
-  );
-
-  const stems = new Set();
-  for (const word of keywords) {
-    if (word.length > 6) {
-      stems.add(word.substring(0, 5));
-    }
-  }
-
+export function extractKeywords(question, { caseSensitive = false } = {}) {
+  const cleaned = caseSensitive
+    ? question.replace(/[.,!?;:]/g, '').replace(/\s+/g, ' ').trim()
+    : normalizeQuestion(question);
+  const keywords = cleaned
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !STOPWORDS.has(word.toLowerCase()));
+  const stems = keywords.filter(word => word.length > 6).map(word => word.substring(0, 5));
   return new Set([...keywords, ...stems]);
 }
 
 /**
- * Calculate keyword overlap similarity
+ * Calculate keyword overlap (Jaccard) similarity
  * @param {string} a - First question
  * @param {string} b - Second question
+ * @param {Object} [options] - Passed to extractKeywords
  * @returns {number} Similarity score (0-1)
  */
-export function keywordSimilarity(a, b) {
-  const keywordsA = extractKeywords(a);
-  const keywordsB = extractKeywords(b);
+export function keywordSimilarity(a, b, options) {
+  const keywordsA = extractKeywords(a, options);
+  const keywordsB = extractKeywords(b, options);
 
   if (keywordsA.size === 0 && keywordsB.size === 0) return 1.0;
   if (keywordsA.size === 0 || keywordsB.size === 0) return 0.0;
 
-  const intersection = new Set([...keywordsA].filter(x => keywordsB.has(x)));
+  const intersection = [...keywordsA].filter(x => keywordsB.has(x));
   const union = new Set([...keywordsA, ...keywordsB]);
 
-  return intersection.size / union.size;
+  return intersection.length / union.size;
 }
 
-/**
- * Extract key words from a question (case-sensitive version)
- * @param {string} question - Question string
- * @returns {Set<string>} Set of key words
- */
-export function extractKeywordsCaseSensitive(question) {
-  const stopwords = new Set([
-    'пожалуйста', 'свои', 'ваши', 'от', 'до', 'в', 'на', 'с', 'по',
-    'о', 'об', 'и', 'а', 'но', 'или', 'то', 'как', 'что', 'это',
-    'вы', 'ты', 'он', 'она', 'они', 'мы', 'я', 'к', 'для', 'при',
-    'чуть', 'данный', 'момент',
-  ]);
-
-  // Remove punctuation but preserve case
-  const cleaned = question
-    .replace(/[.,!?;:]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const words = cleaned.split(/\s+/);
-
-  // For case-sensitive mode, we compare against lowercase stopwords
-  const keywords = new Set(
-    words.filter(word => word.length > 2 && !stopwords.has(word.toLowerCase())),
-  );
-
-  const stems = new Set();
-  for (const word of keywords) {
-    if (word.length > 6) {
-      stems.add(word.substring(0, 5));
-    }
-  }
-
-  return new Set([...keywords, ...stems]);
-}
-
-/**
- * Calculate keyword overlap similarity (case-sensitive version)
- * @param {string} a - First question
- * @param {string} b - Second question
- * @returns {number} Similarity score (0-1)
- */
-export function keywordSimilarityCaseSensitive(a, b) {
-  const keywordsA = extractKeywordsCaseSensitive(a);
-  const keywordsB = extractKeywordsCaseSensitive(b);
-
-  if (keywordsA.size === 0 && keywordsB.size === 0) return 1.0;
-  if (keywordsA.size === 0 || keywordsB.size === 0) return 0.0;
-
-  const intersection = new Set([...keywordsA].filter(x => keywordsB.has(x)));
-  const union = new Set([...keywordsA, ...keywordsB]);
-
-  return intersection.size / union.size;
-}
+export const extractKeywordsCaseSensitive = (question) => extractKeywords(question, { caseSensitive: true });
+export const keywordSimilarityCaseSensitive = (a, b) => keywordSimilarity(a, b, { caseSensitive: true });
 
 /**
  * Find all matching questions from a database using fuzzy matching
@@ -600,15 +507,7 @@ export function findBestMatch(question, qaDatabase, options = {}) {
       normalize(dbQuestion),
     );
 
-    // For keyword similarity, we need to adjust our functions if case sensitive
-    // Since extractKeywords uses normalizeQuestion internally, we need a version that respects case sensitivity
-    let kwSimilarity;
-    if (caseSensitive) {
-      // For case-sensitive mode, use the strings as-is for keyword extraction
-      kwSimilarity = keywordSimilarityCaseSensitive(question, dbQuestion);
-    } else {
-      kwSimilarity = keywordSimilarity(question, dbQuestion);
-    }
+    const kwSimilarity = keywordSimilarity(question, dbQuestion, { caseSensitive });
 
     const combinedScore = (editSimilarity * 0.4) + (kwSimilarity * 0.6);
 

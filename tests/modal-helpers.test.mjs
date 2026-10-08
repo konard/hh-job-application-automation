@@ -1,619 +1,95 @@
 /**
  * Unit tests for modal-helpers module
- * Tests modal detection, closing, and waiting functionality
+ * Tests modal detection and closing functionality
  */
 
 import { describe, test, assert } from 'test-anywhere';
 import {
   closeModalIfPresent,
-  isModalVisible,
-  waitForModalToClose,
+  checkAndCloseDirectApplicationModal,
 } from '../src/helpers/modal-helpers.mjs';
+import { SELECTORS } from '../src/hh-selectors.mjs';
+
+function createMockCommander({ count = 0, evaluateValue, clickError } = {}) {
+  const calls = { clicked: [], waits: [] };
+  return {
+    calls,
+    count: async () => (typeof count === 'function' ? count() : count),
+    clickButton: async ({ selector }) => {
+      if (clickError) throw clickError;
+      calls.clicked.push(selector);
+    },
+    wait: async ({ ms }) => {
+      calls.waits.push(ms);
+    },
+    safeEvaluate: async ({ defaultValue }) => ({ value: evaluateValue ?? defaultValue }),
+  };
+}
 
 describe('Modal Helpers', () => {
-
   describe('closeModalIfPresent()', () => {
     test('should return false when no modal is present', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, false);
+      const commander = createMockCommander({ count: 0 });
+      assert.equal(await closeModalIfPresent({ commander }), false);
+      assert.equal(commander.calls.clicked.length, 0);
     });
 
-    test('should return true and close modal when modal is present', async () => {
-      let clickedSelector = null;
-      let waitCalled = false;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        clickButton: async ({ selector }) => {
-          clickedSelector = selector;
-        },
-        wait: async ({ ms: _ms, reason: _reason }) => {
-          waitCalled = true;
-        },
-      };
-
-      const result = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, true);
-      assert.ok(clickedSelector !== null, 'Should have clicked close button');
-      assert.ok(waitCalled, 'Should have waited after closing');
+    test('should click the default close button and wait when modal is present', async () => {
+      const commander = createMockCommander({ count: 1 });
+      assert.equal(await closeModalIfPresent({ commander }), true);
+      assert.deepEqual(commander.calls.clicked, [SELECTORS.responsePopupClose]);
+      assert.deepEqual(commander.calls.waits, [1000]);
     });
 
-    test('should use custom close button selector when provided', async () => {
-      let clickedSelector = null;
-      const customSelector = '[data-qa="custom-close"]';
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        clickButton: async ({ selector }) => {
-          clickedSelector = selector;
-        },
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      await closeModalIfPresent({
-        commander: mockCommander,
-        closeButtonSelector: customSelector,
-      });
-
-      assert.equal(clickedSelector, customSelector);
+    test('should use custom close button selector and wait time', async () => {
+      const commander = createMockCommander({ count: 1 });
+      const closeButtonSelector = '[data-qa="custom-close"]';
+      await closeModalIfPresent({ commander, closeButtonSelector, waitAfterClose: 250 });
+      assert.deepEqual(commander.calls.clicked, [closeButtonSelector]);
+      assert.deepEqual(commander.calls.waits, [250]);
     });
 
-    test('should wait specified time after closing', async () => {
-      let waitTime = null;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms, reason: _reason }) => {
-          waitTime = ms;
-        },
-      };
-
-      await closeModalIfPresent({
-        commander: mockCommander,
-        waitAfterClose: 2000,
-      });
-
-      assert.equal(waitTime, 2000);
+    test('should click only once even with multiple modals present', async () => {
+      const commander = createMockCommander({ count: 3 });
+      await closeModalIfPresent({ commander });
+      assert.equal(commander.calls.clicked.length, 1);
     });
 
-    test('should use default wait time when not specified', async () => {
-      let waitTime = null;
+    test('should return false when count or click fails', async () => {
+      const failingCount = createMockCommander({ count: () => { throw new Error('Count failed'); } });
+      assert.equal(await closeModalIfPresent({ commander: failingCount }), false);
 
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms, reason: _reason }) => {
-          waitTime = ms;
-        },
-      };
-
-      await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.equal(waitTime, 1000);
-    });
-
-    test('should return false on error', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => {
-          throw new Error('Network error');
-        },
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, false);
-    });
-
-    test('should handle click errors gracefully', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        clickButton: async ({ selector: _selector }) => {
-          throw new Error('Click failed');
-        },
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, false);
-    });
-
-    test('should not log when verbose is false', async () => {
-      let consoleLogCalled = false;
-      const originalLog = console.log;
-      console.log = (..._args) => {
-        consoleLogCalled = true;
-      };
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      await closeModalIfPresent({
-        commander: mockCommander,
-        verbose: false,
-      });
-
-      console.log = originalLog;
-      assert.equal(consoleLogCalled, false);
-    });
-
-    test('should log when verbose is true', async () => {
-      let consoleLogCalled = false;
-      const originalLog = console.log;
-      console.log = (..._args) => {
-        consoleLogCalled = true;
-      };
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      await closeModalIfPresent({
-        commander: mockCommander,
-        verbose: true,
-      });
-
-      console.log = originalLog;
-      assert.ok(consoleLogCalled, 'Should have logged when verbose is true');
-    });
-
-    test('should handle multiple modals present', async () => {
-      let clickedCount = 0;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 3,
-        clickButton: async ({ selector: _selector }) => {
-          clickedCount++;
-        },
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, true);
-      assert.equal(clickedCount, 1, 'Should only click once even with multiple modals');
+      const failingClick = createMockCommander({ count: 1, clickError: new Error('Click failed') });
+      assert.equal(await closeModalIfPresent({ commander: failingClick }), false);
     });
   });
 
-  describe('isModalVisible()', () => {
-    test('should return true when modal overlay is present', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-      };
-
-      const result = await isModalVisible({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, true);
+  describe('checkAndCloseDirectApplicationModal()', () => {
+    test('should not detect anything without cancel button', async () => {
+      const commander = createMockCommander({ count: 0 });
+      const result = await checkAndCloseDirectApplicationModal({ commander });
+      assert.deepEqual(result, { isDirectApplication: false, closed: false });
     });
 
-    test('should return false when modal overlay is not present', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-      };
-
-      const result = await isModalVisible({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, false);
+    test('should not close modal when direct application text is missing', async () => {
+      const commander = createMockCommander({ count: 1, evaluateValue: { found: false, reason: 'no text' } });
+      const result = await checkAndCloseDirectApplicationModal({ commander });
+      assert.equal(result.isDirectApplication, false);
+      assert.equal(commander.calls.clicked.length, 0);
     });
 
-    test('should return true when multiple modal overlays present', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 2,
-      };
-
-      const result = await isModalVisible({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, true);
+    test('should click cancel button when direct application modal is detected', async () => {
+      const commander = createMockCommander({ count: 1, evaluateValue: { found: true, reason: 'magritte-alert' } });
+      const result = await checkAndCloseDirectApplicationModal({ commander });
+      assert.deepEqual(result, { isDirectApplication: true, closed: true });
+      assert.deepEqual(commander.calls.clicked, [SELECTORS.directApplicationCancelButton]);
     });
 
-    test('should return false on error', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => {
-          throw new Error('Count failed');
-        },
-      };
-
-      const result = await isModalVisible({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, false);
-    });
-
-    test('should not log when verbose is false', async () => {
-      let consoleLogCalled = false;
-      const originalLog = console.log;
-      console.log = (..._args) => {
-        consoleLogCalled = true;
-      };
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-      };
-
-      await isModalVisible({
-        commander: mockCommander,
-        verbose: false,
-      });
-
-      console.log = originalLog;
-      assert.equal(consoleLogCalled, false);
-    });
-
-    test('should log when verbose is true', async () => {
-      let consoleLogCalled = false;
-      const originalLog = console.log;
-      console.log = (..._args) => {
-        consoleLogCalled = true;
-      };
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-      };
-
-      await isModalVisible({
-        commander: mockCommander,
-        verbose: true,
-      });
-
-      console.log = originalLog;
-      assert.ok(consoleLogCalled, 'Should have logged when verbose is true');
-    });
-  });
-
-  describe('waitForModalToClose()', () => {
-    test('should return true immediately if modal is not visible', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const startTime = Date.now();
-      const result = await waitForModalToClose({
-        commander: mockCommander,
-      });
-      const elapsed = Date.now() - startTime;
-
-      assert.equal(result, true);
-      assert.ok(elapsed < 100, 'Should return quickly when modal not visible');
-    });
-
-    test('should return false when timeout is reached', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1, // Always visible
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await waitForModalToClose({
-        commander: mockCommander,
-        timeout: 1000,
-        pollInterval: 100,
-      });
-
-      assert.equal(result, false);
-    });
-
-    test('should return true when modal closes within timeout', async () => {
-      let callCount = 0;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => {
-          callCount++;
-          // Modal closes on third check
-          return callCount < 3 ? 1 : 0;
-        },
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await waitForModalToClose({
-        commander: mockCommander,
-        timeout: 5000,
-        pollInterval: 100,
-      });
-
-      assert.equal(result, true);
-      assert.ok(callCount >= 3, 'Should have polled multiple times');
-    });
-
-    test('should wait until timeout is reached when modal stays visible', async () => {
-      // Note: Default timeout is 5000ms but bun's test timeout is also 5000ms,
-      // so we use explicit shorter values here to avoid flakiness
-      let waitCalls = 0;
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1, // Always visible
-        wait: async ({ ms, reason: _reason }) => {
-          waitCalls++;
-          // Actually wait to simulate real behavior
-          await new Promise((resolve) => setTimeout(resolve, ms));
-        },
-      };
-
-      const startTime = Date.now();
-      await waitForModalToClose({
-        commander: mockCommander,
-        timeout: 1500,
-        pollInterval: 300,
-      });
-      const elapsed = Date.now() - startTime;
-
-      // Should wait close to the specified timeout
-      assert.ok(elapsed >= 1400, 'Should wait close to specified timeout');
-      assert.ok(waitCalls >= 4, `Should have called wait at least 4 times with 300ms poll, got ${waitCalls}`);
-    });
-
-    test('should use default poll interval when not specified', async () => {
-      let waitCallCount = 0;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1, // Always visible
-        wait: async ({ ms, reason: _reason }) => {
-          waitCallCount++;
-          // Actually wait to allow time to advance
-          await new Promise((resolve) => setTimeout(resolve, ms));
-        },
-      };
-
-      await waitForModalToClose({
-        commander: mockCommander,
-        timeout: 1500,
-      });
-
-      // Default poll interval is 500ms, so in 1500ms we should wait ~3 times
-      assert.ok(waitCallCount >= 2 && waitCallCount <= 4, `Expected 2-4 waits with 500ms interval, got ${waitCallCount}`);
-    });
-
-    test('should respect custom poll interval', async () => {
-      let waitTimes = [];
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        wait: async ({ ms, reason: _reason }) => {
-          waitTimes.push(ms);
-        },
-      };
-
-      await waitForModalToClose({
-        commander: mockCommander,
-        timeout: 1000,
-        pollInterval: 200,
-      });
-
-      // All wait times should be 200ms
-      for (const waitTime of waitTimes) {
-        assert.equal(waitTime, 200);
-      }
-    });
-
-    test('should not log when verbose is false', async () => {
-      let consoleLogCalled = false;
-      const originalLog = console.log;
-      console.log = (..._args) => {
-        consoleLogCalled = true;
-      };
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      await waitForModalToClose({
-        commander: mockCommander,
-        verbose: false,
-      });
-
-      console.log = originalLog;
-      assert.equal(consoleLogCalled, false);
-    });
-
-    test('should log when verbose is true', async () => {
-      let consoleLogCalled = false;
-      const originalLog = console.log;
-      console.log = (..._args) => {
-        consoleLogCalled = true;
-      };
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      await waitForModalToClose({
-        commander: mockCommander,
-        verbose: true,
-      });
-
-      console.log = originalLog;
-      assert.ok(consoleLogCalled, 'Should have logged when verbose is true');
-    });
-
-    test('should handle errors gracefully', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => {
-          throw new Error('Network error');
-        },
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      // isModalVisible returns false on error, so waitForModalToClose should return true
-      const result = await waitForModalToClose({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, true);
-    });
-  });
-
-  describe('Integration scenarios', () => {
-    test('should close modal and wait for it to disappear', async () => {
-      let modalVisible = true;
-      let closed = false;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => {
-          // Modal becomes invisible after close is called
-          return (modalVisible && !closed) ? 1 : 0;
-        },
-        clickButton: async ({ selector: _selector }) => {
-          closed = true;
-        },
-        wait: async ({ ms: _ms, reason: _reason }) => {
-          if (closed) {
-            modalVisible = false;
-          }
-        },
-      };
-
-      // Close modal
-      const closeResult = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-      assert.equal(closeResult, true);
-
-      // Wait for it to disappear
-      const waitResult = await waitForModalToClose({
-        commander: mockCommander,
-      });
-      assert.equal(waitResult, true);
-    });
-
-    test('should handle case where modal was already closed', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const closeResult = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-      assert.equal(closeResult, false);
-
-      const isVisible = await isModalVisible({
-        commander: mockCommander,
-      });
-      assert.equal(isVisible, false);
-    });
-
-    test('should handle modal that appears and disappears', async () => {
-      let callCount = 0;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => {
-          callCount++;
-          // Modal appears briefly then disappears
-          return callCount === 1 ? 1 : 0;
-        },
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const firstCheck = await isModalVisible({
-        commander: mockCommander,
-      });
-      assert.equal(firstCheck, true);
-
-      const secondCheck = await isModalVisible({
-        commander: mockCommander,
-      });
-      assert.equal(secondCheck, false);
-    });
-  });
-
-  describe('Edge cases', () => {
-    test('should handle empty options object', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 0,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.equal(result, false);
-    });
-
-    test('should handle very short timeout', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await waitForModalToClose({
-        commander: mockCommander,
-        timeout: 10,
-        pollInterval: 5,
-      });
-
-      assert.equal(result, false);
-    });
-
-    test('should handle zero timeout', async () => {
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        wait: async ({ ms: _ms, reason: _reason }) => {},
-      };
-
-      const result = await waitForModalToClose({
-        commander: mockCommander,
-        timeout: 0,
-      });
-
-      assert.equal(result, false);
-    });
-
-    test('should handle async wait function', async () => {
-      let waited = false;
-
-      const mockCommander = {
-        count: async ({ selector: _selector }) => 1,
-        clickButton: async ({ selector: _selector }) => {},
-        wait: async ({ ms: _ms, reason: _reason }) => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          waited = true;
-        },
-      };
-
-      await closeModalIfPresent({
-        commander: mockCommander,
-      });
-
-      assert.ok(waited, 'Should have called async wait function');
+    test('should ignore navigation errors during detection', async () => {
+      const commander = createMockCommander({ count: 1 });
+      commander.safeEvaluate = async () => ({ value: { found: false }, navigationError: true });
+      const result = await checkAndCloseDirectApplicationModal({ commander });
+      assert.equal(result.isDirectApplication, false);
     });
   });
 });

@@ -1,5 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { createMutex } from './helpers/mutex.mjs';
+
+const isVacancyId = (id) => /^\d+$/.test(id);
 
 export function createIgnoredVacanciesDatabase(filePath) {
   if (!filePath) {
@@ -9,90 +12,44 @@ export function createIgnoredVacanciesDatabase(filePath) {
     );
   }
 
-  const DB_FILE_PATH = filePath;
-  const locks = new Map();
-
-  async function acquireLock(key) {
-    while (locks.has(key)) {
-      await locks.get(key);
-    }
-
-    let releaseLock;
-    const lockPromise = new Promise((resolve) => {
-      releaseLock = resolve;
-    });
-
-    locks.set(key, lockPromise);
-    return releaseLock;
-  }
-
-  function releaseLock(key, releaseFn) {
-    locks.delete(key);
-    releaseFn();
-  }
+  const exclusive = createMutex();
 
   async function readIgnoredVacancyIds() {
     try {
-      await fs.mkdir(path.dirname(DB_FILE_PATH), { recursive: true });
-      const content = await fs.readFile(DB_FILE_PATH, 'utf8');
-
-      return new Set(
-        content
-          .split('\n')
-          .map((line) => line.trim())
-          .filter((line) => /^\d+$/.test(line)),
-      );
+      const content = await fs.readFile(filePath, 'utf8');
+      return new Set(content.split('\n').map((line) => line.trim()).filter(isVacancyId));
     } catch (error) {
-      if (error.code === 'ENOENT') {
-        return new Set();
+      if (error.code !== 'ENOENT') {
+        console.error('Error reading ignored vacancy IDs database:', error);
       }
-
-      console.error('Error reading ignored vacancy IDs database:', error);
       return new Set();
     }
   }
 
   async function writeIgnoredVacancyIds(vacancyIds) {
-    await fs.mkdir(path.dirname(DB_FILE_PATH), { recursive: true });
-
-    const normalizedIds = Array.from(vacancyIds)
-      .map((id) => String(id).trim())
-      .filter((id) => /^\d+$/.test(id))
+    const ids = Array.from(vacancyIds, (id) => String(id).trim())
+      .filter(isVacancyId)
       .sort((a, b) => Number(a) - Number(b));
-
-    const nextContent = normalizedIds.length > 0 ? `${normalizedIds.join('\n')}\n` : '';
-
-    let existingContent = '';
-    try {
-      existingContent = await fs.readFile(DB_FILE_PATH, 'utf8');
-    } catch {
-      // File doesn't exist yet, will be created.
-    }
-
+    const nextContent = ids.length > 0 ? `${ids.join('\n')}\n` : '';
+    const existingContent = await fs.readFile(filePath, 'utf8').catch(() => '');
     if (existingContent === nextContent) {
       return;
     }
-
-    await fs.writeFile(DB_FILE_PATH, nextContent, 'utf8');
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, nextContent, 'utf8');
   }
 
-  async function addIgnoredVacancyId(vacancyId) {
-    if (!/^\d+$/.test(String(vacancyId))) {
-      return false;
+  function addIgnoredVacancyId(vacancyId) {
+    if (!isVacancyId(String(vacancyId))) {
+      return Promise.resolve(false);
     }
-
-    const lockKey = 'ignored-vacancies-database';
-    const release = await acquireLock(lockKey);
-
-    try {
+    return exclusive(async () => {
       const vacancyIds = await readIgnoredVacancyIds();
       const sizeBefore = vacancyIds.size;
       vacancyIds.add(String(vacancyId));
       await writeIgnoredVacancyIds(vacancyIds);
       return vacancyIds.size > sizeBefore;
-    } finally {
-      releaseLock(lockKey, release);
-    }
+    });
   }
 
   return {

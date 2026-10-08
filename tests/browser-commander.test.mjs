@@ -10,7 +10,6 @@ import {
   detectEngine,
   createLogger,
   isVerboseEnabled,
-  CHROME_ARGS,
   TIMING,
   isNavigationError,
   isTimeoutError,
@@ -118,16 +117,6 @@ function createUrlContext(url) {
 // ==================== CONSTANTS TESTS ====================
 
 describe('Browser Commander - Constants', () => {
-  test('CHROME_ARGS contains essential flags', () => {
-    assert.ok(Array.isArray(CHROME_ARGS), 'CHROME_ARGS should be an array');
-    assert.ok(CHROME_ARGS.length > 0, 'CHROME_ARGS should not be empty');
-    // Check for some common Chrome flags
-    assert.ok(
-      CHROME_ARGS.some(arg => arg.includes('disable')),
-      'Should have some disable flags',
-    );
-  });
-
   test('TIMING contains expected timeout values', () => {
     assert.ok(typeof TIMING === 'object', 'TIMING should be an object');
     assert.ok(typeof TIMING.DEFAULT_TIMEOUT === 'number', 'Should have DEFAULT_TIMEOUT');
@@ -336,39 +325,19 @@ describe('Browser Commander - Factory (makeBrowserCommander)', () => {
     assert.equal(commander.engine, 'puppeteer', 'Should detect Puppeteer engine');
   });
 
-  test('Commander has all expected bound functions', () => {
-    const mockPage = createMockPlaywrightPage();
-    const commander = makeBrowserCommander({ page: mockPage, verbose: false });
-
-    // Core functions
-    assert.ok(typeof commander.wait === 'function', 'Should have wait');
-    assert.ok(typeof commander.evaluate === 'function', 'Should have evaluate');
-    assert.ok(typeof commander.getUrl === 'function', 'Should have getUrl');
-
-    // Navigation functions
-    assert.ok(typeof commander.goto === 'function', 'Should have goto');
-    assert.ok(typeof commander.waitForNavigation === 'function', 'Should have waitForNavigation');
-
-    // Element functions
-    assert.ok(typeof commander.querySelector === 'function', 'Should have querySelector');
-    assert.ok(typeof commander.querySelectorAll === 'function', 'Should have querySelectorAll');
-    assert.ok(typeof commander.findByText === 'function', 'Should have findByText');
-    assert.ok(typeof commander.waitForSelector === 'function', 'Should have waitForSelector');
-
-    // Interaction functions
-    assert.ok(typeof commander.clickElement === 'function', 'Should have clickElement');
-    assert.ok(typeof commander.clickButton === 'function', 'Should have clickButton');
-    assert.ok(typeof commander.fillTextArea === 'function', 'Should have fillTextArea');
-    assert.ok(typeof commander.scrollIntoView === 'function', 'Should have scrollIntoView');
-
-    // Visibility functions
-    assert.ok(typeof commander.isVisible === 'function', 'Should have isVisible');
-    assert.ok(typeof commander.isEnabled === 'function', 'Should have isEnabled');
-
-    // Content functions
-    assert.ok(typeof commander.textContent === 'function', 'Should have textContent');
-    assert.ok(typeof commander.inputValue === 'function', 'Should have inputValue');
-    assert.ok(typeof commander.getAttribute === 'function', 'Should have getAttribute');
+  test('Commander has every method this application uses', () => {
+    const commander = makeBrowserCommander({ page: createMockPlaywrightPage(), verbose: false });
+    const usedMethods = [
+      'wait', 'evaluate', 'safeEvaluate', 'getUrl', 'goto', 'waitForPageReady',
+      'waitForSelector', 'findByText', 'normalizeSelector', 'count', 'isVisible', 'isEnabled',
+      'innerText', 'clickButton', 'fillTextArea', 'pageTrigger', 'onUrlChange', 'shouldAbort',
+      'isActionStoppedError', 'destroy',
+      // High-level helpers replacing former application code
+      'waitForUrlCondition', 'installClickListener', 'checkAndClearFlag', 'findToggleButton',
+    ];
+    for (const method of usedMethods) {
+      assert.equal(typeof commander[method], 'function', `Should have ${method}`);
+    }
   });
 
   test('Commander has network tracker when enabled', () => {

@@ -32,14 +32,5 @@ export function enableDebugLevel() {
   log.enableLevel('debug');
 }
 
-/**
- * Check if debug level is enabled
- * @returns {boolean}
- */
-export function isDebugEnabled() {
-  const enabled = log.getEnabledLevels();
-  return enabled.includes('debug');
-}
-
 export default log;
 export { log };
