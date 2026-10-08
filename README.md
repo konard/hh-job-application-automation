@@ -150,7 +150,7 @@ To check what will be sent, apply to a single vacancy step by step:
 bun run apply -- --test-mode
 ```
 
-Buttons are clicked right away. Before every value entered into the form (typed text, a chosen
+Buttons are clicked right away, except the one that sends the application. Before it and before every value entered into the form (typed text, a chosen
 radio/checkbox option) the field is scrolled into view (nothing is drawn on the page, so screenshots
 and recordings stay clean), and the terminal shows the field and the exact value. Type `y`
 to enter it or `q` to stop. The run ends after that one application.

@@ -1,9 +1,10 @@
 /**
  * Test mode: one application, every value entered into a form field confirmed first.
  *
- * Buttons are clicked without asking. Before text is typed or a radio/checkbox
- * option is chosen, the value is printed and the run waits for a line on stdin:
- * `y` enters it, `q` stops the run.
+ * Buttons are clicked without asking, except the one that sends the application.
+ * Before text is typed, a radio/checkbox option is chosen or the application is
+ * sent, the step is printed and the run waits for a line on stdin: `y` does it,
+ * `q` stops the run.
  *
  * @module test-mode
  */
@@ -13,6 +14,13 @@ import { SELECTORS } from './hh-selectors.mjs';
 
 // Clicks that only dismiss overlays enter no data
 const UNCONFIRMED_SELECTORS = new Set([SELECTORS.cookiesAccept, SELECTORS.additionalDataClose]);
+// The click that sends the application waits too, so the filled form can be reviewed first
+const SUBMIT_SELECTORS = new Set([
+  SELECTORS.submitButtonPopup,
+  SELECTORS.submitButtonLetter,
+  SELECTORS.submitButtonWithoutQuestions,
+  'button[type="submit"]',
+]);
 const STEP_PAUSE_MS = 2000;
 
 let enabled = false;
@@ -118,8 +126,11 @@ export function withConfirmations(commander) {
   const wrapped = {
     clickButton: confirmed(
       commander.clickButton,
-      async ({ selector }) => `Choose ${await describeElement(commander, selector)}`,
-      async (options) => !UNCONFIRMED_SELECTORS.has(options.selector) && await isFormField(options),
+      async ({ selector }) => (SUBMIT_SELECTORS.has(selector)
+        ? `Send the application: click ${await describeElement(commander, selector)}`
+        : `Choose ${await describeElement(commander, selector)}`),
+      async (options) => SUBMIT_SELECTORS.has(options.selector) ||
+        (!UNCONFIRMED_SELECTORS.has(options.selector) && await isFormField(options)),
     ),
     fillTextArea: confirmed(
       (options) => commander.fillTextArea({ ...options, simulateTyping: true }),
