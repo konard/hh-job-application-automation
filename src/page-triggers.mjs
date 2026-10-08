@@ -16,6 +16,7 @@ import { log } from './logging.mjs';
 import { createApplyButtonTracker } from './helpers/session-tracker.mjs';
 import { isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { URL_PATTERNS, extractVacancyIdFromResponseUrl, extractVacancyId } from './hh-selectors.mjs';
+import { withdrawPrompt } from './confirmations.mjs';
 
 /**
  * Register all page triggers for the HH.ru automation
@@ -25,7 +26,7 @@ import { URL_PATTERNS, extractVacancyIdFromResponseUrl, extractVacancyId } from 
  * @param {Function} options.addOrUpdateQA - Function to save Q&A pairs
  * @param {Function} options.handleVacancyResponsePage - Handler for vacancy response page
  * @param {Function} options.onVacancyPageFromResponse - Callback when navigating to vacancy from response
- * @param {Function} options.onApplicationSubmitted - Callback when application is submitted
+ * @param {Function} options.onApplicationSubmitted - Called with the vacancy ID when an application was sent from the vacancy page
  * @param {Function} options.onSearchPageVisited - Callback when search page URL changes (for tracking pagination)
  * @param {Function} options.getReturnUrl - Returns the URL to go back to after submission
  * @returns {Function} Cleanup function to unregister all triggers
@@ -63,6 +64,8 @@ export function registerPageTriggers({
       const saveInterval = setInterval(() => saveQA('(auto-save)').catch(() => {}), 5000);
       ctx.onCleanup(async () => {
         clearInterval(saveInterval);
+        // The form was sent or left in the browser, so a question on stdin no longer applies
+        withdrawPrompt();
         await saveQA('before navigation').catch((error) => {
           log.debug(() => `⚠️ Error saving Q&A on cleanup: ${error.message}`);
         });
@@ -102,21 +105,24 @@ export function registerPageTriggers({
         console.log('Click listener installed for vacancy page');
       }
 
-      // Poll until the apply button was clicked and the submission completed
+      // hh.ru opens the vacancy page after the form is sent (also when the user sent it in
+      // the browser), or the user sends it from here with the "Откликнуться" button
       while (!ctx.isStopped()) {
-        await ctx.wait(2000);
-        if (await buttonTracker.checkAndClear()) {
+        const clicked = await buttonTracker.checkAndClear();
+        if (clicked) {
           console.log('Detected "Откликнуться" button was clicked on vacancy page!');
-          if (await isResponseSubmitted(commander)) {
-            const returnUrl = getReturnUrl();
-            console.log(`Application submission detected, redirecting to: ${returnUrl}`);
-            onApplicationSubmitted(vacancyId);
-            lastVacancyResponseId = null;
-            // Not awaited: the navigation stops this action
-            commander.goto({ url: returnUrl }).catch(() => {});
-            return;
-          }
         }
+        if (await isResponseSubmitted(commander)) {
+          console.log(`✅ Application sent for vacancy ${vacancyId}`);
+          lastVacancyResponseId = null;
+          await onApplicationSubmitted(vacancyId);
+          const returnUrl = getReturnUrl();
+          console.log(`Returning to: ${returnUrl}`);
+          // Not awaited: the navigation stops this action
+          commander.goto({ url: returnUrl, waitForStableUrlBefore: false }).catch(() => {});
+          return;
+        }
+        await ctx.wait(2000);
       }
     },
   });

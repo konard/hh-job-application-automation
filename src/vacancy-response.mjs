@@ -16,7 +16,7 @@ import {
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
 import { log } from './logging.mjs';
-import { isInteractive, waitForUser } from './confirmations.mjs';
+import { isInteractive, PromptWithdrawnError, waitForUser } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import {
@@ -321,7 +321,7 @@ export async function handleVacancyResponsePage({
 
     if (unansweredCount > 0 || !await isFormComplete()) {
       const open = await listOpenQuestions(commander);
-      console.log(`Questions without a saved answer:\n${open.map((question) => `   • ${question}`).join('\n')}`);
+      console.log(`Open questions (no saved answer, or it fits none of the options):\n${open.map((question) => `   • ${question}`).join('\n')}`);
       if (onMissingAnswers === 'skip') {
         console.log(`Skipping this vacancy (--on-missing-answers skip), returning to: ${returnUrl}`);
         await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
@@ -332,7 +332,9 @@ export async function handleVacancyResponsePage({
         return;
       }
       do {
-        await waitForUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)');
+        if (!await waitForUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)')) {
+          return;
+        }
       } while (!await isFormComplete());
     }
 
@@ -374,9 +376,12 @@ export async function handleVacancyResponsePage({
       return;
     }
     console.log(`✅ Application sent for vacancy ${vacancyId}`);
-    await onApplicationSent();
+    await onApplicationSent(vacancyId);
     await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
   } catch (error) {
+    if (error instanceof PromptWithdrawnError) {
+      return;
+    }
     if (isNavigationError(error)) {
       console.log('⚠️  Page navigation detected during form handling, continuing with next vacancy');
       return;

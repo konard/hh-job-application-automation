@@ -4,7 +4,7 @@
  * Steps (`--confirm`, comma-separated):
  * - `answers`      - text typed into a question and radio/checkbox choices on the full form
  * - `cover-letter` - the cover letter typed into the full form
- * - `send`         - the click that sends the full form
+ * - `send`         - the click that sends a form with questions (full form or popup)
  * - `popup`        - everything in the short application popup on the vacancy list
  *
  * Before a confirmed step the field is scrolled into view, the step is printed and the
@@ -35,6 +35,24 @@ let interactive = false;
 let steps = new Set();
 let stop = () => {};
 let lines = null;
+// A line typed while no prompt was waiting, or after a prompt was withdrawn, goes to the next prompt
+let pendingLine = null;
+let withdrawCurrent = null;
+
+/** Thrown by a confirmed step whose prompt was withdrawn because the page changed */
+export class PromptWithdrawnError extends Error {
+  constructor() {
+    super('The confirmation prompt was withdrawn because the page changed');
+    this.name = 'PromptWithdrawnError';
+  }
+}
+
+/**
+ * Withdraw the prompt that waits on stdin, e.g. when the form was sent or left in the browser
+ */
+export function withdrawPrompt() {
+  withdrawCurrent?.();
+}
 
 /**
  * Turn interactive confirmations on
@@ -54,23 +72,37 @@ export const isInteractive = () => interactive;
 /**
  * Print a message and wait until the user types `y` (no-op in unattended runs)
  * @param {string} description
+ * @returns {Promise<boolean>} True when confirmed, false when the prompt was withdrawn
  */
 export async function waitForUser(description) {
   if (!interactive) {
-    return;
+    return true;
   }
   lines ??= readline.createInterface({ input: process.stdin })[Symbol.asyncIterator]();
-  for (;;) {
-    console.log(`❓ ${description}\n   Type y to continue, q to stop:`);
-    const { value, done } = await lines.next();
-    const answer = done ? 'q' : value.trim().toLowerCase();
-    if (answer === 'y') {
-      return;
+  const withdrawn = new Promise((resolve) => {
+    withdrawCurrent = () => resolve(null);
+  });
+  try {
+    for (;;) {
+      console.log(`❓ ${description}\n   Type y to continue, q to stop:`);
+      pendingLine ??= lines.next();
+      const line = await Promise.race([pendingLine, withdrawn]);
+      if (line === null) {
+        console.log('↪️  Prompt withdrawn: the page changed in the browser');
+        return false;
+      }
+      pendingLine = null;
+      const answer = line.done ? 'q' : line.value.trim().toLowerCase();
+      if (answer === 'y') {
+        return true;
+      }
+      if (answer === 'q') {
+        await stop();
+        return new Promise(() => {});
+      }
     }
-    if (answer === 'q') {
-      await stop();
-      return new Promise(() => {});
-    }
+  } finally {
+    withdrawCurrent = null;
   }
 }
 
@@ -78,11 +110,10 @@ export async function waitForUser(description) {
  * Wait for confirmation of a step when that step is configured
  * @param {string} step - One of CONFIRM_STEPS
  * @param {string} description
+ * @returns {Promise<boolean>} False when the prompt was withdrawn
  */
-export async function confirmStep(step, description) {
-  if (steps.has(step)) {
-    await waitForUser(description);
-  }
+export function confirmStep(step, description) {
+  return steps.has(step) ? waitForUser(description) : Promise.resolve(true);
 }
 
 /**
@@ -141,9 +172,18 @@ export function withConfirmations(commander) {
     args: [selector],
   }).catch(() => false);
 
+  // Test questions are rendered as task bodies, in the popup and on the full form
+  const hasQuestions = () => commander.evaluate({
+    fn: (questionBlock) => Boolean(document.querySelector(questionBlock)),
+    args: [SELECTORS.questionBlock],
+  }).catch(() => true);
+
   const clickStep = async (options) => {
     if (SUBMIT_SELECTORS.has(options.selector)) {
-      return inPopup() ? 'popup' : 'send';
+      if (await hasQuestions()) {
+        return 'send';
+      }
+      return inPopup() ? 'popup' : null;
     }
     if (UNCONFIRMED_SELECTORS.has(options.selector) || !await isFormField(options)) {
       return null;
@@ -163,7 +203,9 @@ export function withConfirmations(commander) {
   const confirmed = (method, describe, stepOf) => async (options) => {
     const step = await stepOf(options);
     if (steps.has(step)) {
-      await confirmStep(step, await describe(options));
+      if (!await confirmStep(step, await describe(options))) {
+        throw new PromptWithdrawnError();
+      }
       const result = await method(options);
       await commander.wait({ ms: STEP_PAUSE_MS, reason: 'pause after a confirmed step' });
       return result;

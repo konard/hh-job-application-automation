@@ -546,7 +546,7 @@ export async function findAndProcessVacancyButton({
     return { status: 'limit_error_after_submit' };
   }
 
-  return { status: 'success' };
+  return { status: 'success', vacancyId };
 }
 
 /**

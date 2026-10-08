@@ -330,9 +330,7 @@ export async function fillRadioQuestion({ commander, questionData, verbose = fal
   const answerIndex = answers.findIndex((ans) => findMatchingOption(questionData.options, ans));
 
   if (answerIndex === -1) {
-    if (verbose) {
-      console.log(`[QA] No matching radio option found for: ${questionData.question}`);
-    }
+    console.log(`[QA] The saved answer fits none of the options, leaving it to you: ${questionData.question}`);
     return false;
   }
 

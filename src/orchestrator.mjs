@@ -73,21 +73,40 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
     },
   });
 
+  // Applications already counted, since one can be detected by several handlers
+  const sentVacancyIds = new Set();
+  // The next application waits until then, so the load on hh.ru stays low
+  let nextApplicationAt = 0;
+
   /**
-   * Checkpoint the trace, then wait 1-2 intervals so the load on hh.ru stays low
+   * Count a sent application once, checkpoint the trace and schedule the next one 1-2 intervals later
+   * @param {string|null} vacancyId
    */
-  async function afterApplicationSent() {
+  async function afterApplicationSent(vacancyId = null) {
+    if (vacancyId) {
+      if (sentVacancyIds.has(vacancyId)) {
+        return;
+      }
+      sentVacancyIds.add(vacancyId);
+    }
     await checkpoint('application-sent');
-    await onApplicationSent();
     const randomExtraDelaySeconds = getRandomIntInclusive(0, BUTTON_CLICK_INTERVAL / 1000);
     const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
+    nextApplicationAt = Date.now() + totalWaitMs;
     console.log(
-      `Waiting ${totalWaitMs / 1000} seconds before processing next button ` +
-        `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)...`,
+      `⏳ Next application in ${totalWaitMs / 1000} seconds ` +
+        `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)`,
     );
-    const intervalWait = await commander.wait({ ms: totalWaitMs, reason: 'interval before next application' });
-    if (intervalWait?.aborted) {
-      console.log('Interval wait was interrupted by navigation');
+    await onApplicationSent();
+  }
+
+  /**
+   * Wait until the next application may be sent
+   */
+  async function waitForApplicationSlot() {
+    const ms = nextApplicationAt - Date.now();
+    if (ms > 0) {
+      await commander.wait({ ms, reason: 'interval before next application' });
     }
   }
 
@@ -110,8 +129,8 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
    * Handle one result of findAndProcessVacancyButton
    * @returns {Promise<boolean>} False when the loop should stop
    */
-  async function handleResult({ status }) {
-    switch (status) {
+  async function handleResult(result) {
+    switch (result.status) {
     case 'navigation_detected':
       console.log('Navigation detected during processing, restarting with new page context...');
       return true;
@@ -135,7 +154,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
       await commander.wait({ ms: 1000, reason: 'brief pause after skipping direct application' });
       return true;
     case 'success':
-      await afterApplicationSent();
+      await afterApplicationSent(result.vacancyId);
       return true;
     default:
       return true;
@@ -182,8 +201,8 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
           isOnVacancyPageFromResponse = true;
         },
         onApplicationSubmitted: (vacancyId) => {
-          console.log(`Application submitted for vacancy ${vacancyId}, clearing state`);
           isOnVacancyPageFromResponse = false;
+          return afterApplicationSent(vacancyId);
         },
         onSearchPageVisited: (url) => {
           lastSearchPageUrl = url;
@@ -209,9 +228,16 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
         }
 
         // Safety net: redirect back after an application sent from a vacancy page
-        if (await checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromResponse, returnUrl: lastSearchPageUrl })) {
+        if (await checkAndRedirectIfNeeded({
+          commander, isOnVacancyPageFromResponse, returnUrl: lastSearchPageUrl, onApplicationSent: afterApplicationSent,
+        })) {
           isOnVacancyPageFromResponse = false;
           await waitForPageReady('after redirect');
+          continue;
+        }
+
+        if (Date.now() < nextApplicationAt) {
+          await waitForApplicationSlot();
           continue;
         }
 

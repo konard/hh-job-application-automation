@@ -13,7 +13,7 @@ import { isNavigationError } from 'browser-commander';
 import { log } from './logging.mjs';
 import { createApplyButtonTracker } from './helpers/session-tracker.mjs';
 import { isResponseSubmitted } from './helpers/page-helpers.mjs';
-import { URL_PATTERNS } from './hh-selectors.mjs';
+import { URL_PATTERNS, extractVacancyId } from './hh-selectors.mjs';
 
 /**
  * Redirect back to the search page if the application was sent from a vacancy page
@@ -21,9 +21,10 @@ import { URL_PATTERNS } from './hh-selectors.mjs';
  * @param {Object} options.commander - Browser commander instance
  * @param {boolean} options.isOnVacancyPageFromResponse - Whether we came to the vacancy page from vacancy_response
  * @param {string} options.returnUrl - URL to return to (last search page)
+ * @param {Function} [options.onApplicationSent] - Called with the vacancy ID before returning
  * @returns {Promise<boolean>} True if redirect was performed
  */
-export async function checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromResponse, returnUrl }) {
+export async function checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromResponse, returnUrl, onApplicationSent = async () => {} }) {
   try {
     const currentUrl = commander.getUrl();
     log.debug(() => `checkAndRedirectIfNeeded: ${currentUrl} (from response: ${isOnVacancyPageFromResponse})`);
@@ -42,8 +43,9 @@ export async function checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromR
       return false;
     }
 
+    await onApplicationSent(extractVacancyId(currentUrl));
     console.log(`Response submitted from vacancy page, redirecting to: ${returnUrl}`);
-    await commander.goto({ url: returnUrl });
+    await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
     return true;
   } catch (error) {
     console.log(isNavigationError(error)

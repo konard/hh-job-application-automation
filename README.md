@@ -156,7 +156,7 @@ on its own:
 
 | Option | Values | Effect |
 |--------|--------|--------|
-| `--confirm` | `answers`, `cover-letter`, `send`, `popup` (comma-separated) | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends it, everything in the short popup form |
+| `--confirm` | `answers`, `cover-letter`, `send`, `popup` (comma-separated) | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends a form with questions (full form or popup; forms with only a cover letter are sent right away), everything in the short popup form |
 | `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy |
 | `--max-applications` | number, `0` = no limit | Stop after sending this many applications |
 
@@ -165,6 +165,17 @@ Other buttons are clicked right away. Before a confirmed step the field is scrol
 the field and the exact value. Type `y` to go on or `q` to stop. When confirmations are on and a
 question has no saved answer, the run lists it and waits until you have answered it in the
 browser; your answers are saved to `data/qa.lino`.
+
+A continuous supervised run, which only asks before sending forms with questions and when an
+answer is missing:
+
+```bash
+bun run apply -- --confirm send --keep-browser-open
+```
+
+You can also send a form yourself in the browser: the run notices the sent application (it
+counts towards `--max-applications`), withdraws its pending question, keeps the 1-2 interval
+pause and returns to the vacancy list.
 
 ### Export the Resume and Collect the Stack
 
