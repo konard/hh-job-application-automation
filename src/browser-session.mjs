@@ -8,6 +8,12 @@
  * cache stay warm and hh.ru sees no extra logins or page loads. A detached watchdog
  * closes it once it has not been used for the idle timeout.
  *
+ * One tab: before attaching, every tab but the automation tab is closed, and tabs opened
+ * later are closed too. The engine cannot tell the tab on screen from the others
+ * (Playwright's focus emulation makes every attached tab report "visible", so
+ * browser-commander's foreground pick takes whichever tab is listed first), so with
+ * several tabs a restarted run could drive a background tab.
+ *
  * Workaround: browser-commander kills the browser it launched when the controlling
  * process exits and has no idle timeout, so the detached start is done here with its
  * launch helpers.
@@ -40,6 +46,8 @@ const WATCHDOG_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 
 const endpoint = (port) => `http://127.0.0.1:${port}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const lastUsedFile = (userDataDir) => path.join(userDataDir, 'hh-automation-last-used');
+const tabFile = (userDataDir) => path.join(userDataDir, 'hh-automation-tab');
+const HH_URL = /^https:\/\/([\w-]+\.)?hh\.ru\//;
 export const watchdogPidFile = (userDataDir) => path.join(userDataDir, 'hh-automation-watchdog.pid');
 
 /**
@@ -113,6 +121,69 @@ export function browserIdleMs(userDataDir) {
 }
 
 /**
+ * The tab to keep: the one the automation used last, else an hh.ru form, else an hh.ru page,
+ * else the first one
+ * @param {Array<{id: string, url: string}>} tabs - Page targets of /json/list
+ * @param {string|null} rememberedId
+ * @returns {{id: string, url: string}|null}
+ */
+export function chooseTab(tabs, rememberedId) {
+  return tabs.find((tab) => tab.id === rememberedId) ??
+    tabs.find((tab) => HH_URL.test(tab.url) && tab.url.includes('/applicant/vacancy_response')) ??
+    tabs.find((tab) => HH_URL.test(tab.url)) ??
+    tabs[0] ??
+    null;
+}
+
+/**
+ * Close every tab but the automation tab (raw CDP endpoints, before the engine attaches)
+ * @param {Object} options
+ * @param {number} options.port
+ * @param {string} options.userDataDir
+ * @returns {Promise<{id: string, url: string}|null>} The kept tab
+ */
+export async function keepSingleTab({ port, userDataDir }) {
+  const tabs = (await fetch(`${endpoint(port)}/json/list`).then((response) => response.json()))
+    .filter((target) => target.type === 'page');
+  let rememberedId = null;
+  try {
+    rememberedId = fs.readFileSync(tabFile(userDataDir), 'utf8').trim();
+  } catch {
+    // No tab recorded yet
+  }
+  const kept = chooseTab(tabs, rememberedId);
+  for (const tab of tabs.filter((item) => item !== kept)) {
+    await fetch(`${endpoint(port)}/json/close/${tab.id}`);
+    console.log(`🗂️  Closed an extra tab, the automation uses one: ${tab.url}`);
+  }
+  if (kept) {
+    fs.writeFileSync(tabFile(userDataDir), kept.id);
+  }
+  return kept;
+}
+
+/**
+ * Close tabs opened while the automation runs, so it never works in more than one
+ * @param {Object} session - { browser, page } of connectBrowser
+ * @param {string} engine
+ */
+function closeNewTabs({ browser, page }, engine) {
+  const close = async (newPage) => {
+    if (!newPage || newPage === page) {
+      return;
+    }
+    const url = newPage.url();
+    await newPage.close().catch(() => {});
+    console.log(`🗂️  Closed a new tab, the automation uses one: ${url}`);
+  };
+  if (engine === 'puppeteer') {
+    browser.on('targetcreated', async (target) => target.type() === 'page' && close(await target.page()));
+  } else {
+    page.context().on('page', close);
+  }
+}
+
+/**
  * Attach to the automation browser, starting it first when it is not running
  *
  * @param {Object} options
@@ -121,9 +192,12 @@ export function browserIdleMs(userDataDir) {
  * @param {number} options.port - Remote debugging port
  * @param {boolean} options.keepOpen - Keep the browser running after the script exits
  * @param {number} options.idleTimeoutMinutes - Close a kept-open browser after this much idle time
+ * @param {boolean} [options.singleTab=true] - Keep the browser to the one automation tab
  * @returns {Promise<{browser: Object, page: Object, reused: boolean, release: () => Promise<void>}>}
  */
-export async function connectOrLaunchBrowser({ engine, userDataDir, port, keepOpen, idleTimeoutMinutes }) {
+export async function connectOrLaunchBrowser({
+  engine, userDataDir, port, keepOpen, idleTimeoutMinutes, singleTab = true,
+}) {
   let reused = await isBrowserRunning(port);
 
   if (reused) {
@@ -150,7 +224,13 @@ export async function connectOrLaunchBrowser({ engine, userDataDir, port, keepOp
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   for (;;) {
     try {
+      if (singleTab) {
+        await keepSingleTab({ port, userDataDir });
+      }
       const session = await connectBrowser({ engine, cdpEndpoint: endpoint(port) });
+      if (singleTab) {
+        closeNewTabs(session, engine);
+      }
       return {
         ...session,
         reused,

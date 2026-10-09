@@ -80,6 +80,9 @@ applies to the vacancies hh.ru suggests for it:
 - **Pace** - `--job-application-interval` seconds (default 240) plus a random extra of up to a
   quarter of it pass between opened vacancies: 4-5 minutes, which still fits hh.ru's 200
   applications a day (261-320 a day of continuous work).
+- **One tab** - the automation browser keeps a single tab: when a run attaches, every other
+  tab is closed (the tab the automation used last is kept, else an hh.ru one), and tabs opened
+  during the run are closed as they appear. Turn it off with `--no-single-tab`.
 - **Browser lifecycle** - Chrome is closed when the script exits. With `--keep-browser-open` it keeps
   running, the next run reuses it and its open page, and it closes itself after
   `--browser-idle-timeout` minutes (default 30) without use.

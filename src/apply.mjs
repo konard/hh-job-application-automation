@@ -91,6 +91,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     port: argv.browserPort,
     keepOpen: argv.keepBrowserOpen,
     idleTimeoutMinutes: argv.browserIdleTimeout,
+    singleTab: argv.singleTab,
   });
 
   // Someone answers on stdin when steps are confirmed, so missing answers can be asked for too

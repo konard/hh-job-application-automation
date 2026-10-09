@@ -92,6 +92,11 @@ export function createConfig() {
           description: 'Questions without a saved answer: wait for the user to answer them, or skip the vacancy',
           default: getenv('ON_MISSING_ANSWERS', 'wait'),
         })
+        .option('single-tab', {
+          type: 'boolean',
+          description: 'Keep the automation browser to one tab: other tabs are closed when the run attaches, new ones as they open',
+          default: getenv('SINGLE_TAB', true),
+        })
         .option('captcha-prefill', {
           type: 'boolean',
           description: 'Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna); ' +

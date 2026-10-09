@@ -159,6 +159,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--confirm` | Steps to confirm on stdin: answers, cover-letter, send, popup, or none | send |
 | `--on-missing-answers` | `wait` for the user or `skip` the vacancy (kept in `deferred-questions.lino`) | wait |
 | `--skip-question` | Skip vacancies that ask a matching question for now; repeatable | - |
+| `--single-tab` | Close every tab but the automation tab, on attach and as new ones open | true |
 | `--captcha-prefill` | Type the Haiku/Luna guess into the captcha field (never sent) | true |
 | `--max-applications` | Stop after this many applications (0 = no limit) | 0 |
 | `--trace` | Record a browser-commander trace in `logs/traces` | true |

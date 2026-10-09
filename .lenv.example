@@ -52,6 +52,11 @@
 # Default: wait
 # ON_MISSING_ANSWERS: wait
 
+# Keep the automation browser to one tab: other tabs are closed when a run attaches, new ones
+# as they open
+# Default: true
+# SINGLE_TAB: false
+
 # Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna);
 # the answer is never sent, you check and send it
 # Default: true
