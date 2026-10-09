@@ -248,8 +248,8 @@ because it holds personal data:
   typed into the empty captcha field: one answer when they agree, both as `haiku|luna` when they
   don't. It is **never sent**: check it, fix it and send it yourself. The picture is taken once
   it has loaded and the dialog has faded in, and kept in `logs/captcha/` for checking. Each
-  picture is read once, or twice when the first read gives no answer; a field you are typing in
-  is left alone. A reply that is not a captcha answer (one to three Russian or English words,
+  picture is read until there is an answer, at most three times; a field you are typing in is
+  left alone. The only click is the one that focuses the field for typing. A reply that is not a captcha answer (one to three Russian or English words,
   e.g. "злеат вьюнить") is dropped: Luna usually declines, Haiku usually answers. Needs `claude` and `codex` on `PATH`; turn it off with
   `--no-captcha-prefill`.
 - **Unconfirmed application**: if hh.ru does not mark a vacancy as responded after sending,

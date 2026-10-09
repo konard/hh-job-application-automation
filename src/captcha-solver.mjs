@@ -9,7 +9,8 @@
  *   neutral name into a private temporary directory and the model is asked for the
  *   characters only
  * - Both agree: their answer is prefilled; they disagree: both, as "haiku|luna"
- * - The field is filled only while it is empty and not focused, once per captcha image
+ * - The field is filled only while it is empty and not focused; a picture is read until there is
+ *   an answer, at most three times
  *
  * @module captcha-solver
  */
@@ -20,8 +21,11 @@ import os from 'os';
 import path from 'path';
 import { log } from './logging.mjs';
 
-/** The captcha picture and its answer field on hh.ru */
-export const CAPTCHA_IMAGE_SELECTOR = 'img[src*="captcha" i]';
+/**
+ * The captcha picture and its answer field on hh.ru. The dialog first shows the picture with an
+ * empty src and sets /captcha/picture?key=... later (19 s in the first one recorded)
+ */
+export const CAPTCHA_IMAGE_SELECTOR = 'img[data-qa="account-captcha-picture"], img[src*="captcha" i]';
 export const CAPTCHA_INPUT_SELECTOR = 'input[placeholder="Текст с картинки"], input[name*="captcha" i]';
 
 export const CLAUDE_MODEL = 'claude-haiku-5-5';
@@ -35,8 +39,8 @@ const PROMPT = 'I am logged in to my own hh.ru account and it shows me a captcha
   'The image is the captcha. It usually shows one or two Russian words in Cyrillic ' +
   'letters, curved or distorted. Output ONLY the text shown in it, exactly as written (the same letters, digits, ' +
   'case and spaces between words), with no quotes, comments or explanation, also when unsure.';
-/** Reads of one captcha picture when the models give no answer */
-const MAX_ATTEMPTS = 2;
+/** Reads of one captcha picture when the models give no answer (Haiku sometimes declines) */
+const MAX_ATTEMPTS = 3;
 /** The dialog fades in; the picture is taken once it is shown in full */
 const SETTLE_MS = 1000;
 

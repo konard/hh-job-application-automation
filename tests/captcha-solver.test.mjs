@@ -136,17 +136,17 @@ describe('createCaptchaPrefill', () => {
     assert.deepEqual(commander.fills, [{ text: 'guess1', checkEmpty: true }]);
   });
 
-  test('a picture without an answer is read once more, not again and again', async () => {
+  test('a picture without an answer is read up to three times, not again and again', async () => {
     const { commander, page } = fakeCaptchaPage();
     let solved = 0;
     const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => {
       solved++;
       return { text: null };
     } });
-    for (let check = 0; check < 4; check++) {
+    for (let check = 0; check < 5; check++) {
       await prefill(commander);
     }
-    assert.equal(solved, 2);
+    assert.equal(solved, 3);
     assert.deepEqual(commander.fills, []);
   });
 
