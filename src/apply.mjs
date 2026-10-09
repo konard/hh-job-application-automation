@@ -112,9 +112,12 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   }
 
   const orchestrator = createOrchestrator({
-    // Nothing touches the page while hh.ru shows a captcha, except its prefilled answer; the user sends it
+    // Nothing touches the page while hh.ru shows a captcha, except its answer: Haiku's reading is sent
+    // once (--captcha-auto-send), after that it is only prefilled and the user sends it
     commander: withConfirmations(withCaptchaGuard(commander, {
-      onCaptcha: argv.captchaPrefill ? createCaptchaPrefill({ page: session.page }) : undefined,
+      onCaptcha: argv.captchaPrefill
+        ? createCaptchaPrefill({ page: session.page, sendOnce: argv.captchaAutoSend })
+        : undefined,
     })),
     page: session.page,
     argv,

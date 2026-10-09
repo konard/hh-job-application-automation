@@ -3,7 +3,8 @@
  */
 import { PassThrough } from 'stream';
 import { describe, test, assert } from 'test-anywhere';
-import { askUser, enableConfirmations, waitForUser, withdrawPrompt } from '../src/confirmations.mjs';
+import { askUser, enableConfirmations, waitForUser, withConfirmations, withdrawPrompt } from '../src/confirmations.mjs';
+import { SELECTORS } from '../src/hh-selectors.mjs';
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -92,5 +93,39 @@ describe('answers typed for a withdrawn prompt', () => {
     input.write('y\n'); // a fresh answer to the second form
     await next;
     assert.equal(confirmed, true);
+  });
+});
+
+describe('sending a form with questions', () => {
+  /** Full form with questions; records clicks */
+  const fakeForm = () => {
+    const clicks = [];
+    return {
+      clicks,
+      getUrl: () => 'https://hh.ru/applicant/vacancy_response?vacancyId=1',
+      evaluate: async () => true,
+      wait: async () => {},
+      clickButton: async (options) => clicks.push(options),
+    };
+  };
+
+  test('asks first', async () => {
+    const input = new PassThrough();
+    enableConfirmations({ steps: ['send'], onStop: () => {}, input });
+    const form = fakeForm();
+    const click = withConfirmations(form).clickButton({ selector: SELECTORS.submitButtonLetter });
+    await tick();
+    assert.deepEqual(form.clicks, []);
+    input.write('y\n');
+    await click;
+    assert.equal(form.clicks.length, 1);
+  });
+
+  test('is sent right away when every answer is exact, without passing the flag on', async () => {
+    const input = new PassThrough();
+    enableConfirmations({ steps: ['send'], onStop: () => {}, input });
+    const form = fakeForm();
+    await withConfirmations(form).clickButton({ selector: SELECTORS.submitButtonLetter, autoSend: true });
+    assert.deepEqual(form.clicks, [{ selector: SELECTORS.submitButtonLetter }]);
   });
 });

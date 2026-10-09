@@ -86,17 +86,28 @@ describe('solveCaptchaImage', () => {
 });
 
 /** Commander and page with one captcha image and its answer field */
-function fakeCaptchaPage({ src = 'https://hh.ru/captcha?key=1', ready = true, value = '', focused = false, copy = 'source' } = {}) {
+function fakeCaptchaPage({
+  src = 'https://hh.ru/captcha?key=1', ready = true, value = '', focused = false, copy = 'source', sendButton = null,
+} = {}) {
   const form = { src, ready, value, focused };
   const fills = [];
+  const clicks = [];
   const screenshots = [];
   const commander = {
     form,
     fills,
+    clicks,
     screenshots,
-    safeEvaluate: async ({ operationName }) => (operationName === 'captcha image copy'
-      ? { value: copy && `data:image/png;base64,${Buffer.from(copy).toString('base64')}` }
-      : { value: { ...form } }),
+    safeEvaluate: async ({ operationName }) => {
+      if (operationName === 'captcha image copy') {
+        return { value: copy && `data:image/png;base64,${Buffer.from(copy).toString('base64')}` };
+      }
+      return { value: operationName === 'captcha send button' ? sendButton : { ...form } };
+    },
+    clickButton: async ({ selector }) => {
+      clicks.push(selector);
+      return { clicked: true };
+    },
     fillTextArea: async ({ text, checkEmpty }) => {
       fills.push({ text, checkEmpty });
       form.value = text;
@@ -116,10 +127,39 @@ function fakeCaptchaPage({ src = 'https://hh.ru/captcha?key=1', ready = true, va
 describe('createCaptchaPrefill', () => {
   test('types the guess into the empty field and does nothing else', async () => {
     const { commander, page } = fakeCaptchaPage();
-    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => ({ haiku: 'ab12', luna: 'ab13', model: 'gpt-6-luna', text: 'ab12|ab13' }) });
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, sendOnce: false, solve: async () => ({ haiku: 'ab12', luna: 'ab13', model: 'gpt-6-luna', text: 'ab12|ab13' }) });
     await prefill(commander);
     assert.deepEqual(commander.fills, [{ text: 'ab12|ab13', checkEmpty: true }]);
-    assert.deepEqual(Object.keys(commander).filter((key) => /click|press|submit|goto/i.test(key)), []);
+    assert.deepEqual(commander.clicks, []);
+  });
+
+  test('Haiku\'s reading is sent once per captcha, then it is only prefilled', async () => {
+    const { commander, page } = fakeCaptchaPage({ sendButton: 'form button[type="submit"]' });
+    const solve = async () => ({ haiku: 'ab12', luna: 'ab13', model: 'gpt-6-luna', text: 'ab12|ab13' });
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve });
+    const episode = {};
+    await prefill(commander, episode);
+    assert.deepEqual(commander.fills, [{ text: 'ab12', checkEmpty: true }]);
+    assert.deepEqual(commander.clicks, ['form button[type="submit"]']);
+    // Not accepted: hh.ru shows a new picture with an empty field
+    Object.assign(commander.form, { src: 'https://hh.ru/captcha?key=2', value: '' });
+    await prefill(commander, episode);
+    assert.deepEqual(commander.fills.at(-1), { text: 'ab12|ab13', checkEmpty: true });
+    assert.equal(commander.clicks.length, 1);
+    // A later captcha gets its own single try
+    Object.assign(commander.form, { src: 'https://hh.ru/captcha?key=3', value: '' });
+    await prefill(commander, {});
+    assert.equal(commander.clicks.length, 2);
+  });
+
+  test('nothing is sent without Haiku\'s reading or without the send button', async () => {
+    for (const [sendButton, haiku] of [['form button[type="submit"]', undefined], [null, 'ab12']]) {
+      const { commander, page } = fakeCaptchaPage({ sendButton });
+      const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => ({ haiku, luna: 'ab13', text: haiku ? `${haiku}|ab13` : 'ab13' }) });
+      await prefill(commander, {});
+      assert.deepEqual(commander.clicks, []);
+      assert.equal(commander.fills.length, 1);
+    }
   });
 
   test('the models get the loaded picture in its original size, not a screenshot', async () => {

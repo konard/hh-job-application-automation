@@ -217,6 +217,10 @@ export function withConfirmations(commander) {
 
   const clickStep = async (options) => {
     if (SUBMIT_SELECTORS.has(options.selector)) {
+      // Every answer is the saved answer of the very same question (checked by the form handler)
+      if (options.autoSend) {
+        return null;
+      }
       if (await hasQuestions()) {
         return 'send';
       }
@@ -237,8 +241,8 @@ export function withConfirmations(commander) {
     return COVER_LETTER_SELECTORS.has(options.selector) ? 'cover-letter' : 'answers';
   };
 
-  const confirmed = (method, describe, stepOf) => async (options) => {
-    const step = await stepOf(options);
+  const confirmed = (method, describe, stepOf) => async ({ autoSend, ...options }) => {
+    const step = await stepOf({ ...options, autoSend });
     if (steps.has(step)) {
       if (!await confirmStep(step, await describe(options))) {
         throw new PromptWithdrawnError();

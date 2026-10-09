@@ -4,7 +4,7 @@
  */
 
 import { isNavigationError, isTimeoutError } from 'browser-commander';
-import { countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
+import { allAnswersExact, countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { closeChatPanel, findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
@@ -69,6 +69,8 @@ export async function processModalApplication({
   vacancyId = null,
   addIgnoredVacancyId = async () => false,
   deferredQuestions = null,
+  readQADatabase = null,
+  autoSendExact = false,
 }) {
   const textareaSelector = SELECTORS.coverLetterTextareaPopup;
   if (isFullFormOpened(commander)) {
@@ -158,6 +160,9 @@ export async function processModalApplication({
 
   // In interactive runs the user answers instead of the vacancy being skipped
   let open = Math.max(unansweredCount, openQuestions.length);
+  const hasQuestions = totalCount > 0 || modalTextareaCount > 1;
+  // Sent without asking only when autofill alone answered every question with its saved answer
+  const autofilledExactly = autoSendExact && hasQuestions && open === 0 && readQADatabase;
   if (open > 0) {
     console.log(`Open questions (no saved answer):\n${formatQuestions(openQuestions)}`);
   }
@@ -203,8 +208,13 @@ export async function processModalApplication({
   if (isFullFormOpened(commander)) {
     return FULL_FORM_OPENED;
   }
+  const autoSend = Boolean(autofilledExactly) &&
+    allAnswersExact(await extractPageQuestions({ evaluate: commander.evaluate }), await readQADatabase());
+  if (autoSend) {
+    console.log('✅ Every answer is the saved answer of the very same question - sending without asking');
+  }
   try {
-    await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000 });
+    await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend });
     console.log(`✅ ${commander.engine}: clicked submit button`);
   } catch (error) {
     if (isNavigationError(error)) {
@@ -546,6 +556,8 @@ export async function findAndProcessVacancyButton({
   ignoreVacanciesWithQuestionnaire = false,
   addIgnoredVacancyId = async () => false,
   deferredQuestions = null,
+  readQADatabase = null,
+  autoSendExact = false,
   waitForUrlCondition,
   START_URL,
   pageClosedByUser,
@@ -602,6 +614,8 @@ export async function findAndProcessVacancyButton({
       vacancyId,
       addIgnoredVacancyId,
       deferredQuestions,
+      readQADatabase,
+      autoSendExact,
     });
   } catch (error) {
     // A wait for a popup element fails once hh.ru has switched to the full form

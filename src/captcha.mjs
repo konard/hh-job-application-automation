@@ -2,8 +2,9 @@
  * Captcha guard: when hh.ru shows a captcha, the automation does nothing on the page
  * (no clicks, typing or navigation) until the user has solved it in the browser.
  *
- * Detection only reads the DOM (no input events, no requests to hh.ru). The only thing typed
- * meanwhile is an optional prefill of the captcha answer (captcha-solver.mjs); it is never sent.
+ * Detection only reads the DOM (no input events, no requests to hh.ru). The only thing done
+ * meanwhile is the optional captcha prefill (captcha-solver.mjs): Haiku's reading may be sent
+ * once per captcha; after that the answer is only typed in for the user to send.
  *
  * @module captcha
  */
@@ -92,7 +93,8 @@ let waiting = null;
  * @param {Object} commander - Browser commander instance (unwrapped)
  * @param {Object} [options]
  * @param {number} [options.pollMs=5000] - How often the page is checked
- * @param {Function} [options.onCaptcha] - Called with the commander on each check that shows a
+ * @param {Function} [options.onCaptcha] - Called with the commander and this captcha's state
+ *   object (the same one until the captcha is gone) on each check that shows a
  *   captcha, without waiting for it (the answer prefill)
  * @returns {Promise<boolean>} True when a captcha was shown and has been solved
  */
@@ -101,10 +103,11 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha } = {}
     if (!await isCaptchaShown(commander)) {
       return false;
     }
+    const episode = {};
     console.log('🛑 hh.ru shows a captcha. Solve it in the browser; the automation touches nothing until it is gone.');
     const started = Date.now();
     while (await isCaptchaShown(commander)) {
-      onCaptcha?.(commander);
+      onCaptcha?.(commander, episode);
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
     console.log(`✅ Captcha solved after ${Math.round((Date.now() - started) / 1000)} s, continuing`);

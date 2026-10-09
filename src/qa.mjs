@@ -110,6 +110,43 @@ export async function listOpenQuestions({ evaluate }) {
 }
 
 /**
+ * Whether every question on the form is a saved question word for word and the form holds
+ * exactly its saved answer, so the form can be sent without asking the user
+ * @param {Array} items - extractPageQuestions result (after filling)
+ * @param {Map<string, string|string[]>} qaMap - Saved answers
+ * @returns {boolean}
+ */
+export function allAnswersExact(items, qaMap) {
+  if (items.length === 0) {
+    return false;
+  }
+  const same = (a, b) => String(a ?? '').trim() === String(b ?? '').trim();
+  const choices = new Map(items.filter(({ type }) => type !== 'textarea').map((item) => [item.question, item]));
+  return items.every((item) => {
+    if (!qaMap.has(item.question)) {
+      return false;
+    }
+    const saved = qaMap.get(item.question);
+    const savedList = [saved].flat().map((answer) => String(answer).trim());
+    if (item.type === 'textarea') {
+      const choice = choices.get(item.question);
+      // The text box of a choice question holds the answer only for its "Свой вариант" option
+      if (choice && !choice.options.some(({ checked, value }) => checked && value === 'open')) {
+        return true;
+      }
+      return same(item.currentValue, savedList.join('\n'));
+    }
+    const checked = item.options.filter((option) => option.checked);
+    if (checked.some(({ value }) => value === 'open')) {
+      // "Свой вариант": the saved answer is the text in its box, checked above
+      return checked.length === 1;
+    }
+    const checkedTexts = checked.map(({ optionText }) => optionText.trim()).sort();
+    return checkedTexts.length === savedList.length && [...savedList].sort().every((answer, i) => answer === checkedTexts[i]);
+  });
+}
+
+/**
  * Extract Q&A pairs from filled forms
  * @param {Object} options - Configuration options
  * @param {Function} options.evaluate - Browser commander evaluate function

@@ -160,7 +160,9 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--on-missing-answers` | `wait` for the user or `skip` the vacancy (kept in `deferred-questions.lino`) | wait |
 | `--skip-question` | Skip vacancies that ask a matching question for now; repeatable | - |
 | `--single-tab` | Close every tab but the automation tab, on attach and as new ones open | true |
-| `--captcha-prefill` | Type the Haiku/Luna guess into the captcha field (never sent) | true |
+| `--captcha-prefill` | Type the Haiku/Luna guess into the captcha field | true |
+| `--captcha-auto-send` | Send Haiku's reading once per captcha; if not accepted, only prefill and wait | true |
+| `--auto-send-exact-answers` | Send forms autofilled with saved answers to word-for-word saved questions without asking | true |
 | `--max-applications` | Stop after this many applications (0 = no limit) | 0 |
 | `--trace` | Record a browser-commander trace in `logs/traces` | true |
 | `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |
@@ -182,8 +184,10 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
    recently updated one. hh.ru shows no update date now, so its list order is used.
 4. Vacancies in `data/deferred-questions.lino` whose question has no answer in `qa.lino` yet (or
    matches `--skip-question`) are marked as processed, so they are not opened.
-5. The orchestrator opens vacancies an even pause apart (`pacing.mjs`), pauses while a captcha is shown and
-   stops when hh.ru does not confirm an application.
+5. The orchestrator opens vacancies an even pause apart (`pacing.mjs`), pauses while a captcha is shown (Haiku's
+   reading is sent once, then the answer is only prefilled for the user) and stops when hh.ru does not confirm
+   an application. Forms with questions are sent without asking only when autofill answered every question
+   with the saved answer of the very same question.
 
 ## Logging
 

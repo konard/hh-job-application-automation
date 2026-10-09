@@ -12,6 +12,7 @@ import {
   fillRadioQuestion,
   fillCheckboxQuestion,
   listOpenQuestions,
+  allAnswersExact,
   setupAutoSaveListeners,
   collectMarkedQAPairs,
 } from './qa.mjs';
@@ -213,6 +214,7 @@ export async function handleVacancyResponsePage({
   onApplicationSent = async () => {},
   onMissingAnswers = 'wait',
   deferredQuestions = null,
+  autoSendExact = true,
   verbose,
 }) {
   const skipQuestionnaireVacancy = async () => {
@@ -289,6 +291,14 @@ export async function handleVacancyResponsePage({
 
     // Auto-fill answers from database, then give user time to review them
     await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
+    // Sent without asking only when autofill alone answered everything with saved answers of the
+    // very same questions; checked again before sending, in case an answer was changed meanwhile
+    const answersExact = async () => allAnswersExact(
+      await extractPageQuestions({ evaluate: commander.evaluate }),
+      await readQADatabase(),
+    );
+    let exactAfterAutofill = autoSendExact && (await listOpenQuestions({ evaluate: commander.evaluate })).length === 0 &&
+      await answersExact();
     if (deferredQuestions) {
       const questionsToSkip = await deferredQuestions.questionsToSkip({
         questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
@@ -320,6 +330,7 @@ export async function handleVacancyResponsePage({
       await countEmptyTestTextareas({ commander }) === 0;
 
     if (unansweredCount > 0 || !await isFormComplete()) {
+      exactAfterAutofill = false;
       const open = await listOpenQuestions({ evaluate: commander.evaluate });
       console.log(`Open questions (no saved answer, or it fits none of the options):\n${formatQuestions(open)}`);
       if (onMissingAnswers === 'skip') {
@@ -344,8 +355,11 @@ export async function handleVacancyResponsePage({
       } while (!await isFormComplete());
     }
 
+    const autoSend = hasTestQuestions && exactAfterAutofill && await answersExact();
     if (!hasTestQuestions) {
       console.log('No test questions found, only cover letter - will auto-submit');
+    } else if (autoSend) {
+      console.log(`Every answer is the saved answer of the very same question (${describeQuestionCounts(totalCount, textareaCount)}) - sending without asking`);
     } else if (autoSubmitEnabled) {
       console.log(`All test questions answered (${describeQuestionCounts(totalCount, textareaCount)}) - will auto-submit`);
     } else {
@@ -372,7 +386,7 @@ export async function handleVacancyResponsePage({
 
     // hh.ru changes the URL after a response, so take the vacancy ID first
     const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
-    await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true });
+    await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true, autoSend });
     console.log('Clicked submit button');
     for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !await isResponseSubmitted(commander); waited += 1000) {
       await commander.wait({ ms: 1000, reason: 'submission to complete' });

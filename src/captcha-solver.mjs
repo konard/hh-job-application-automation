@@ -10,7 +10,9 @@
  *   https://github.com/link-assistant/image-to-number does: the image is copied under a
  *   neutral name into a private temporary directory and the model is asked for the
  *   characters only
- * - Both agree: their answer is prefilled; they disagree: both, as "haiku|luna"
+ * - The first picture of a captcha: Haiku's reading is typed in and sent once (sendOnce). If hh.ru
+ *   does not accept it, nothing more is sent: later pictures are only prefilled for the user
+ * - Prefill: both agree, their answer; they disagree, both, as "haiku|luna"
  * - The field is filled only while it is empty and not focused; a picture is read until there is
  *   an answer, at most three times
  *
@@ -28,7 +30,8 @@ import { log } from './logging.mjs';
  * empty src and sets /captcha/picture?key=... later (19 s in the first one recorded)
  */
 export const CAPTCHA_IMAGE_SELECTOR = 'img[data-qa="account-captcha-picture"], img[src*="captcha" i]';
-export const CAPTCHA_INPUT_SELECTOR = 'input[placeholder="Текст с картинки"], input[name*="captcha" i]';
+export const CAPTCHA_INPUT_SELECTOR =
+  'input[data-qa="account-captcha-input"], input[placeholder="Текст с картинки"], input[name*="captcha" i]';
 
 export const CLAUDE_MODEL = 'claude-haiku-5-5';
 /** Used when the Codex model catalog cannot be read */
@@ -38,8 +41,8 @@ const SOLVER_TIMEOUT_MS = 90000;
 export const READER_EFFORT = 'low';
 const IMAGE_NAME = 'image.png';
 
-const PROMPT = 'I am logged in to my own hh.ru account and it shows me a captcha. Your reading is only typed into ' +
-  'the field as a suggestion; I check it, fix it if needed and send it myself. ' +
+const PROMPT = 'I am logged in to my own hh.ru account and it shows me a captcha. Your reading is typed into ' +
+  'the captcha field for me and sent once; if it is not accepted, I solve the captcha myself. ' +
   'The image is the captcha. It usually shows one or two Russian words in Cyrillic ' +
   'letters, curved or distorted. Output ONLY the text shown in it, exactly as written (the same letters, digits, ' +
   'case and spaces between words), with no quotes, comments or explanation, also when unsure.';
@@ -256,16 +259,46 @@ async function takeCaptchaImage(commander, page) {
 }
 
 /**
+ * Runs in the page: the button that sends the captcha answer, as a selector, or null. It is the
+ * submit button of the form (or dialog) holding the answer field, else its "Отправить" button
+ * @param {{inputSelector: string}} selectors
+ * @returns {string|null}
+ */
+export function findCaptchaSendButton({ inputSelector }) {
+  const input = [...document.querySelectorAll(inputSelector)].find((element) => element.getClientRects().length > 0);
+  const scope = input?.closest('form') ?? input?.closest('[role="dialog"]');
+  if (!scope) {
+    return null;
+  }
+  const scopeSelector = scope.matches('form') ? 'form' : '[role="dialog"]';
+  const inputMark = (input.getAttribute('data-qa') && `[data-qa="${input.getAttribute('data-qa')}"]`) ||
+    (input.name && `[name="${input.name}"]`);
+  if (!inputMark) {
+    return null;
+  }
+  const buttons = [...scope.querySelectorAll('button')].filter((button) => button.getClientRects().length > 0);
+  const submit = buttons.find((button) => button.type === 'submit');
+  if (submit) {
+    return `${scopeSelector}:has(${inputMark}) button[type="submit"]`;
+  }
+  const send = buttons.find((button) => button.innerText.trim() === 'Отправить');
+  return send?.getAttribute('data-qa') ? `button[data-qa="${send.getAttribute('data-qa')}"]` : null;
+}
+
+/**
  * Create the prefill step, called on every captcha check while a captcha is shown
  * @param {Object} options
  * @param {Object} options.page - Raw Playwright/Puppeteer page, for the element screenshot fallback
  * @param {Function} [options.solve=solveCaptchaImage]
  * @param {string|null} [options.saveDir] - Where the captcha pictures are kept for checking (logs/captcha)
  * @param {number} [options.settleMs=1000] - Pause before the picture is taken
- * @returns {(commander: Object) => Promise<void>} Takes the unguarded commander
+ * @param {boolean} [options.sendOnce=true] - Send Haiku's reading of a captcha's first picture once
+ * @returns {(commander: Object, episode?: Object) => Promise<void>} Takes the unguarded commander and
+ *   the state of this captcha (from waitWhileCaptcha)
  */
 export function createCaptchaPrefill({
   page, solve = solveCaptchaImage, saveDir = path.join(process.cwd(), 'logs', 'captcha'), settleMs = SETTLE_MS,
+  sendOnce = true,
 }) {
   let currentSrc = null;
   let attempts = 0;
@@ -279,8 +312,13 @@ export function createCaptchaPrefill({
     silent: true,
   })).value;
 
-  async function prefill(commander) {
+  async function prefill(commander, episode) {
     let form = await readForm(commander);
+    // A new picture after the send means hh.ru did not accept it
+    if (episode.sent && !episode.reported && form?.src && form.src !== episode.sentSrc) {
+      episode.reported = true;
+      console.log('🛑 hh.ru did not accept Haiku\'s reading; the captcha is yours to solve (it is only prefilled now)');
+    }
     if (form && form.src !== currentSrc) {
       currentSrc = form.src;
       attempts = 0;
@@ -308,7 +346,8 @@ export function createCaptchaPrefill({
       log.debug(() => `Captcha picture saved to ${file}`);
     }
 
-    console.log('🤖 Reading the captcha with Haiku and Luna (it is only prefilled, you send it)...');
+    const trySend = sendOnce && !episode.sent;
+    console.log(`🤖 Reading the captcha with Haiku and Luna (${trySend ? 'Haiku\'s reading is sent once' : 'it is only prefilled, you send it'})...`);
     const { haiku, luna, model, text } = await solve(png);
     console.log(`🤖 Captcha guesses: Haiku "${haiku ?? '-'}", ${model} "${luna ?? '-'}"`);
     if (!text) {
@@ -321,14 +360,37 @@ export function createCaptchaPrefill({
       console.log('🤖 The captcha changed or you started typing, so it is not prefilled');
       return;
     }
+    const sendButton = trySend && haiku && (await commander.safeEvaluate({
+      fn: findCaptchaSendButton,
+      args: [{ inputSelector: CAPTCHA_INPUT_SELECTOR }],
+      defaultValue: null,
+      operationName: 'captcha send button',
+      silent: true,
+    })).value;
+    const answer = sendButton ? haiku : text;
     await commander.fillTextArea({
-      selector: CAPTCHA_INPUT_SELECTOR, text, checkEmpty: true, scrollIntoView: false, simulateTyping: true,
+      selector: CAPTCHA_INPUT_SELECTOR, text: answer, checkEmpty: true, scrollIntoView: false, simulateTyping: true,
     });
-    console.log(`✍️  Prefilled the captcha with "${text}": check it, fix it if needed and send it yourself`);
+    if (!sendButton) {
+      if (trySend && haiku) {
+        console.log('🤖 The captcha send button was not found, so nothing is sent');
+      }
+      console.log(`✍️  Prefilled the captcha with "${answer}": check it, fix it if needed and send it yourself`);
+      return;
+    }
+    // Once per captcha: if hh.ru does not accept it, everything after this is up to the user
+    if ((await readForm(commander))?.value !== answer) {
+      console.log('🤖 The captcha field does not hold Haiku\'s reading, so nothing is sent');
+      return;
+    }
+    episode.sent = true;
+    episode.sentSrc = form.src;
+    console.log(`📨 Sending Haiku's reading of the captcha (once): "${answer}"`);
+    await commander.clickButton({ selector: sendButton, scrollIntoView: false });
   }
 
-  return (commander) => {
-    running ??= prefill(commander)
+  return (commander, episode = {}) => {
+    running ??= prefill(commander, episode)
       .catch((error) => console.log(`⚠️  Captcha prefill failed: ${error.message}`))
       .finally(() => {
         running = null;

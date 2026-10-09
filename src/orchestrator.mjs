@@ -133,6 +133,7 @@ export function createOrchestrator({
     returnUrl: lastSearchPageUrl,
     onApplicationSent: afterApplicationSent,
     deferredQuestions,
+    autoSendExact: argv.autoSendExactAnswers,
     verbose: argv.verbose,
   });
 
@@ -278,6 +279,8 @@ export function createOrchestrator({
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
           addIgnoredVacancyId: qaDB.addIgnoredVacancyId,
           deferredQuestions,
+          readQADatabase: qaDB.readQADatabase,
+          autoSendExact: argv.autoSendExactAnswers,
           waitForUrlCondition,
           START_URL,
           pageClosedByUser: getPageClosedByUser,

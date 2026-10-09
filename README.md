@@ -161,7 +161,10 @@ bun run apply -- --test-mode
 ```
 
 By default the run asks before sending a form with questions (`--confirm send`) and waits
-for you when a question has no saved answer. `--test-mode` is a preset: `--max-applications 1`
+for you when a question has no saved answer. A form is sent without asking only when autofill
+alone answered it exactly: every question is a saved question word for word and its field holds
+the saved answer (the same text, the same checked options). Any other form is autofilled as far as
+possible and waits for you; turn the exception off with `--no-auto-send-exact-answers`. `--test-mode` is a preset: `--max-applications 1`
 and also confirm `answers`. Each part can be set
 on its own:
 
@@ -169,6 +172,7 @@ on its own:
 |--------|--------|--------|
 | `--confirm` | `answers`, `cover-letter`, `send` (default), `popup` (comma-separated), or `none` | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends a form with questions (full form or popup; forms with only a cover letter are sent right away), everything in the short popup form |
 | `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy (kept in `data/deferred-questions.lino`) |
+| `--auto-send-exact-answers` | `true` (default), `false` | Send forms whose every question autofill answered with the saved answer of the very same question, without asking |
 | `--skip-question` | text, repeatable | Skip vacancies that ask a matching question for now (see below) |
 | `--max-applications` | number, `0` = no limit | Stop after sending this many applications |
 
@@ -250,10 +254,14 @@ because it holds personal data:
   the already loaded image, no new request; a screenshot of the picture is the fallback), the way
   [image-to-number](https://github.com/link-assistant/image-to-number) does, and their guess is
   typed into the empty captcha field: one answer when they agree, both as `haiku|luna` when they
-  don't. It is **never sent**: check it, fix it and send it yourself. The picture is taken once
+  don't. **Auto-send once** (`--captcha-auto-send`, on by default): on the first picture of a
+  captcha only Haiku's reading is typed in and «Отправить» is clicked, once. If hh.ru does not
+  accept it (a new picture appears), nothing more is sent: from then on the guess is only
+  prefilled, and you check it, fix it and send it yourself. With `--no-captcha-auto-send` it is
+  never sent. The picture is taken once
   it has loaded and the dialog has faded in, and kept in `logs/captcha/` for checking. Each
   picture is read until there is an answer, at most three times; a field you are typing in is
-  left alone. The only click is the one that focuses the field for typing. A reply that is not a captcha answer (one to three Russian or English words,
+  left alone. The only clicks are the one that focuses the field for typing and the single send. A reply that is not a captcha answer (one to three Russian or English words,
   e.g. "злеат вьюнить") is dropped: Luna usually declines, Haiku usually answers. Both run at
   low reasoning effort (`READER_EFFORT` in `src/captcha-solver.mjs`), whatever your own Claude
   Code and Codex settings are. Needs `claude` and `codex` on `PATH`; turn it off with

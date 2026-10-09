@@ -92,6 +92,12 @@ export function createConfig() {
           description: 'Questions without a saved answer: wait for the user to answer them, or skip the vacancy',
           default: getenv('ON_MISSING_ANSWERS', 'wait'),
         })
+        .option('auto-send-exact-answers', {
+          type: 'boolean',
+          description: 'Send a form with questions without asking when every question is a saved question word for word ' +
+            'and autofill answered it with the saved answer; other forms are autofilled and wait for you',
+          default: getenv('AUTO_SEND_EXACT_ANSWERS', true),
+        })
         .option('single-tab', {
           type: 'boolean',
           description: 'Keep the automation browser to one tab: other tabs are closed when the run attaches, new ones as they open',
@@ -99,9 +105,15 @@ export function createConfig() {
         })
         .option('captcha-prefill', {
           type: 'boolean',
-          description: 'Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna); ' +
-            'it is never sent, you check and send it',
+          description: 'Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna) ' +
+            'for you to check and send',
           default: getenv('CAPTCHA_PREFILL', true),
+        })
+        .option('captcha-auto-send', {
+          type: 'boolean',
+          description: 'With --captcha-prefill: send Haiku\'s reading of a captcha once; if hh.ru does not accept it, ' +
+            'the captcha is only prefilled and waits for you',
+          default: getenv('CAPTCHA_AUTO_SEND', true),
         })
         .option('skip-question', {
           type: 'string',

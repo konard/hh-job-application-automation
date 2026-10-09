@@ -57,10 +57,20 @@
 # Default: true
 # SINGLE_TAB: false
 
-# Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna);
-# the answer is never sent, you check and send it
+# Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna)
+# for you to check and send
 # Default: true
 # CAPTCHA_PREFILL: false
+
+# With CAPTCHA_PREFILL: send Haiku's reading of a captcha once; if hh.ru does not accept it,
+# the captcha is only prefilled and waits for you
+# Default: true
+# CAPTCHA_AUTO_SEND: false
+
+# Send a form with questions without asking when every question is a saved question word for
+# word and autofill answered it with the saved answer; other forms are autofilled and wait for you
+# Default: true
+# AUTO_SEND_EXACT_ANSWERS: false
 
 # Skip vacancies that ask these questions (a part of a question is enough) for now,
 # separated by |; they are kept in data/deferred-questions.lino until answered in qa.lino
