@@ -21,6 +21,8 @@ export const CAPTCHA_SELECTORS = [
 ];
 const CAPTCHA_URL = /\/(?:account\/)?captcha/i;
 const POLL_MS = 5000;
+const NAVIGATION_RETRIES = 5;
+const NAVIGATION_RETRY_MS = 1000;
 
 /**
  * Commander methods that act on the page. evaluate/safeEvaluate are included because page
@@ -61,16 +63,25 @@ export function pageShowsCaptcha({ texts, selectors }) {
  * @returns {Promise<boolean>}
  */
 export async function isCaptchaShown(commander) {
-  if (CAPTCHA_URL.test(commander.getUrl())) {
-    return true;
+  // A navigation during the check says nothing about the new page, so it is checked again
+  for (let attempt = 0; attempt < NAVIGATION_RETRIES; attempt++) {
+    if (CAPTCHA_URL.test(commander.getUrl())) {
+      return true;
+    }
+    const { value, navigationError } = await commander.safeEvaluate({
+      fn: pageShowsCaptcha,
+      args: [{ texts: CAPTCHA_TEXTS, selectors: CAPTCHA_SELECTORS }],
+      defaultValue: false,
+      operationName: 'captcha check',
+      silent: true,
+    });
+    if (!navigationError) {
+      return value;
+    }
+    await new Promise((resolve) => setTimeout(resolve, NAVIGATION_RETRY_MS));
   }
-  const { value } = await commander.safeEvaluate({
-    fn: pageShowsCaptcha,
-    args: [{ texts: CAPTCHA_TEXTS, selectors: CAPTCHA_SELECTORS }],
-    defaultValue: false,
-    operationName: 'captcha check',
-  });
-  return value;
+  log.debug(() => 'Captcha check kept being interrupted by navigation; assuming no captcha');
+  return false;
 }
 
 let waiting = null;

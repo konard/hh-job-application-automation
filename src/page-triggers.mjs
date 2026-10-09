@@ -164,7 +164,11 @@ export function registerPageTriggers({
 
   // Track in-page navigation (e.g., pagination) and forget the vacancy_response
   // tracking when navigating somewhere other than its vacancy page
-  const onUrlChange = ({ newUrl }) => {
+  const onUrlChange = ({ previousUrl, newUrl }) => {
+    // A question about the form must not outlive it: its answer would act on another page
+    if (URL_PATTERNS.vacancyResponse.test(previousUrl ?? '') && !URL_PATTERNS.vacancyResponse.test(newUrl)) {
+      withdrawPrompt();
+    }
     if (URL_PATTERNS.searchVacancy.test(newUrl)) {
       onSearchPageVisited(newUrl);
     }

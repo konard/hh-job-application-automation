@@ -61,6 +61,7 @@ export async function isResponseSubmitted(commander) {
     args: [RESPONSE_SENT_TEXTS],
     defaultValue: false,
     operationName: 'response submitted check',
+    silent: true,
   });
   return value;
 }
@@ -132,6 +133,7 @@ export async function closeChatPanel(commander) {
     args: [{ panelSelector: SELECTORS.chatPanel }],
     defaultValue: null,
     operationName: 'chat panel check',
+    silent: true,
   });
   if (value?.selector) {
     await commander.clickButton({ selector: value.selector, scrollIntoView: false }).catch(() => {});

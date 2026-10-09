@@ -187,6 +187,7 @@ async function isVacancyCardResponded({ commander, vacancyId }) {
       args: [vacancyId, SELECTORS.vacancyResponded],
       defaultValue: false,
       operationName: 'responded vacancy check',
+      silent: true,
     });
     if (value) {
       return true;
@@ -290,6 +291,7 @@ function scanApplyButtons({ commander, selector }) {
     args: [selector, Array.from(processedVacancyIds)],
     defaultValue: { totalButtons: 0, unprocessedCount: 0, buttonIndex: -1, vacancyId: null },
     operationName: 'find unprocessed vacancy button',
+    silent: true,
   });
 }
 
@@ -348,6 +350,8 @@ function withButtonAt({ commander, selector, buttonIndex, action, defaultValue }
     args: [selector, buttonIndex, action],
     defaultValue,
     operationName: `vacancy button ${action}`,
+    // Callers handle navigationError themselves
+    silent: true,
   });
 }
 
@@ -368,6 +372,7 @@ async function describeVacancyCard({ commander, selector, buttonIndex }) {
     args: [selector, buttonIndex],
     defaultValue: null,
     operationName: 'vacancy card description',
+    silent: true,
   });
   return value ? `"${value}"` : 'the next vacancy';
 }

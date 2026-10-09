@@ -37,7 +37,8 @@ let stop = () => {};
 let lines = null;
 // A line typed while no prompt was waiting, or after a prompt was withdrawn, goes to the next prompt
 let pendingLine = null;
-let withdrawCurrent = null;
+// Withdraw functions of the prompts that wait now
+const pendingPrompts = new Set();
 
 /** Thrown by a confirmed step whose prompt was withdrawn because the page changed */
 export class PromptWithdrawnError extends Error {
@@ -48,10 +49,10 @@ export class PromptWithdrawnError extends Error {
 }
 
 /**
- * Withdraw the prompt that waits on stdin, e.g. when the form was sent or left in the browser
+ * Withdraw every prompt that waits on stdin, e.g. when the form was sent or left in the browser
  */
 export function withdrawPrompt() {
-  withdrawCurrent?.();
+  pendingPrompts.forEach((withdraw) => withdraw());
 }
 
 /**
@@ -59,11 +60,14 @@ export function withdrawPrompt() {
  * @param {Object} options
  * @param {string[]} options.steps - Steps to confirm (see CONFIRM_STEPS)
  * @param {Function} options.onStop - Called when the user answers `q`
+ * @param {import('stream').Readable} [options.input=process.stdin] - Where the answers are read
  */
-export function enableConfirmations({ steps: confirmSteps, onStop }) {
+export function enableConfirmations({ steps: confirmSteps, onStop, input = process.stdin }) {
   interactive = true;
   steps = new Set(confirmSteps);
   stop = onStop;
+  lines = readline.createInterface({ input })[Symbol.asyncIterator]();
+  pendingLine = null;
 }
 
 /** Whether someone answers on stdin, so the run can wait for them */
@@ -78,10 +82,11 @@ export async function waitForUser(description) {
   if (!interactive) {
     return true;
   }
-  lines ??= readline.createInterface({ input: process.stdin })[Symbol.asyncIterator]();
+  let withdraw;
   const withdrawn = new Promise((resolve) => {
-    withdrawCurrent = () => resolve(null);
+    withdraw = () => resolve(null);
   });
+  pendingPrompts.add(withdraw);
   try {
     for (;;) {
       console.log(`❓ ${description}\n   Type y to continue, q to stop:`);
@@ -102,7 +107,7 @@ export async function waitForUser(description) {
       }
     }
   } finally {
-    withdrawCurrent = null;
+    pendingPrompts.delete(withdraw);
   }
 }
 

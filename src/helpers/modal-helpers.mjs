@@ -91,6 +91,7 @@ export async function checkAndCloseDirectApplicationModal({ commander } = {}) {
       args: [cancelButtonSelector, SELECTORS.directApplicationAlert, SELECTORS.modalOverlay],
       defaultValue: { found: false, reason: 'evaluate failed' },
       operationName: 'direct application check',
+      silent: true,
     });
 
     log.debug(() => `🔍 Direct application detection: ${JSON.stringify(detection)}`);
