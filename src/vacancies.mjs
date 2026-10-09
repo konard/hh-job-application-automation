@@ -3,7 +3,7 @@
  * Handles finding and clicking "Откликнуться" buttons in vacancy lists
  */
 
-import { isNavigationError } from 'browser-commander';
+import { isNavigationError, isTimeoutError } from 'browser-commander';
 import { countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
@@ -48,9 +48,19 @@ async function skipModal({ commander, reason }) {
   return { success: false, reason };
 }
 
+/** The popup result when hh.ru has replaced it with the full application form */
+const FULL_FORM_OPENED = { success: false, reason: 'full_form_opened' };
+
+/**
+ * Whether hh.ru has replaced the popup with the full application form: for a vacancy with
+ * questions it may first open the popup and switch to /applicant/vacancy_response seconds later
+ */
+const isFullFormOpened = (commander) => URL_PATTERNS.vacancyResponse.test(commander.getUrl());
+
 /**
  * Process modal application form
- * Fills cover letter and handles test questions in modal
+ * Fills cover letter and handles test questions in modal. Stops as soon as hh.ru switches to the
+ * full application form, which the vacancy_response page handler takes over
  */
 export async function processModalApplication({
   commander,
@@ -61,6 +71,9 @@ export async function processModalApplication({
   deferredQuestions = null,
 }) {
   const textareaSelector = SELECTORS.coverLetterTextareaPopup;
+  if (isFullFormOpened(commander)) {
+    return FULL_FORM_OPENED;
+  }
 
   // Expand the cover letter section unless the textarea is already visible (cover letter might be mandatory)
   const textareaVisible = await commander.count({ selector: textareaSelector }) > 0 &&
@@ -84,6 +97,9 @@ export async function processModalApplication({
     }
   }
 
+  if (isFullFormOpened(commander)) {
+    return FULL_FORM_OPENED;
+  }
   if (MESSAGE) {
     const { filled, verified, actualValue } = await commander.fillTextArea({
       selector: textareaSelector,
@@ -184,6 +200,9 @@ export async function processModalApplication({
     return skipModal({ commander, reason: 'button_disabled' });
   }
 
+  if (isFullFormOpened(commander)) {
+    return FULL_FORM_OPENED;
+  }
   try {
     await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000 });
     console.log(`✅ ${commander.engine}: clicked submit button`);
@@ -574,14 +593,28 @@ export async function findAndProcessVacancyButton({
     return { status: modalResult.status, vacancyId };
   }
 
-  const submitResult = await processModalApplication({
-    commander,
-    MESSAGE,
-    ignoreVacanciesWithQuestionnaire,
-    vacancyId,
-    addIgnoredVacancyId,
-    deferredQuestions,
-  });
+  let submitResult;
+  try {
+    submitResult = await processModalApplication({
+      commander,
+      MESSAGE,
+      ignoreVacanciesWithQuestionnaire,
+      vacancyId,
+      addIgnoredVacancyId,
+      deferredQuestions,
+    });
+  } catch (error) {
+    // A wait for a popup element fails once hh.ru has switched to the full form
+    if (!(isTimeoutError(error) || isNavigationError(error)) || !isFullFormOpened(commander)) {
+      throw error;
+    }
+    log.debug(() => `Popup step interrupted by the full form: ${error.message.split('\n')[0]}`);
+    submitResult = FULL_FORM_OPENED;
+  }
+  if (submitResult.reason === FULL_FORM_OPENED.reason) {
+    console.log('📝 hh.ru replaced the popup with the full application form:', commander.getUrl());
+    return { status: 'vacancy_response_detected', vacancyId };
+  }
   if (!submitResult.success) {
     return { status: 'modal_processing_failed', reason: submitResult.reason, vacancyId };
   }
