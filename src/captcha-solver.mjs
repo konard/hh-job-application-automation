@@ -15,7 +15,7 @@
  */
 
 import { execFile } from 'child_process';
-import { mkdtemp, rm, writeFile, readFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { log } from './logging.mjs';
@@ -30,21 +30,33 @@ export const FALLBACK_LUNA_MODEL = 'gpt-6-luna';
 const SOLVER_TIMEOUT_MS = 90000;
 const IMAGE_NAME = 'image.png';
 
-const PROMPT = 'The image is a captcha from a website. Output ONLY the text shown in it, exactly as written ' +
-  '(the same letters, digits and case), with no quotes or explanation.';
-
-/** A captcha answer is one short word; anything else (a refusal, an explanation) is not one */
-const PLAUSIBLE_ANSWER = /^[\p{L}\p{N}]{2,12}$/u;
+const PROMPT = 'I am logged in to my own hh.ru account and it shows me a captcha. Your reading is only typed into ' +
+  'the field as a suggestion; I check it, fix it if needed and send it myself. ' +
+  'The image is the captcha. It usually shows one or two Russian words in Cyrillic ' +
+  'letters, curved or distorted. Output ONLY the text shown in it, exactly as written (the same letters, digits, ' +
+  'case and spaces between words), with no quotes, comments or explanation, also when unsure.';
+/** Reads of one captcha picture when the models give no answer */
+const MAX_ATTEMPTS = 2;
+/** The dialog fades in; the picture is taken once it is shown in full */
+const SETTLE_MS = 1000;
 
 /**
- * The answer in a model reply: its last non-empty line without quotes or a final period
+ * A captcha answer is one to three short Russian or English words ("злеат вьюнить", hh.ru's
+ * "English" captcha); anything else (a refusal, an explanation, other scripts) is not one
+ */
+const PLAUSIBLE_ANSWER = /^(?=.{2,30}$)[а-яёa-z0-9]+(?: [а-яёa-z0-9]+){0,2}$/i;
+
+/**
+ * The answer in a model reply: its last line that looks like a captcha answer, without quotes
+ * or a final period (a comment such as "the first word is cut off" is skipped)
  * @param {string|null|undefined} reply
- * @returns {string|null} Null when the reply is not a plausible captcha answer
+ * @returns {string|null} Null when no line is a plausible captcha answer
  */
 export function cleanAnswer(reply) {
-  const line = String(reply ?? '').split('\n').map((item) => item.trim()).filter(Boolean).pop();
-  const answer = line?.replace(/^["'`«»“”]+|["'`«»“”.]+$/g, '').trim();
-  return answer && PLAUSIBLE_ANSWER.test(answer) ? answer : null;
+  const answers = String(reply ?? '').split('\n')
+    .map((line) => line.trim().replace(/^["'`«»“”]+|["'`«»“”.]+$/g, '').trim())
+    .filter((line) => PLAUSIBLE_ANSWER.test(line));
+  return answers.pop() ?? null;
 }
 
 /**
@@ -163,7 +175,7 @@ export async function solveCaptchaImage(png, { claude = askClaude, codex = askCo
 /**
  * Runs in the page: the visible captcha image and its answer field
  * @param {{imageSelector: string, inputSelector: string}} selectors
- * @returns {{src: string, value: string, focused: boolean}|null}
+ * @returns {{src: string, ready: boolean, value: string, focused: boolean}|null}
  */
 export function readCaptchaForm({ imageSelector, inputSelector }) {
   const isVisible = (element) => element.getClientRects().length > 0 &&
@@ -173,7 +185,17 @@ export function readCaptchaForm({ imageSelector, inputSelector }) {
   if (!image || !input) {
     return null;
   }
-  return { src: image.currentSrc || image.src, value: input.value, focused: document.activeElement === input };
+  // Loaded, and not faded out (the dialog fades in)
+  let opacity = 1;
+  for (let element = image; element; element = element.parentElement) {
+    opacity *= Number(window.getComputedStyle(element).opacity);
+  }
+  return {
+    src: image.currentSrc || image.src,
+    ready: image.complete && image.naturalWidth > 0 && opacity > 0.99,
+    value: input.value,
+    focused: document.activeElement === input,
+  };
 }
 
 /**
@@ -181,10 +203,15 @@ export function readCaptchaForm({ imageSelector, inputSelector }) {
  * @param {Object} options
  * @param {Object} options.page - Raw Playwright/Puppeteer page, for the element screenshot
  * @param {Function} [options.solve=solveCaptchaImage]
+ * @param {string|null} [options.saveDir] - Where the captcha pictures are kept for checking (logs/captcha)
+ * @param {number} [options.settleMs=1000] - Pause before the picture is taken
  * @returns {(commander: Object) => Promise<void>} Takes the unguarded commander
  */
-export function createCaptchaPrefill({ page, solve = solveCaptchaImage }) {
-  let handledSrc = null;
+export function createCaptchaPrefill({
+  page, solve = solveCaptchaImage, saveDir = path.join(process.cwd(), 'logs', 'captcha'), settleMs = SETTLE_MS,
+}) {
+  let currentSrc = null;
+  let attempts = 0;
   let running = null;
 
   const readForm = async (commander) => (await commander.safeEvaluate({
@@ -196,15 +223,21 @@ export function createCaptchaPrefill({ page, solve = solveCaptchaImage }) {
   })).value;
 
   async function prefill(commander) {
-    const form = await readForm(commander);
-    // Once per captcha image, and never over what the user types
-    if (!form || form.src === handledSrc) {
+    let form = await readForm(commander);
+    if (form && form.src !== currentSrc) {
+      currentSrc = form.src;
+      attempts = 0;
+    }
+    // A picture is read until there is an answer (at most twice), and never over what the user types
+    if (!form?.ready || attempts >= MAX_ATTEMPTS || form.value || form.focused) {
       return;
     }
-    handledSrc = form.src;
-    if (form.value || form.focused) {
+    await new Promise((resolve) => setTimeout(resolve, settleMs));
+    form = await readForm(commander);
+    if (!form?.ready || form.src !== currentSrc || form.value || form.focused) {
       return;
     }
+    attempts++;
 
     let png = null;
     for (const handle of await page.$$(CAPTCHA_IMAGE_SELECTOR)) {
@@ -216,6 +249,12 @@ export function createCaptchaPrefill({ page, solve = solveCaptchaImage }) {
       log.debug(() => 'Captcha image not found for the prefill');
       return;
     }
+    if (saveDir) {
+      const file = path.join(saveDir, `${new Date().toISOString().replace(/[:.]/g, '-')}.png`);
+      await mkdir(saveDir, { recursive: true });
+      await writeFile(file, png);
+      log.debug(() => `Captcha picture saved to ${file}`);
+    }
 
     console.log('🤖 Reading the captcha with Haiku and Luna (it is only prefilled, you send it)...');
     const { haiku, luna, model, text } = await solve(png);
@@ -223,6 +262,7 @@ export function createCaptchaPrefill({ page, solve = solveCaptchaImage }) {
     if (!text) {
       return;
     }
+    attempts = MAX_ATTEMPTS;
 
     const now = await readForm(commander);
     if (now?.src !== form.src || now.value || now.focused) {

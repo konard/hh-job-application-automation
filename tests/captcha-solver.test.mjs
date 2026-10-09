@@ -17,6 +17,18 @@ describe('cleanAnswer', () => {
     assert.equal(cleanAnswer('жук42'), 'жук42');
   });
 
+  test('a comment after the answer is skipped', () => {
+    assert.equal(cleanAnswer('блеат вьюнить\n\nЛевое слово обрезано по краю картинки, поэтому его прочтение неуверенное.'), 'блеат вьюнить');
+  });
+
+  test('hh.ru captchas of two words are answers', () => {
+    assert.equal(cleanAnswer('злеат вьюнить'), 'злеат вьюнить');
+  });
+
+  test('letters of other scripts are no answer', () => {
+    assert.equal(cleanAnswer('ավետ BbDИНИЬ'), null);
+  });
+
   test('a refusal or an explanation is no answer', () => {
     assert.equal(cleanAnswer('I can’t help solve CAPTCHAs.'), null);
     assert.equal(cleanAnswer('The text is unclear'), null);
@@ -74,8 +86,8 @@ describe('solveCaptchaImage', () => {
 });
 
 /** Commander and page with one captcha image and its answer field */
-function fakeCaptchaPage({ src = 'https://hh.ru/captcha?key=1', value = '', focused = false } = {}) {
-  const form = { src, value, focused };
+function fakeCaptchaPage({ src = 'https://hh.ru/captcha?key=1', ready = true, value = '', focused = false } = {}) {
+  const form = { src, ready, value, focused };
   const fills = [];
   const commander = {
     form,
@@ -94,7 +106,7 @@ function fakeCaptchaPage({ src = 'https://hh.ru/captcha?key=1', value = '', focu
 describe('createCaptchaPrefill', () => {
   test('types the guess into the empty field and does nothing else', async () => {
     const { commander, page } = fakeCaptchaPage();
-    const prefill = createCaptchaPrefill({ page, solve: async () => ({ haiku: 'ab12', luna: 'ab13', model: 'gpt-6-luna', text: 'ab12|ab13' }) });
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => ({ haiku: 'ab12', luna: 'ab13', model: 'gpt-6-luna', text: 'ab12|ab13' }) });
     await prefill(commander);
     assert.deepEqual(commander.fills, [{ text: 'ab12|ab13', checkEmpty: true }]);
     assert.deepEqual(Object.keys(commander).filter((key) => /click|press|submit|goto/i.test(key)), []);
@@ -103,7 +115,7 @@ describe('createCaptchaPrefill', () => {
   test('each captcha image is read once', async () => {
     const { commander, page } = fakeCaptchaPage();
     let solved = 0;
-    const prefill = createCaptchaPrefill({ page, solve: async () => ({ text: `guess${++solved}` }) });
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => ({ text: `guess${++solved}` }) });
     await prefill(commander);
     commander.form.value = '';
     await prefill(commander);
@@ -113,10 +125,35 @@ describe('createCaptchaPrefill', () => {
     assert.equal(solved, 2);
   });
 
+  test('a picture that is still loading or fading in is read once it is shown', async () => {
+    const { commander, page } = fakeCaptchaPage({ ready: false });
+    let solved = 0;
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => ({ text: `guess${++solved}` }) });
+    await prefill(commander);
+    assert.equal(solved, 0);
+    commander.form.ready = true;
+    await prefill(commander);
+    assert.deepEqual(commander.fills, [{ text: 'guess1', checkEmpty: true }]);
+  });
+
+  test('a picture without an answer is read once more, not again and again', async () => {
+    const { commander, page } = fakeCaptchaPage();
+    let solved = 0;
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => {
+      solved++;
+      return { text: null };
+    } });
+    for (let check = 0; check < 4; check++) {
+      await prefill(commander);
+    }
+    assert.equal(solved, 2);
+    assert.deepEqual(commander.fills, []);
+  });
+
   test('what the user types is left alone', async () => {
     for (const form of [{ value: 'my answer' }, { focused: true }]) {
       const { commander, page } = fakeCaptchaPage(form);
-      const prefill = createCaptchaPrefill({ page, solve: async () => ({ text: 'ab12' }) });
+      const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => ({ text: 'ab12' }) });
       await prefill(commander);
       assert.deepEqual(commander.fills, []);
     }
@@ -124,7 +161,7 @@ describe('createCaptchaPrefill', () => {
 
   test('typing during the guess cancels the prefill', async () => {
     const { commander, page } = fakeCaptchaPage();
-    const prefill = createCaptchaPrefill({ page, solve: async () => {
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async () => {
       commander.form.focused = true;
       return { text: 'ab12' };
     } });

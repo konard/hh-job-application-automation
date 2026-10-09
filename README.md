@@ -246,9 +246,11 @@ because it holds personal data:
   your account) read the captcha from a screenshot of its picture, the way
   [image-to-number](https://github.com/link-assistant/image-to-number) does, and their guess is
   typed into the empty captcha field: one answer when they agree, both as `haiku|luna` when they
-  don't. It is **never sent**: check it, fix it and send it yourself. Each captcha picture is
-  read once, and a field you are typing in is left alone. A reply that is not a captcha answer
-  (Luna sometimes declines) is dropped. Needs `claude` and `codex` on `PATH`; turn it off with
+  don't. It is **never sent**: check it, fix it and send it yourself. The picture is taken once
+  it has loaded and the dialog has faded in, and kept in `logs/captcha/` for checking. Each
+  picture is read once, or twice when the first read gives no answer; a field you are typing in
+  is left alone. A reply that is not a captcha answer (one to three Russian or English words,
+  e.g. "злеат вьюнить") is dropped: Luna usually declines, Haiku usually answers. Needs `claude` and `codex` on `PATH`; turn it off with
   `--no-captcha-prefill`.
 - **Unconfirmed application**: if hh.ru does not mark a vacancy as responded after sending,
   the run waits for you (or stops in unattended runs) instead of opening the next vacancy.
