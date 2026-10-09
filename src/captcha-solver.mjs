@@ -2,8 +2,10 @@
  * Captcha prefill: read the captcha with two local AI CLIs and type their guess into the
  * captcha field, so the user only checks it and sends it. Nothing is ever submitted.
  *
- * - The captcha image is taken from a screenshot of its element: loading the image again
- *   could make hh.ru issue a new captcha
+ * - The models get only the captcha picture, in its original size (250x90 on hh.ru): the
+ *   already loaded image is copied through a canvas in the page, since loading it again could
+ *   make hh.ru issue a new captcha. If the copy is not possible, a screenshot of the picture
+ *   element is used instead; never a screenshot of the page
  * - Claude Code (Haiku) and Codex (the latest Luna model) read it in parallel, the way
  *   https://github.com/link-assistant/image-to-number does: the image is copied under a
  *   neutral name into a private temporary directory and the model is asked for the
@@ -203,9 +205,57 @@ export function readCaptchaForm({ imageSelector, inputSelector }) {
 }
 
 /**
+ * Runs in the page: the loaded captcha picture in its original size, as a PNG data URL. hh.ru
+ * serves it from its own origin, so the canvas can be read; no request is made
+ * @param {{imageSelector: string}} selectors
+ * @returns {string|null}
+ */
+export function copyCaptchaImage({ imageSelector }) {
+  const image = [...document.querySelectorAll(imageSelector)]
+    .find((element) => element.getClientRects().length > 0 && element.complete && element.naturalWidth > 0);
+  if (!image) {
+    return null;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  canvas.getContext('2d').drawImage(image, 0, 0);
+  try {
+    return canvas.toDataURL('image/png');
+  } catch {
+    // A picture from another origin cannot be read back
+    return null;
+  }
+}
+
+/**
+ * The captcha picture: copied in its original size, or else a screenshot of its element
+ * @returns {Promise<Buffer|null>}
+ */
+async function takeCaptchaImage(commander, page) {
+  const { value: dataUrl } = await commander.safeEvaluate({
+    fn: copyCaptchaImage,
+    args: [{ imageSelector: CAPTCHA_IMAGE_SELECTOR }],
+    defaultValue: null,
+    operationName: 'captcha image copy',
+    silent: true,
+  });
+  if (dataUrl?.startsWith('data:image/png;base64,')) {
+    return Buffer.from(dataUrl.slice('data:image/png;base64,'.length), 'base64');
+  }
+  log.debug(() => 'Captcha picture could not be copied, taking a screenshot of its element');
+  for (const handle of await page.$$(CAPTCHA_IMAGE_SELECTOR)) {
+    if (await handle.boundingBox()) {
+      return handle.screenshot({ type: 'png' });
+    }
+  }
+  return null;
+}
+
+/**
  * Create the prefill step, called on every captcha check while a captcha is shown
  * @param {Object} options
- * @param {Object} options.page - Raw Playwright/Puppeteer page, for the element screenshot
+ * @param {Object} options.page - Raw Playwright/Puppeteer page, for the element screenshot fallback
  * @param {Function} [options.solve=solveCaptchaImage]
  * @param {string|null} [options.saveDir] - Where the captcha pictures are kept for checking (logs/captcha)
  * @param {number} [options.settleMs=1000] - Pause before the picture is taken
@@ -243,12 +293,7 @@ export function createCaptchaPrefill({
     }
     attempts++;
 
-    let png = null;
-    for (const handle of await page.$$(CAPTCHA_IMAGE_SELECTOR)) {
-      if (!png && await handle.boundingBox()) {
-        png = await handle.screenshot({ type: 'png' });
-      }
-    }
+    const png = await takeCaptchaImage(commander, page);
     if (!png) {
       log.debug(() => 'Captcha image not found for the prefill');
       return;

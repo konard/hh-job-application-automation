@@ -246,7 +246,8 @@ because it holds personal data:
 - **Captcha**: when hh.ru shows a captcha, the run touches nothing on the page (no clicks,
   page scripts or navigation) and waits until you have solved it in the browser.
 - **Captcha prefill**: meanwhile local Claude Code (Haiku) and Codex (the newest Luna model of
-  your account) read the captcha from a screenshot of its picture, the way
+  your account) read the captcha picture, only the picture and in its original size (copied from
+  the already loaded image, no new request; a screenshot of the picture is the fallback), the way
   [image-to-number](https://github.com/link-assistant/image-to-number) does, and their guess is
   typed into the empty captcha field: one answer when they agree, both as `haiku|luna` when they
   don't. It is **never sent**: check it, fix it and send it yourself. The picture is taken once

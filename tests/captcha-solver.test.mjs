@@ -86,20 +86,30 @@ describe('solveCaptchaImage', () => {
 });
 
 /** Commander and page with one captcha image and its answer field */
-function fakeCaptchaPage({ src = 'https://hh.ru/captcha?key=1', ready = true, value = '', focused = false } = {}) {
+function fakeCaptchaPage({ src = 'https://hh.ru/captcha?key=1', ready = true, value = '', focused = false, copy = 'source' } = {}) {
   const form = { src, ready, value, focused };
   const fills = [];
+  const screenshots = [];
   const commander = {
     form,
     fills,
-    safeEvaluate: async () => ({ value: { ...form } }),
+    screenshots,
+    safeEvaluate: async ({ operationName }) => (operationName === 'captcha image copy'
+      ? { value: copy && `data:image/png;base64,${Buffer.from(copy).toString('base64')}` }
+      : { value: { ...form } }),
     fillTextArea: async ({ text, checkEmpty }) => {
       fills.push({ text, checkEmpty });
       form.value = text;
       return { filled: true };
     },
   };
-  const page = { $$: async () => [{ boundingBox: async () => ({ width: 100 }), screenshot: async () => Buffer.from('png') }] };
+  const page = { $$: async () => [{
+    boundingBox: async () => ({ width: 100 }),
+    screenshot: async () => {
+      screenshots.push('element');
+      return Buffer.from('screenshot');
+    },
+  }] };
   return { commander, page };
 }
 
@@ -110,6 +120,29 @@ describe('createCaptchaPrefill', () => {
     await prefill(commander);
     assert.deepEqual(commander.fills, [{ text: 'ab12|ab13', checkEmpty: true }]);
     assert.deepEqual(Object.keys(commander).filter((key) => /click|press|submit|goto/i.test(key)), []);
+  });
+
+  test('the models get the loaded picture in its original size, not a screenshot', async () => {
+    const { commander, page } = fakeCaptchaPage();
+    let image = null;
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async (png) => {
+      image = png.toString();
+      return { text: 'ab12' };
+    } });
+    await prefill(commander);
+    assert.equal(image, 'source');
+    assert.deepEqual(commander.screenshots, []);
+  });
+
+  test('a screenshot of the picture element is the fallback when it cannot be copied', async () => {
+    const { commander, page } = fakeCaptchaPage({ copy: null });
+    let image = null;
+    const prefill = createCaptchaPrefill({ page, saveDir: null, settleMs: 0, solve: async (png) => {
+      image = png.toString();
+      return { text: 'ab12' };
+    } });
+    await prefill(commander);
+    assert.equal(image, 'screenshot');
   });
 
   test('each captcha image is read once', async () => {
