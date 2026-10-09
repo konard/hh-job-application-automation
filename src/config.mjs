@@ -92,6 +92,12 @@ export function createConfig() {
           description: 'Questions without a saved answer: wait for the user to answer them, or skip the vacancy',
           default: getenv('ON_MISSING_ANSWERS', 'wait'),
         })
+        .option('captcha-prefill', {
+          type: 'boolean',
+          description: 'Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna); ' +
+            'it is never sent, you check and send it',
+          default: getenv('CAPTCHA_PREFILL', true),
+        })
         .option('skip-question', {
           type: 'string',
           array: true,

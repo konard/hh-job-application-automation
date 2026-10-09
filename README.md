@@ -241,7 +241,15 @@ because it holds personal data:
 ### Captcha, Pauses and the Chat Panel
 
 - **Captcha**: when hh.ru shows a captcha, the run touches nothing on the page (no clicks,
-  typing, page scripts or navigation) and waits until you have solved it in the browser.
+  page scripts or navigation) and waits until you have solved it in the browser.
+- **Captcha prefill**: meanwhile local Claude Code (Haiku) and Codex (the newest Luna model of
+  your account) read the captcha from a screenshot of its picture, the way
+  [image-to-number](https://github.com/link-assistant/image-to-number) does, and their guess is
+  typed into the empty captcha field: one answer when they agree, both as `haiku|luna` when they
+  don't. It is **never sent**: check it, fix it and send it yourself. Each captcha picture is
+  read once, and a field you are typing in is left alone. A reply that is not a captcha answer
+  (Luna sometimes declines) is dropped. Needs `claude` and `codex` on `PATH`; turn it off with
+  `--no-captcha-prefill`.
 - **Unconfirmed application**: if hh.ru does not mark a vacancy as responded after sending,
   the run waits for you (or stops in unattended runs) instead of opening the next vacancy.
 - **Pauses**: after every opened vacancy, sent or not, the next one waits the same even

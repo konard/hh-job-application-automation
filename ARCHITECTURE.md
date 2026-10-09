@@ -28,6 +28,8 @@ src/
 ├── qa.mjs                    # Q&A matching logic
 ├── qa-database.mjs           # Q&A database operations (Links Notation format)
 ├── deferred-questions.mjs    # Questions answered later and the vacancies waiting for them
+├── captcha.mjs               # Captcha detection; page actions wait while one is shown
+├── captcha-solver.mjs        # Captcha answer prefill by local Claude Code (Haiku) and Codex (Luna)
 ├── config.mjs                # Configuration using lino-arguments
 ├── logging.mjs               # Logging using log-lazy
 ├── hh-selectors.mjs          # Centralized CSS selectors and URL patterns
@@ -157,6 +159,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--confirm` | Steps to confirm on stdin: answers, cover-letter, send, popup, or none | send |
 | `--on-missing-answers` | `wait` for the user or `skip` the vacancy (kept in `deferred-questions.lino`) | wait |
 | `--skip-question` | Skip vacancies that ask a matching question for now; repeatable | - |
+| `--captcha-prefill` | Type the Haiku/Luna guess into the captcha field (never sent) | true |
 | `--max-applications` | Stop after this many applications (0 = no limit) | 0 |
 | `--trace` | Record a browser-commander trace in `logs/traces` | true |
 | `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |

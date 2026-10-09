@@ -22,6 +22,7 @@ import { connectOrLaunchBrowser } from './browser-session.mjs';
 import { startTracing, stopTracing } from './tracing.mjs';
 import { enableConfirmations, withConfirmations } from './confirmations.mjs';
 import { withCaptchaGuard } from './captcha.mjs';
+import { createCaptchaPrefill } from './captcha-solver.mjs';
 import { createDeferredQuestions, formatQuestions } from './deferred-questions.mjs';
 
 const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
@@ -110,8 +111,10 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   }
 
   const orchestrator = createOrchestrator({
-    // Nothing touches the page while hh.ru shows a captcha; the user solves it
-    commander: withConfirmations(withCaptchaGuard(commander)),
+    // Nothing touches the page while hh.ru shows a captcha, except its prefilled answer; the user sends it
+    commander: withConfirmations(withCaptchaGuard(commander, {
+      onCaptcha: argv.captchaPrefill ? createCaptchaPrefill({ page: session.page }) : undefined,
+    })),
     page: session.page,
     argv,
     qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
