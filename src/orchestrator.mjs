@@ -23,12 +23,10 @@ import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
+import { pauseMs } from './pacing.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
-function getRandomIntInclusive(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
 
 /**
  * Create the main automation orchestrator
@@ -79,17 +77,13 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
   let nextApplicationAt = 0;
 
   /**
-   * The next vacancy is opened 1-2 intervals from now, so the load on hh.ru stays low
+   * Schedule the next vacancy (see pacing.mjs), so the load on hh.ru stays low
    * @param {string} reason - What was just done, for the log
    */
   function scheduleNextApplication(reason) {
-    const randomExtraDelaySeconds = getRandomIntInclusive(0, BUTTON_CLICK_INTERVAL / 1000);
-    const totalWaitMs = BUTTON_CLICK_INTERVAL + randomExtraDelaySeconds * 1000;
+    const totalWaitMs = pauseMs({ intervalMs: BUTTON_CLICK_INTERVAL });
     nextApplicationAt = Math.max(nextApplicationAt, Date.now() + totalWaitMs);
-    console.log(
-      `⏳ ${reason}; next vacancy in ${totalWaitMs / 1000} seconds ` +
-        `(base ${BUTTON_CLICK_INTERVAL / 1000}s + random ${randomExtraDelaySeconds}s)`,
-    );
+    console.log(`⏳ ${reason}; next vacancy in ${totalWaitMs / 1000} seconds`);
   }
 
   /**

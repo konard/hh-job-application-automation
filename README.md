@@ -77,8 +77,9 @@ applies to the vacancies hh.ru suggests for it:
   `--login-from chrome` to pick a browser, or `--manual-login` to log in yourself.
 - **Resume** - the suggested vacancies of the most recently updated resume are opened, unless `--url`
   is given.
-- **Pace** - at least `--job-application-interval` seconds (default 60) plus a random extra of up to
-  the same amount pass between applications.
+- **Pace** - `--job-application-interval` seconds (default 240) plus a random extra of up to a
+  quarter of it pass between opened vacancies: 4-5 minutes, which still fits hh.ru's 200
+  applications a day (261-320 a day of continuous work).
 - **Browser lifecycle** - Chrome is closed when the script exits. With `--keep-browser-open` it keeps
   running, the next run reuses it and its open page, and it closes itself after
   `--browser-idle-timeout` minutes (default 30) without use.
@@ -98,8 +99,8 @@ applies to the vacancies hh.ru suggests for it:
    # Enable verbose logging by default
    VERBOSE: true
 
-   # Minimum seconds between opened vacancies (default 180; a random extra up to the same is added)
-   JOB_APPLICATION_INTERVAL: 240
+   # Seconds between opened vacancies (default 240; a random extra up to a quarter is added)
+   JOB_APPLICATION_INTERVAL: 300
 
    # Keep the browser open between runs (closed after 30 idle minutes)
    KEEP_BROWSER_OPEN: true
@@ -181,7 +182,7 @@ bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 ```
 
 You can also send a form yourself in the browser: the run notices the sent application (it
-counts towards `--max-applications`), withdraws its pending question, keeps the 1-2 interval
+counts towards `--max-applications`), withdraws its pending question, keeps the interval
 pause and returns to the vacancy list.
 
 ### Export the Resume and Collect the Stack
@@ -211,8 +212,8 @@ because it holds personal data:
   typing, page scripts or navigation) and waits until you have solved it in the browser.
 - **Unconfirmed application**: if hh.ru does not mark a vacancy as responded after sending,
   the run waits for you (or stops in unattended runs) instead of opening the next vacancy.
-- **Pauses**: after every opened vacancy, sent or not, the next one waits 1-2
-  `--job-application-interval`s (default 180 s, so 3-6 minutes), so hh.ru sees few requests.
+- **Pauses**: after every opened vacancy, sent or not, the next one waits the same even
+  pause (default 4-5 minutes), so hh.ru sees few requests and 200 applications a day still fit.
 - **Chat panel**: hh.ru opens the employer chat after an application; the run closes it.
 
 ### Ignore Questionnaire Vacancies

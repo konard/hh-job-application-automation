@@ -109,8 +109,8 @@ export function createConfig() {
         })
         .option('job-application-interval', {
           type: 'number',
-          description: 'Minimum seconds between opened vacancies; a random extra of up to the same amount is added',
-          default: getenv('JOB_APPLICATION_INTERVAL', 180),
+          description: 'Seconds between opened vacancies; a random extra of up to a quarter is added (default fits 200 applications a day)',
+          default: getenv('JOB_APPLICATION_INTERVAL', 240),
         })
         .option('message', {
           alias: 'm',

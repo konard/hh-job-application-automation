@@ -64,9 +64,9 @@
 # Default: ~/.hh-automation/chrome-profile
 # USER_DATA_DIR: ./user-data
 
-# Minimum seconds between opened vacancies; a random extra of up to the same amount is added
-# Default: 180 (seconds)
-# JOB_APPLICATION_INTERVAL: 180
+# Seconds between opened vacancies; a random extra of up to a quarter is added
+# Default: 240 (4-5 minutes, fits 200 applications a day)
+# JOB_APPLICATION_INTERVAL: 240
 
 # Cover letter sent with every application: MESSAGE or MESSAGE_FILE is required
 # (data/cover-letter.txt holds the cover letter shown in README)

@@ -160,7 +160,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |
 | `--message` / `--message-file` | Cover letter (one of them is required) | - |
 | `--verbose` | Enable debug logging | false |
-| `--job-application-interval` | Minimum seconds between opened vacancies (plus random up to the same) | 180 |
+| `--job-application-interval` | Seconds between opened vacancies (plus random up to a quarter; see `pacing.mjs`) | 240 |
 | `--auto-submit-vacancy-response-form` | Auto-submit forms whose questions are all answered | false |
 
 ## Startup Flow
@@ -174,7 +174,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
    login when needed, and copies the hh.ru cookies into the automation browser.
 3. `resumes.mjs` reads the resumes on the profile page and opens the suggested vacancies of the most
    recently updated one. hh.ru shows no update date now, so its list order is used.
-4. The orchestrator opens vacancies 1-2 intervals apart, pauses while a captcha is shown and
+4. The orchestrator opens vacancies an even pause apart (`pacing.mjs`), pauses while a captcha is shown and
    stops when hh.ru does not confirm an application.
 
 ## Logging
