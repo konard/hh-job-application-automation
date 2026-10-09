@@ -74,13 +74,15 @@ export function enableConfirmations({ steps: confirmSteps, onStop, input = proce
 export const isInteractive = () => interactive;
 
 /**
- * Print a message and wait until the user types `y` (no-op in unattended runs)
+ * Print a message and wait for the user's choice (no-op in unattended runs)
  * @param {string} description
- * @returns {Promise<boolean>} True when confirmed, false when the prompt was withdrawn
+ * @param {Object} [options]
+ * @param {string} [options.skip] - What `s` does; without it `s` is not offered
+ * @returns {Promise<'continue'|'skip'|'withdrawn'>} 'withdrawn' when the page changed meanwhile
  */
-export async function waitForUser(description) {
+export async function askUser(description, { skip } = {}) {
   if (!interactive) {
-    return true;
+    return 'continue';
   }
   let withdraw;
   const withdrawn = new Promise((resolve) => {
@@ -89,17 +91,20 @@ export async function waitForUser(description) {
   pendingPrompts.add(withdraw);
   try {
     for (;;) {
-      console.log(`❓ ${description}\n   Type y to continue, q to stop:`);
+      console.log(`❓ ${description}\n   Type y to continue${skip ? `, s to ${skip}` : ''}, q to stop:`);
       pendingLine ??= lines.next();
       const line = await Promise.race([pendingLine, withdrawn]);
       if (line === null) {
         console.log('↪️  Prompt withdrawn: the page changed in the browser');
-        return false;
+        return 'withdrawn';
       }
       pendingLine = null;
       const answer = line.done ? 'q' : line.value.trim().toLowerCase();
       if (answer === 'y') {
-        return true;
+        return 'continue';
+      }
+      if (answer === 's' && skip) {
+        return 'skip';
       }
       if (answer === 'q') {
         await stop();
@@ -109,6 +114,15 @@ export async function waitForUser(description) {
   } finally {
     pendingPrompts.delete(withdraw);
   }
+}
+
+/**
+ * Print a message and wait until the user types `y` (no-op in unattended runs)
+ * @param {string} description
+ * @returns {Promise<boolean>} True when confirmed, false when the prompt was withdrawn
+ */
+export async function waitForUser(description) {
+  return await askUser(description) === 'continue';
 }
 
 /**

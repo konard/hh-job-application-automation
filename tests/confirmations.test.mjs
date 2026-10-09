@@ -3,7 +3,7 @@
  */
 import { PassThrough } from 'stream';
 import { describe, test, assert } from 'test-anywhere';
-import { enableConfirmations, waitForUser, withdrawPrompt } from '../src/confirmations.mjs';
+import { askUser, enableConfirmations, waitForUser, withdrawPrompt } from '../src/confirmations.mjs';
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -42,5 +42,32 @@ describe('waitForUser', () => {
     await tick();
     withdrawPrompt();
     assert.deepEqual(await Promise.all([first, second]), [false, false]);
+  });
+});
+
+describe('askUser', () => {
+  test('s skips when skipping is offered', async () => {
+    const input = new PassThrough();
+    enableConfirmations({ steps: ['send'], onStop: () => {}, input });
+    const answer = askUser('Answer the open questions', { skip: 'skip this vacancy' });
+    input.write('s\n');
+    assert.equal(await answer, 'skip');
+  });
+
+  test('s is ignored when skipping is not offered', async () => {
+    const input = new PassThrough();
+    enableConfirmations({ steps: ['send'], onStop: () => {}, input });
+    const answer = askUser('Send?');
+    input.write('s\ny\n');
+    assert.equal(await answer, 'continue');
+  });
+
+  test('a withdrawn prompt says so', async () => {
+    const input = new PassThrough();
+    enableConfirmations({ steps: ['send'], onStop: () => {}, input });
+    const answer = askUser('Answer the open questions', { skip: 'skip this vacancy' });
+    await tick();
+    withdrawPrompt();
+    assert.equal(await answer, 'withdrawn');
   });
 });

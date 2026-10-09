@@ -165,7 +165,8 @@ on its own:
 | Option | Values | Effect |
 |--------|--------|--------|
 | `--confirm` | `answers`, `cover-letter`, `send` (default), `popup` (comma-separated), or `none` | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends a form with questions (full form or popup; forms with only a cover letter are sent right away), everything in the short popup form |
-| `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy |
+| `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy (kept in `data/deferred-questions.lino`) |
+| `--skip-question` | text, repeatable | Skip vacancies that ask a matching question for now (see below) |
 | `--max-applications` | number, `0` = no limit | Stop after sending this many applications |
 
 Other buttons are clicked right away. Before a confirmed step the field is scrolled into view
@@ -184,6 +185,37 @@ bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 You can also send a form yourself in the browser: the run notices the sent application (it
 counts towards `--max-applications`), withdraws its pending question, keeps the interval
 pause and returns to the vacancy list.
+
+### Answer Hard Questions Later
+
+Some questions take time to answer well (see
+[the case study](docs/case-studies/hard-question-ai-portfolio/case-study.md)). The run does not
+have to wait for them:
+
+- At the open-questions prompt type `s`: the vacancy is skipped for now, and its ID is kept under
+  each open question in `data/deferred-questions.lino`.
+- A later form whose open question matches a deferred one is skipped right away and added there.
+- `--skip-question "<text>"` skips forms that ask a matching question (a part of it is enough),
+  answered or not. Repeat it for several questions, or pass several values after it:
+
+  ```bash
+  bun run apply -- --message-file data/cover-letter.txt --skip-question "портфель автоматизаций"
+  bun run apply -- --message-file data/cover-letter.txt \
+    --skip-question "портфель автоматизаций" --skip-question "руководить командой"
+  ```
+
+  In `.lenv` or the environment: `SKIP_QUESTIONS: портфель автоматизаций|руководить командой`.
+
+The file has the format of `qa.lino`, with vacancy IDs under each question:
+
+```
+Какой портфель автоматизаций и AI-продуктов вам удалось реализовать? Как считали эффекты для бизнеса?
+  137956393
+```
+
+Its vacancies are not opened again while the question has no answer in `data/qa.lino`. Once you
+add the answer, they are opened like any other vacancy and the answer is filled in; a vacancy you
+have applied to is removed from the file.
 
 ### Export the Resume and Collect the Stack
 

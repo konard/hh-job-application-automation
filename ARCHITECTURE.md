@@ -27,6 +27,7 @@ src/
 ├── vacancy-response.mjs      # Response form handling (cover letter, Q&A)
 ├── qa.mjs                    # Q&A matching logic
 ├── qa-database.mjs           # Q&A database operations (Links Notation format)
+├── deferred-questions.mjs    # Questions answered later and the vacancies waiting for them
 ├── config.mjs                # Configuration using lino-arguments
 ├── logging.mjs               # Logging using log-lazy
 ├── hh-selectors.mjs          # Centralized CSS selectors and URL patterns
@@ -154,7 +155,8 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--browser-port` | Remote debugging port of the automation Chrome | 9322 |
 | `--test-mode` | Preset: `--max-applications 1`, also confirm answers | false |
 | `--confirm` | Steps to confirm on stdin: answers, cover-letter, send, popup, or none | send |
-| `--on-missing-answers` | `wait` for the user or `skip` the vacancy | wait |
+| `--on-missing-answers` | `wait` for the user or `skip` the vacancy (kept in `deferred-questions.lino`) | wait |
+| `--skip-question` | Skip vacancies that ask a matching question for now; repeatable | - |
 | `--max-applications` | Stop after this many applications (0 = no limit) | 0 |
 | `--trace` | Record a browser-commander trace in `logs/traces` | true |
 | `--user-data-dir` | Browser profile directory | `~/.hh-automation/chrome-profile` |
@@ -174,7 +176,9 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
    login when needed, and copies the hh.ru cookies into the automation browser.
 3. `resumes.mjs` reads the resumes on the profile page and opens the suggested vacancies of the most
    recently updated one. hh.ru shows no update date now, so its list order is used.
-4. The orchestrator opens vacancies an even pause apart (`pacing.mjs`), pauses while a captcha is shown and
+4. Vacancies in `data/deferred-questions.lino` whose question has no answer in `qa.lino` yet (or
+   matches `--skip-question`) are marked as processed, so they are not opened.
+5. The orchestrator opens vacancies an even pause apart (`pacing.mjs`), pauses while a captcha is shown and
    stops when hh.ru does not confirm an application.
 
 ## Logging
@@ -201,6 +205,21 @@ Q&A pairs stored in Links Notation format (`data/qa.lino`):
   option2
   option3
 ```
+
+## Deferred Questions
+
+Questions to answer later, with the vacancies that ask them (`data/deferred-questions.lino`, same
+format as `qa.lino`):
+
+```
+Какой портфель автоматизаций и AI-продуктов вам удалось реализовать? Как считали эффекты для бизнеса?
+  137956393
+```
+
+A vacancy is added when the user types `s` at an open-questions prompt, when an open question
+matches a deferred one (a contained fragment, or fuzzy score >= 0.7), when a question matches
+`--skip-question`, or with `--on-missing-answers skip`. It is removed once an application to it is
+sent. See [the case study](docs/case-studies/hard-question-ai-portfolio/case-study.md).
 
 ## Testing
 

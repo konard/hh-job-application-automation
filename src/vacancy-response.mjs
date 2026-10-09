@@ -11,12 +11,14 @@ import {
   fillTextareaQuestion,
   fillRadioQuestion,
   fillCheckboxQuestion,
+  listOpenQuestions,
   setupAutoSaveListeners,
   collectMarkedQAPairs,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
+import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
-import { isInteractive, PromptWithdrawnError, waitForUser } from './confirmations.mjs';
+import { askUser, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import {
@@ -163,26 +165,6 @@ async function prepareCoverLetterTextarea({ commander }) {
 }
 
 /**
- * Questions on the form that still have no answer
- * @returns {Promise<string[]>}
- */
-async function listOpenQuestions(commander) {
-  const items = await extractPageQuestions({ evaluate: commander.evaluate });
-  const choices = new Map(items.filter(({ type }) => type !== 'textarea').map((item) => [item.question, item]));
-  const open = items.filter((item) => {
-    if (item.type !== 'textarea') {
-      return !item.options.some(({ checked }) => checked);
-    }
-    const choice = choices.get(item.question);
-    // The text box of a choice question needs text only for its "Свой вариант" option
-    return choice
-      ? choice.options.some(({ checked, value }) => checked && value === 'open') && !item.currentValue
-      : !item.currentValue;
-  });
-  return [...new Set(open.map(({ question }) => question))];
-}
-
-/**
  * "1 choice, 3 text" style summary of the test questions on the form
  */
 function describeQuestionCounts(choiceCount, textareaCount) {
@@ -230,11 +212,20 @@ export async function handleVacancyResponsePage({
   returnUrl = DEFAULT_RETURN_URL,
   onApplicationSent = async () => {},
   onMissingAnswers = 'wait',
+  deferredQuestions = null,
   verbose,
 }) {
   const skipQuestionnaireVacancy = async () => {
     console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
     await rememberIgnoredVacancy(addIgnoredVacancyId, extractVacancyIdFromResponseUrl(commander.getUrl()));
+    console.log(`Returning to: ${returnUrl}`);
+    await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+  };
+  // Answered later: the vacancy is kept under its questions in deferred-questions.lino
+  const deferVacancy = async (questions) => {
+    const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
+    await deferredQuestions?.defer(questions, vacancyId);
+    console.log(`⏭️  Vacancy ${vacancyId} skipped for now, kept in deferred-questions.lino under:\n${formatQuestions(questions)}`);
     console.log(`Returning to: ${returnUrl}`);
     await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
   };
@@ -298,6 +289,15 @@ export async function handleVacancyResponsePage({
 
     // Auto-fill answers from database, then give user time to review them
     await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
+    if (deferredQuestions) {
+      const questionsToSkip = await deferredQuestions.questionsToSkip({
+        questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
+        openQuestions: await listOpenQuestions({ evaluate: commander.evaluate }),
+      });
+      if (questionsToSkip.length > 0) {
+        return deferVacancy(questionsToSkip);
+      }
+    }
     await commander.wait({ ms: 30000, reason: 'form validation and user review after auto-fill' });
 
     if (!URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
@@ -320,20 +320,26 @@ export async function handleVacancyResponsePage({
       await countEmptyTestTextareas({ commander }) === 0;
 
     if (unansweredCount > 0 || !await isFormComplete()) {
-      const open = await listOpenQuestions(commander);
-      console.log(`Open questions (no saved answer, or it fits none of the options):\n${open.map((question) => `   • ${question}`).join('\n')}`);
+      const open = await listOpenQuestions({ evaluate: commander.evaluate });
+      console.log(`Open questions (no saved answer, or it fits none of the options):\n${formatQuestions(open)}`);
       if (onMissingAnswers === 'skip') {
-        console.log(`Skipping this vacancy (--on-missing-answers skip), returning to: ${returnUrl}`);
-        await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
-        return;
+        console.log('Skipping this vacancy (--on-missing-answers skip)');
+        return deferVacancy(open);
       }
       if (!isInteractive()) {
         console.log('Please answer them and submit the form manually when ready');
         return;
       }
       do {
-        if (!await waitForUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)')) {
+        const choice = await askUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)', {
+          skip: deferredQuestions ? DEFER_CHOICE : undefined,
+        });
+        if (choice === 'withdrawn') {
           return;
+        }
+        if (choice === 'skip') {
+          const stillOpen = await listOpenQuestions({ evaluate: commander.evaluate });
+          return deferVacancy(stillOpen.length > 0 ? stillOpen : open);
         }
       } while (!await isFormComplete());
     }

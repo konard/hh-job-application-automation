@@ -88,6 +88,28 @@ export async function extractPageQuestions(options = {}) {
 }
 
 /**
+ * Questions on the form that still have no answer
+ * @param {Object} options
+ * @param {Function} options.evaluate - Browser commander evaluate function
+ * @returns {Promise<string[]>}
+ */
+export async function listOpenQuestions({ evaluate }) {
+  const items = await extractPageQuestions({ evaluate });
+  const choices = new Map(items.filter(({ type }) => type !== 'textarea').map((item) => [item.question, item]));
+  const open = items.filter((item) => {
+    if (item.type !== 'textarea') {
+      return !item.options.some(({ checked }) => checked);
+    }
+    const choice = choices.get(item.question);
+    // The text box of a choice question needs text only for its "Свой вариант" option
+    return choice
+      ? choice.options.some(({ checked, value }) => checked && value === 'open') && !item.currentValue
+      : !item.currentValue;
+  });
+  return [...new Set(open.map(({ question }) => question))];
+}
+
+/**
  * Extract Q&A pairs from filled forms
  * @param {Object} options - Configuration options
  * @param {Function} options.evaluate - Browser commander evaluate function

@@ -35,10 +35,13 @@ const PAGE_READY_TIMEOUT = 120000;
  * @param {Object} options.page - Raw engine page
  * @param {Object} options.argv - Parsed configuration
  * @param {Object} options.qaDB - { readQADatabase, addOrUpdateQA, addIgnoredVacancyId }
+ * @param {Object} [options.deferredQuestions] - Questions answered later (deferred-questions.mjs)
  * @param {Function} options.onPageClosed - Called when the user closes the tab
  * @returns {Object} Orchestrator with start method
  */
-export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, onApplicationSent = async () => {} }) {
+export function createOrchestrator({
+  commander, page, argv, qaDB, deferredQuestions = null, onPageClosed, onApplicationSent = async () => {},
+}) {
   let START_URL = argv.url;
   const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
 
@@ -97,6 +100,9 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
         return false;
       }
       sentVacancyIds.add(vacancyId);
+      // It no longer waits for an answer
+      await deferredQuestions?.forget(vacancyId)
+        .catch((error) => console.error('Error updating deferred-questions.lino:', error.message));
     }
     await checkpoint('application-sent');
     scheduleNextApplication('Application sent');
@@ -126,6 +132,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
     ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
     returnUrl: lastSearchPageUrl,
     onApplicationSent: afterApplicationSent,
+    deferredQuestions,
     verbose: argv.verbose,
   });
 
@@ -270,6 +277,7 @@ export function createOrchestrator({ commander, page, argv, qaDB, onPageClosed, 
           MESSAGE: argv.message,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
           addIgnoredVacancyId: qaDB.addIgnoredVacancyId,
+          deferredQuestions,
           waitForUrlCondition,
           START_URL,
           pageClosedByUser: getPageClosedByUser,

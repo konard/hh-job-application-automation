@@ -4,12 +4,13 @@
  */
 
 import { isNavigationError } from 'browser-commander';
-import { countUnansweredQuestions } from './qa.mjs';
+import { countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
+import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { closeChatPanel, findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
-import { isInteractive, waitForUser } from './confirmations.mjs';
+import { askUser, isInteractive, waitForUser } from './confirmations.mjs';
 
 /**
  * Handle limit error when detected
@@ -57,6 +58,7 @@ export async function processModalApplication({
   ignoreVacanciesWithQuestionnaire = false,
   vacancyId = null,
   addIgnoredVacancyId = async () => false,
+  deferredQuestions = null,
 }) {
   const textareaSelector = SELECTORS.coverLetterTextareaPopup;
 
@@ -114,18 +116,50 @@ export async function processModalApplication({
     return skipModal({ commander, reason: 'questionnaire_ignored' });
   }
 
+  // Answered later: the vacancy is kept under its questions in deferred-questions.lino
+  const deferModal = async (questions) => {
+    await deferredQuestions?.defer(questions, vacancyId);
+    console.log(`⏭️  Vacancy ${vacancyId} skipped for now, kept in deferred-questions.lino under:\n${formatQuestions(questions)}`);
+    return skipModal({ commander, reason: 'questions_deferred' });
+  };
+  const listOpen = () => listOpenQuestions({ evaluate: commander.evaluate });
+  const countOpen = async () => Math.max(
+    (await countUnansweredQuestions({ evaluate: commander.evaluate, containerSelector: SELECTORS.applicationForm }))
+      .unansweredCount,
+    (await listOpen()).length,
+  );
+
+  const openQuestions = await listOpen();
+  if (deferredQuestions && (totalCount > 0 || modalTextareaCount > 1)) {
+    const questionsToSkip = await deferredQuestions.questionsToSkip({
+      questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
+      openQuestions,
+    });
+    if (questionsToSkip.length > 0) {
+      return deferModal(questionsToSkip);
+    }
+  }
+
   // In interactive runs the user answers instead of the vacancy being skipped
-  let open = unansweredCount;
+  let open = Math.max(unansweredCount, openQuestions.length);
+  if (open > 0) {
+    console.log(`Open questions (no saved answer):\n${formatQuestions(openQuestions)}`);
+  }
   while (open > 0 && isInteractive()) {
-    await waitForUser(`Answer the ${open} open question(s) in the application popup`);
-    ({ unansweredCount: open } = await countUnansweredQuestions({
-      evaluate: commander.evaluate,
-      containerSelector: SELECTORS.applicationForm,
-    }));
+    const choice = await askUser(`Answer the ${open} open question(s) in the application popup`, {
+      skip: deferredQuestions ? DEFER_CHOICE : undefined,
+    });
+    if (choice === 'skip') {
+      return deferModal(await listOpen());
+    }
+    open = await countOpen();
   }
 
   if (open > 0) {
     console.log(`⚠️  Found ${open} UNANSWERED test question(s) in modal`);
+    if (deferredQuestions) {
+      return deferModal(await listOpen());
+    }
     console.log('💡 Skipping this vacancy - cannot auto-submit when test questions remain unanswered');
     return skipModal({ commander, reason: 'unanswered_questions' });
   }
@@ -492,6 +526,7 @@ export async function findAndProcessVacancyButton({
   MESSAGE,
   ignoreVacanciesWithQuestionnaire = false,
   addIgnoredVacancyId = async () => false,
+  deferredQuestions = null,
   waitForUrlCondition,
   START_URL,
   pageClosedByUser,
@@ -545,6 +580,7 @@ export async function findAndProcessVacancyButton({
     ignoreVacanciesWithQuestionnaire,
     vacancyId,
     addIgnoredVacancyId,
+    deferredQuestions,
   });
   if (!submitResult.success) {
     return { status: 'modal_processing_failed', reason: submitResult.reason, vacancyId };

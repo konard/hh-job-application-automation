@@ -22,6 +22,7 @@ import { connectOrLaunchBrowser } from './browser-session.mjs';
 import { startTracing, stopTracing } from './tracing.mjs';
 import { enableConfirmations, withConfirmations } from './confirmations.mjs';
 import { withCaptchaGuard } from './captcha.mjs';
+import { createDeferredQuestions, formatQuestions } from './deferred-questions.mjs';
 
 const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
@@ -60,6 +61,19 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
 
   if (argv.verbose) {
     enableDebugLevel();
+  }
+
+  // Vacancies whose questions are answered later are not opened until then
+  const deferredQuestions = createDeferredQuestions(path.join(process.cwd(), 'data', 'deferred-questions.lino'), {
+    skipQuestions: argv.skipQuestions,
+  });
+  if (argv.skipQuestions.length > 0) {
+    console.log(`⏭️  Skipping vacancies that ask:\n${formatQuestions(argv.skipQuestions)}`);
+  }
+  const deferredVacancyIds = await deferredQuestions.pendingVacancyIds(await readQADatabase());
+  deferredVacancyIds.forEach(markVacancyAsProcessed);
+  if (deferredVacancyIds.size > 0) {
+    console.log(`Loaded ${deferredVacancyIds.size} vacancy ID(s) that wait for answers in data/deferred-questions.lino`);
   }
 
   if (argv.ignoreVacanciesWithQuestionnaire) {
@@ -101,6 +115,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     page: session.page,
     argv,
     qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
+    deferredQuestions,
     onPageClosed: () => shutdown('Tab close detected'),
     onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),

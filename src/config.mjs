@@ -92,6 +92,13 @@ export function createConfig() {
           description: 'Questions without a saved answer: wait for the user to answer them, or skip the vacancy',
           default: getenv('ON_MISSING_ANSWERS', 'wait'),
         })
+        .option('skip-question', {
+          type: 'string',
+          array: true,
+          description: 'Skip vacancies that ask this question (or a part of it) for now; repeat for several. ' +
+            'They are kept in data/deferred-questions.lino',
+          default: getenv('SKIP_QUESTIONS', ''),
+        })
         .option('max-applications', {
           type: 'number',
           description: 'Stop after sending this many applications (0 = no limit)',
@@ -146,6 +153,11 @@ export function createConfig() {
   if (!config.message.trim() && !config.help) {
     throw new Error('Choose a cover letter: --message-file <file> (e.g. data/cover-letter.txt) or --message "<text>"');
   }
+  // SKIP_QUESTIONS holds several questions separated by |
+  config.skipQuestions = [config.skipQuestion ?? []].flat()
+    .flatMap((question) => String(question).split('|'))
+    .map((question) => question.trim())
+    .filter(Boolean);
   config.confirmSteps = config.confirm === 'none' ? []
     : config.confirm.split(',').map((step) => step.trim()).filter(Boolean);
   if (config.testMode) {

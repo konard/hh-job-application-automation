@@ -52,6 +52,11 @@
 # Default: wait
 # ON_MISSING_ANSWERS: wait
 
+# Skip vacancies that ask these questions (a part of a question is enough) for now,
+# separated by |; they are kept in data/deferred-questions.lino until answered in qa.lino
+# Default: none
+# SKIP_QUESTIONS: портфель автоматизаций|руководить командой
+
 # Stop after sending this many applications (0 = no limit)
 # Default: 0
 # MAX_APPLICATIONS: 10
