@@ -70,6 +70,12 @@ export function enableConfirmations({ steps: confirmSteps, onStop, input = proce
   pendingLine = null;
 }
 
+/**
+ * The next stdin line, stamped with the time it arrived
+ * @returns {Promise<{done: boolean, value?: string, at: number}>}
+ */
+const nextLine = () => lines.next().then((line) => ({ ...line, at: Date.now() }));
+
 /** Whether someone answers on stdin, so the run can wait for them */
 export const isInteractive = () => interactive;
 
@@ -89,16 +95,28 @@ export async function askUser(description, { skip } = {}) {
     withdraw = () => resolve(null);
   });
   pendingPrompts.add(withdraw);
+  // Only answers typed after this question was shown count: one meant for a withdrawn prompt
+  // must not confirm the next step
+  const shownAt = Date.now();
+  let ask = true;
   try {
     for (;;) {
-      console.log(`❓ ${description}\n   Type y to continue${skip ? `, s to ${skip}` : ''}, q to stop:`);
-      pendingLine ??= lines.next();
+      if (ask) {
+        console.log(`❓ ${description}\n   Type y to continue${skip ? `, s to ${skip}` : ''}, q to stop:`);
+      }
+      ask = true;
+      pendingLine ??= nextLine();
       const line = await Promise.race([pendingLine, withdrawn]);
       if (line === null) {
         console.log('↪️  Prompt withdrawn: the page changed in the browser');
         return 'withdrawn';
       }
       pendingLine = null;
+      if (!line.done && line.at < shownAt) {
+        console.log(`↪️  Ignored "${line.value.trim()}": it was typed before this question`);
+        ask = false;
+        continue;
+      }
       const answer = line.done ? 'q' : line.value.trim().toLowerCase();
       if (answer === 'y') {
         return 'continue';

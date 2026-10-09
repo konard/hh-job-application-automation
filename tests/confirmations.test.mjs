@@ -71,3 +71,26 @@ describe('askUser', () => {
     assert.equal(await answer, 'withdrawn');
   });
 });
+
+describe('answers typed for a withdrawn prompt', () => {
+  test('do not confirm the next prompt', async () => {
+    const input = new PassThrough();
+    enableConfirmations({ steps: ['send'], onStop: () => {}, input });
+    const first = waitForUser('Send the first form?');
+    await tick();
+    withdrawPrompt(); // the form was sent in the browser
+    assert.equal(await first, false);
+    input.write('y\n'); // the answer to the first form arrives late
+    await tick();
+
+    let confirmed = false;
+    const next = waitForUser('Send the second form?').then((answer) => {
+      confirmed = answer;
+    });
+    await tick();
+    assert.equal(confirmed, false);
+    input.write('y\n'); // a fresh answer to the second form
+    await next;
+    assert.equal(confirmed, true);
+  });
+});
