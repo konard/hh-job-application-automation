@@ -3,7 +3,7 @@
  * Issue #74: Saved questions are not filled on vacancy response page form
  */
 import { describe, test, assert } from 'test-anywhere';
-import { extractSubjectTerms, findBestMatch } from '../src/qa-database.mjs';
+import { extractSubjectTerms, findBestMatch, toFormalAddress } from '../src/qa-database.mjs';
 
 // Test data simulating real Q&A database
 const qaDatabase = new Map([
@@ -247,5 +247,40 @@ describe('Subject terms (technology and role names)', () => {
   test('sharing only generic question words is not a match', () => {
     const cities = new Map([['Подскажите, в каком городе Вы проживаете?', 'В Гоа, в Индии.']]);
     assert.equal(findBestMatch('Подскажите, пожалуйста, на каком стеке вы разрабатываете?', cities), null);
+  });
+});
+
+describe('Informal address', () => {
+  test('pronouns and 2nd person verbs become formal', () => {
+    assert.equal(toFormalAddress('тебя'), 'вас');
+    assert.equal(toFormalAddress('твои'), 'ваши');
+    assert.equal(toFormalAddress('планируешь'), 'планируете');
+    assert.equal(toFormalAddress('видишь'), 'видите');
+  });
+
+  test('short words ending in -шь stay', () => {
+    assert.equal(toFormalAddress('лишь'), 'лишь');
+    assert.equal(toFormalAddress('мышь'), 'мышь');
+  });
+
+  test('a question asked with "ты" finds the answer saved for "вы"', () => {
+    const db = new Map([
+      ['Какой у вас уровень английского языка?', 'C1'],
+      ['Из какой локации вы планируете работать?', 'Из Нячанга, Вьетнам.'],
+    ]);
+    assert.equal(findBestMatch('Какой у тебя уровень английского языка?', db)?.answer, 'C1');
+    assert.equal(findBestMatch('Из какой локации ты планируешь работать? Страна/город', db)?.answer, 'Из Нячанга, Вьетнам.');
+  });
+
+  test('sharing only generic words is no match', () => {
+    const db = new Map([
+      ['От какой суммы рассматриваете предложения о работе?', 'От 450000 рублей'],
+      ['Какой у вас опыт?', '15 лет'],
+      ['5. Есть ли опыт работы с ГИТ?', 'Да'],
+    ]);
+    assert.equal(findBestMatch('В связи с чем вы сейчас рассматриваете предложения о работе?', db), null);
+    assert.equal(findBestMatch('Какой у тебя опыт работа с базами данных?', db), null);
+    assert.equal(findBestMatch('6. Есть ли опыт работы с Докер?', db), null);
+    assert.equal(findBestMatch('От какой минимальной суммы рассматриваешь предложения?', db)?.answer, 'От 450000 рублей');
   });
 });

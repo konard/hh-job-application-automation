@@ -423,7 +423,30 @@ export function normalizeQuestion(question) {
     .toLowerCase()
     .replace(/[.,!?;:]/g, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .split(' ')
+    .map(toFormalAddress)
+    .join(' ');
+}
+
+// "Какие твои ожидания?" and "Какие ваши ожидания?" ask the same
+const FORMAL_PRONOUNS = {
+  ты: 'вы', тебя: 'вас', тебе: 'вам', тобой: 'вами', твой: 'ваш', твоя: 'ваша', твоё: 'ваше', твое: 'ваше',
+  твои: 'ваши', твоего: 'вашего', твоей: 'вашей', твоих: 'ваших', твоим: 'вашим', твоими: 'вашими',
+  твою: 'вашу', твоём: 'вашем', твоем: 'вашем', твоему: 'вашему',
+};
+
+/**
+ * A lowercase word in the formal address: pronouns, and 2nd person singular verbs
+ * ("планируешь" -> "планируете", "видишь" -> "видите"); short words such as "лишь" stay
+ * @param {string} word
+ * @returns {string}
+ */
+export function toFormalAddress(word) {
+  if (FORMAL_PRONOUNS[word]) {
+    return FORMAL_PRONOUNS[word];
+  }
+  return word.length > 5 ? word.replace(/([еи])шь$/u, '$1те') : word;
 }
 
 const STOPWORDS = new Set([
@@ -439,6 +462,7 @@ const GENERIC_QUESTION_WORDS = new Set([
   'какой', 'какая', 'какое', 'какие', 'каком', 'какую', 'каких', 'какого', 'каким',
   'ваш', 'ваша', 'ваше', 'ваши', 'вашей', 'вашего', 'вам', 'вас', 'вами', 'твой', 'тебя', 'тебе',
   'есть', 'ли', 'был', 'была', 'было', 'были', 'у',
+  'опыт', 'опыта', 'опытом', 'себя', 'рассматриваете', 'работы', 'работа', 'работе', 'работу', 'работать', 'предложения', 'сейчас',
 ]);
 
 /**
