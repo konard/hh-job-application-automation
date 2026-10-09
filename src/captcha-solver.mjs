@@ -34,6 +34,8 @@ export const CLAUDE_MODEL = 'claude-haiku-5-5';
 /** Used when the Codex model catalog cannot be read */
 export const FALLBACK_LUNA_MODEL = 'gpt-6-luna';
 const SOLVER_TIMEOUT_MS = 90000;
+/** Reasoning effort of both readers, set here so it does not depend on the user's CLI settings */
+export const READER_EFFORT = 'low';
 const IMAGE_NAME = 'image.png';
 
 const PROMPT = 'I am logged in to my own hh.ru account and it shows me a captcha. Your reading is only typed into ' +
@@ -143,7 +145,8 @@ function readAnswer(name, reply) {
 /** Ask Claude Code (Haiku) for the text in image.png of the directory */
 async function askClaude(dir) {
   return readAnswer('Haiku', await run('claude', [
-    '-p', `${IMAGE_NAME}\n\n${PROMPT}`, '--model', CLAUDE_MODEL, '--allowedTools', 'Read', '--output-format', 'text',
+    '-p', `${IMAGE_NAME}\n\n${PROMPT}`, '--model', CLAUDE_MODEL, '--effort', READER_EFFORT,
+    '--allowedTools', 'Read', '--output-format', 'text',
   ], { cwd: dir }));
 }
 
@@ -151,7 +154,7 @@ async function askClaude(dir) {
 async function askCodex(dir) {
   const answerFile = path.join(dir, 'codex-answer.txt');
   await run('codex', [
-    'exec', '-m', await resolveLunaModel(), '-c', 'model_reasoning_effort=low', '--skip-git-repo-check', '--ephemeral',
+    'exec', '-m', await resolveLunaModel(), '-c', `model_reasoning_effort=${READER_EFFORT}`, '--skip-git-repo-check', '--ephemeral',
     '-s', 'read-only', '-i', IMAGE_NAME, '-o', answerFile, PROMPT,
   ], { cwd: dir });
   return readAnswer('Luna', await readFile(answerFile, 'utf8'));
