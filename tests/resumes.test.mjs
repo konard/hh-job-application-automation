@@ -80,6 +80,10 @@ describe('parseResumeState()', () => {
     const html = `<html><template class="CareerPlatformFront-InitialState">{"a":1}</template><template style="display: none" class="ResumeProfileFront-InitialState">${stateText}</template></html>`;
     assert.equal(resumeStateFromHtml(html), stateText);
     assert.equal(resumeStateFromHtml('<html></html>'), null);
+    // As hh.ru serves it: the JSON's quotes are &quot; entities
+    const served = `<template class="ResumeProfileFront-InitialState">${stateText.replace(/"/g, '&quot;')}</template>`;
+    assert.equal(resumeStateFromHtml(served), stateText);
+    assert.equal(parseResumeState(resumeStateFromHtml(served)).resumes.length, 3);
   });
 });
 

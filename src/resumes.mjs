@@ -104,11 +104,28 @@ export function parseResumeState(text) {
  */
 export function resumeStateFromHtml(html) {
   for (const match of String(html).matchAll(/<template\b[^>]*InitialState[^>]*>([\s\S]*?)<\/template>/g)) {
-    if (match[1].includes('"applicantResumes"')) {
-      return match[1];
+    // The page as served encodes the JSON's quotes (&quot;); a page saved from the DOM does not
+    const state = decodeEntities(match[1]);
+    if (state.includes('"applicantResumes"')) {
+      return state;
     }
   }
   return null;
+}
+
+/**
+ * Text with its HTML entities decoded: &quot; &amp; &lt; &gt; &#39; and numeric ones
+ * @param {string} text
+ * @returns {string}
+ */
+function decodeEntities(text) {
+  const named = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", nbsp: '\u00a0' };
+  return text.replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity, code) => {
+    if (code[0] === '#') {
+      return String.fromCodePoint(code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1)));
+    }
+    return named[code.toLowerCase()] ?? entity;
+  });
 }
 
 /**

@@ -46,7 +46,7 @@ export async function withFileLock(file, fn, { timeoutMs = 30000, staleMs = 6000
       if (Date.now() - started > timeoutMs) {
         throw new Error(`${file} is locked by another process for more than ${timeoutMs / 1000} s (remove ${lock} if no process uses it)`);
       }
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
   }
   try {
