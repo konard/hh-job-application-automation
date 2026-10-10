@@ -354,6 +354,6 @@ A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, 
 requirement (contacts as placeholders), listed in both places. Section D of forms-and-chats.md (rules for
 all of it) is covered by SEC, PACE6 and PROC1.
 
-Open work, in order: live checks of the chat items (C4, C7, C9–C12), LinkedIn login (LOGIN7) and the LinkedIn side of the experience sync (EXP2, EXP4) (EXP1–EXP7), saving sent external-form
+Open work, in order: live checks of the chat items (C4, C7, C9–C12), LinkedIn login (LOGIN7) and the LinkedIn side of the experience sync (EXP2, EXP4), saving sent external-form
 answers (B14), the most recently updated resume (RUN2), on-site-only vacancy filtering (FLT5), and the
 upstream trace gaps (TRACE1, TRACE3).
