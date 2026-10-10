@@ -290,6 +290,49 @@ async function toggleMarked(page) {
 }
 
 /**
+ * Add skills to the open position form from the skill picker: each skill is typed and the
+ * suggestion that is exactly it is chosen. A profile at LinkedIn's 100-skill limit only takes
+ * skills already in its Skills section; the others are left for the user
+ * @param {Object} page
+ * @param {string[]} skills
+ * @returns {Promise<{added: string[], missing: string[]}>}
+ */
+export async function addLinkedInSkills(page, skills) {
+  const added = [];
+  const missing = [];
+  const input = page.locator('input[placeholder^="Skill"], input[placeholder^="Навык"]').first();
+  for (const skill of skills) {
+    if (!await input.isVisible().catch(() => false)) {
+      await page.getByRole('button', { name: /^(Add skill|Добавить навык)$/ }).first().click().catch(() => {});
+    }
+    if (!await input.isVisible().catch(() => false)) {
+      missing.push(skill);
+      continue;
+    }
+    await input.fill(skill);
+    await sleep(2000);
+    const option = page.getByRole('option', { name: skill, exact: true }).first();
+    if (await option.isVisible().catch(() => false)) {
+      await option.click().catch(() => {});
+      await sleep(800);
+    }
+    // A chosen skill shows as a checked chip; a skill outside the profile's Skills section is not taken
+    const chosen = await page.evaluate((name) => [...document.querySelectorAll('input[type="checkbox"]')]
+      .some((box) => box.checked && box.labels?.[0]?.innerText.trim().toLowerCase() === name.toLowerCase()), skill).catch(() => false);
+    if (chosen) {
+      added.push(skill);
+    } else {
+      if (await input.isVisible().catch(() => false)) {
+        await input.fill('');
+      }
+      missing.push(skill);
+    }
+  }
+  await page.evaluate(() => document.activeElement?.blur?.()).catch(() => {});
+  return { added, missing };
+}
+
+/**
  * Close the suggestion list a typed field opened, the way a person does: the suggestion that is
  * exactly the typed value is chosen, else the form's heading is clicked; no field is left focused
  * @param {Object} page
@@ -357,7 +400,13 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
   }
   await closeSuggestions(page);
   if (change.fields.skills?.length) {
-    notes.push(`LinkedIn: add the skills yourself in the form: ${change.fields.skills.join(', ')}`);
+    const { added, missing } = await addLinkedInSkills(page, change.fields.skills);
+    if (added.length) {
+      notes.push(`LinkedIn: skills added: ${added.join(', ')}`);
+    }
+    if (missing.length) {
+      notes.push(`LinkedIn: not among the profile's skills (LinkedIn allows 100), add them yourself if needed: ${missing.join(', ')}`);
+    }
   }
   return notes;
 }

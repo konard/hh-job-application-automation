@@ -525,7 +525,7 @@ export function planSync(diff, to, translate = (text) => text) {
         const missing = to === 'linkedin' ? difference.onlyHh : difference.onlyLinkedin;
         if (missing.length > 0) {
           fields.skills = missing;
-          notes.push(to === 'hh' ? 'hh.ru keeps skills for the whole resume, not per job: add them to «Навыки» if they are missing there' : 'LinkedIn skills are added one by one in the position form');
+          notes.push(to === 'hh' ? 'hh.ru keeps skills for the whole resume, not per job: add them to «Навыки» if they are missing there' : 'LinkedIn skills are picked in the position form from the profile skills');
         }
       }
     }

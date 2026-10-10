@@ -98,3 +98,7 @@ Haiku 26, Luna 27. Haiku's translation is used; Formal AI is run and reported on
 3. `bun run experience -- sync --to linkedin`: check that each LinkedIn position form is prefilled
    (title, company, dates, description); type `s` to discard or `y` to save (E2, E3, E6).
 4. `bun run experience -- sync --to hh`: same on hh.ru (E2, E3, E6).
+
+### LinkedIn skills and media (2026-10-11)
+
+«what are media? And can we preselect some skills?» A position's skills are chosen in its form from the skill picker: each skill is typed and the suggestion that is exactly it is chosen (`addLinkedInSkills` in `src/experience-sites.mjs`). The profile is at LinkedIn's 100-skill limit, so only skills already in its Skills section are taken (Kaiten: iOS and Android added, ClickUp is not among them and is left for the user). Media (images, documents, links, presentations attached to a position) is not touched.
