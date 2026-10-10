@@ -205,8 +205,11 @@ export function setFieldByLabel({ label, value, kind, group }) {
     return `no field labelled ${label}${group ? ` in ${group}` : ''}`;
   }
   if (kind === 'checkbox') {
+    // A styled checkbox is toggled by a real click on its label (the caller does it): a click
+    // from the page script leaves the box and the form's state apart
     if (control.checked !== Boolean(value)) {
-      control.click();
+      control.setAttribute('data-hh-automation-toggle', '');
+      return 'toggle';
     }
     return null;
   }
@@ -268,6 +271,25 @@ const fieldsOfLinkedIn = (fields) => {
 };
 
 /**
+ * Toggle the checkbox setFieldByLabel marked, with a real click on its label (or on the box)
+ * @param {Object} page
+ * @returns {Promise<string|null>} Why it was not toggled, or null
+ */
+async function toggleMarked(page) {
+  const box = page.locator('[data-hh-automation-toggle]').first();
+  const id = await box.getAttribute('id').catch(() => null);
+  const label = id ? page.locator(`label[for="${id}"]`).first() : null;
+  const before = await box.isChecked().catch(() => null);
+  if (label && await label.isVisible().catch(() => false)) {
+    await label.click().catch(() => {});
+  } else {
+    await box.click({ force: true }).catch(() => {});
+  }
+  await box.evaluate((element) => element.removeAttribute('data-hh-automation-toggle')).catch(() => {});
+  return await box.isChecked().catch(() => before) === before ? 'the checkbox did not change' : null;
+}
+
+/**
  * Close the suggestion list a typed field opened, the way a person does: the suggestion that is
  * exactly the typed value is chosen, else the form's heading is clicked; no field is left focused
  * @param {Object} page
@@ -316,7 +338,10 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
     notes.push('LinkedIn: «Notify network» switched off');
   }
   for (const field of fieldsOfLinkedIn(change.fields)) {
-    const problem = await page.evaluate(setFieldByLabel, field).catch((error) => error.message.split('\n')[0]);
+    let problem = await page.evaluate(setFieldByLabel, field).catch((error) => error.message.split('\n')[0]);
+    if (problem === 'toggle') {
+      problem = await toggleMarked(page);
+    }
     if (problem) {
       notes.push(`LinkedIn: ${problem}`);
     }
