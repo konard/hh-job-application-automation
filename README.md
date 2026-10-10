@@ -275,7 +275,8 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   one place; contact values in answers you save are stored as placeholders.
 - The report (every question, its source and answer) is printed and saved to `logs/forms/`.
 
-See [the requirements](docs/requirements/forms-and-chats.md) for what is done and what is planned.
+See [the requirements](docs/requirements/forms-and-chats.md) for what is done and what is planned,
+and [the full list of requirements](docs/requirements/README.md) for everything else.
 
 ### Export the Resume and Collect the Stack
 
