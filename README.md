@@ -294,6 +294,9 @@ browser. For the message waiting for an answer the reply is typed into the messa
   drafts the reply from the chat, the resume and saved answers;
 - questionnaire links (and hh.ru's employer rating poll) are prefilled in form slots;
 - what you have answered in chats is learned into `qa.lino` and `chat-templates.lino`.
+  Template messages you answered the same way are generalized into patterns, e.g.
+  `pattern: ваше резюме … опыт* … позиции … свяже* с вами` (shared words in order, `…` for any
+  words, `*` for any ending), which match other companies' wordings of the same message.
 
 `--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
 quick replies are never clicked.

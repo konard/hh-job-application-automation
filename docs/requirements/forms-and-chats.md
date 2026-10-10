@@ -40,6 +40,8 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
     https://rating.hh.ru/poll)
 13. «We also need to develop ability to export both linked in and hh.ru working experince and display differences, that
     needs to be synced …» — see [experience-sync.md](experience-sync.md)
+14. «we can also can have a feature of `learning` messages and answers, and if the answer is the same or similar we can
+    learn updated regex/peg like templates from multiple of them.» (Технократия's «Ваше резюме принято в работу…»)
 
 ## A. hh.ru application forms
 
@@ -89,6 +91,7 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 | C9 | Rejections are read automatically: a closed chat («Переписка будет доступна после приглашения работодателя») is only opened (read); when a reply is possible, the saved rejection reply asking for the reason is typed, not sent (`Отказ` in chat-templates.lino: «Здравствуйте, а можете раскрыть конкретнее причины отказа? Если это вилка зарплатных ожиданий, может быть мы можем рассмотреть другие варианты вместе?») | VK «Отказ» chat: read; an open one: the reply typed | 🧪 |
 | C10 | Questionnaire links sent in chats (Google Forms, Yandex Forms, Microsoft Forms, Typeform) are prefilled in a free form slot (B1–B13) | Maria's «анкета: https://forms.gle/NTRexHv7bxQQxnKZA» → form slot | 🧪 |
 | C11 | hh.ru's employer rating poll (https://rating.hh.ru/poll) from a chat opens in a form slot logged in to hh.ru with the company typed into the search; the ratings are the user's to choose (never invented, never submitted) | Контур's message → rating poll slot | 🧪 |
+| C12 | Template messages answered the same (or a similar) way are generalized into learned patterns in chat-templates.lino: the words they share in order, `…` for what differs, `*` for word endings; patterns are learned again whenever a new template reply is learned, a different template with the same reply stays apart, a question never matches a pattern | Ирина's and Технократия's messages → `pattern: ваше резюме … опыт* … позиции … свяже* с вами`; `tests/chat-answers.test.mjs` | 🧪 |
 
 ## D. Rules for all of it
 

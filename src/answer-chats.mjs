@@ -20,7 +20,7 @@ import { createQADatabase, findBestMatch } from './qa-database.mjs';
 import { askClaude, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms } from './form-slots.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
@@ -86,12 +86,21 @@ async function learn(messages) {
     }
   }
   const known = await templatesDb.readQADatabase();
+  const examples = new Map([...known].filter(([key]) => !isPattern(key)));
+  let learned = false;
   for (const [message, reply] of templates) {
-    if (!findBestMatch(message, known, { threshold: TEMPLATE_THRESHOLD })) {
-      await templatesDb.addOrUpdateQA(message, reply);
-      known.set(message, reply);
+    if (!findBestMatch(message, examples, { threshold: TEMPLATE_THRESHOLD })) {
+      examples.set(message, reply);
+      learned = true;
       console.log(`💾 Learned a template reply (chat-templates.lino): ${message.split('\n')[0]}`);
     }
+  }
+  if (learned) {
+    // Template messages answered the same way are generalized into patterns
+    const updated = withLearnedPatterns(examples);
+    [...updated.keys()].filter((key) => isPattern(key) && !known.has(key))
+      .forEach((key) => console.log(`🧩 Learned a template pattern: ${key}`));
+    await templatesDb.writeQADatabase(updated);
   }
 }
 

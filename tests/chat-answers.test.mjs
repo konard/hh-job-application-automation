@@ -3,7 +3,8 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import {
-  formLinks, isRejection, knownReply, learnedPairs, pendingMessages, REJECTION_KEY, templateCore,
+  formLinks, isPattern, isRejection, knownReply, learnedPairs, learnPatterns, matchesPattern, pendingMessages, PATTERN_PREFIX,
+  REJECTION_KEY, templateCore, withLearnedPatterns,
 } from '../src/chat-answers.mjs';
 
 const templates = new Map([
@@ -70,5 +71,39 @@ describe('chat answers', () => {
   test('questionnaire links, the hh.ru rating poll among them', () => {
     assert.deepEqual(formLinks([{ text: 'Анкета: https://forms.gle/abc123 и рейтинг https://rating.hh.ru/poll.' }]),
       ['https://forms.gle/abc123', 'https://rating.hh.ru/poll']);
+  });
+});
+
+describe('template patterns', () => {
+  const reply = 'Здравствуйте, благодарю, ожидаю.';
+  const examples = new Map([
+    ['Рассмотрим ваше резюме. Если навыки и опыт подойдут для позиции, мы свяжемся с вами.', reply],
+    ['Сообщаем, что Ваше резюме принято в работу. После рассмотрения, в случае соответствия параметров резюме и рабочего опыта требованиям по данной позиции, наш специалист обязательно свяжется с Вами. Хорошего дня!', reply],
+    ['Спасибо, что откликнулись на вакансию. В течение двух рабочих дней мы изучим ваше резюме. После этого напишем или позвоним вам.', reply],
+    [REJECTION_KEY, 'Подскажите, пожалуйста, причину отказа?'],
+  ]);
+
+  test('messages answered the same way are generalized: shared words in order, gaps, word endings', () => {
+    const patterns = learnPatterns(examples);
+    assert.deepEqual([...patterns], [[`${PATTERN_PREFIX}ваше резюме … опыт* … позиции … свяже* с вами`, reply]]);
+  });
+
+  test('a different template with the same reply stays apart, a single example makes no pattern', () => {
+    assert.equal(learnPatterns(new Map([...examples].slice(2))).size, 0);
+  });
+
+  test('another wording matches the pattern; a question or another message does not', () => {
+    const templates = withLearnedPatterns(examples);
+    const other = 'Анна, добрый день!\nМы получили ваше резюме. Если ваш опыт подойдёт для этой позиции, наш рекрутер свяжется с вами.';
+    assert.equal(knownReply({ title: '', text: other }, { templates, qaMap })?.answer, reply);
+    assert.ok(matchesPattern('ваше резюме … свяже* с вами', 'Ваше резюме у нас, свяжемся с вами'));
+    assert.equal(knownReply({ title: '', text: 'Ваше резюме подходит, опыт есть, по позиции свяжемся с вами, когда удобно?' }, { templates, qaMap }), null);
+    assert.equal(knownReply({ title: '', text: 'Пришлите, пожалуйста, портфолио.' }, { templates, qaMap }), null);
+  });
+
+  test('learning again replaces old patterns', () => {
+    const stale = new Map([...examples, [`${PATTERN_PREFIX}старый шаблон`, reply]]);
+    assert.ok(!withLearnedPatterns(stale).has(`${PATTERN_PREFIX}старый шаблон`));
+    assert.ok([...withLearnedPatterns(stale).keys()].some(isPattern));
   });
 });

@@ -8,11 +8,13 @@
  *   greeting with the user's name and the sender's signature, which differ between companies
  * - Anything else is drafted by local Claude Code from the resume and saved answers
  * - Answers the user has sent in chats are learned: question → qa.lino, template → chat-templates
+ * - Template messages answered the same way are generalized into patterns («pattern: ваше резюме …
+ *   свяж* с вами»): the words they share in order, `…` for what differs, `*` for a word's ending
  *
  * @module chat-answers
  */
 
-import { findBestMatch, normalizeQuestion } from './qa-database.mjs';
+import { findBestMatch, normalizeQuestion, stringSimilarity } from './qa-database.mjs';
 import { answerText } from './qa.mjs';
 
 /** A template message is the same text in other words; its saved reply needs a close match */
@@ -134,13 +136,16 @@ export function knownReply(message, { templates, qaMap }) {
     return { answer: answerText(templates.get(REJECTION_KEY)), source: 'rejection: asking for the reason', matched: REJECTION_KEY };
   }
   const core = templateCore(message.text, { sender: message.title });
+  const examples = new Map([...templates].filter(([key]) => !isPattern(key)));
   // A template inside a longer message (a company adds a paragraph of its own) is still that template
   const flat = normalizeQuestion(core);
-  const contained = [...templates.keys()].find((key) => key !== REJECTION_KEY && normalizeQuestion(key).length > 20 &&
+  const contained = [...examples.keys()].find((key) => key !== REJECTION_KEY && normalizeQuestion(key).length > 20 &&
     flat.includes(normalizeQuestion(key)));
-  const template = contained
-    ? { question: contained, answer: templates.get(contained), score: 1 }
-    : findBestMatch(core, templates, { threshold: TEMPLATE_THRESHOLD });
+  // A learned pattern matches other wordings of the same template; a question is not a template
+  const pattern = !contained && !isQuestion(core) && [...templates.keys()].find((key) => isPattern(key) && matchesPattern(key, core));
+  const template = contained || pattern
+    ? { question: contained || pattern, answer: templates.get(contained || pattern), score: 1 }
+    : findBestMatch(core, examples, { threshold: TEMPLATE_THRESHOLD });
   if (template) {
     return { answer: answerText(template.answer), source: `chat-templates.lino ${template.score.toFixed(2)}`, matched: template.question };
   }
@@ -151,6 +156,162 @@ export function knownReply(message, { templates, qaMap }) {
     }
   }
   return null;
+}
+
+/** Prefix of a learned pattern in data/chat-templates.lino */
+export const PATTERN_PREFIX = 'pattern: ';
+const GAP = '…';
+
+/** @param {string} key @returns {boolean} */
+export const isPattern = (key) => key.startsWith(PATTERN_PREFIX);
+
+/** Words of a message for patterns: lowercase, without punctuation, ё as е */
+const patternWords = (text) => normalizeQuestion(String(text).replace(/[«»"()—–]/g, ' ')).replace(/ё/g, 'е').split(' ').filter(Boolean);
+
+/** Words that carry meaning: prepositions and conjunctions do not count when patterns are compared */
+const meaningful = (tokens) => tokens.filter((token) => token !== GAP && token.replace(/\*$/, '').length >= 3).length;
+
+/**
+ * The same word in another form («свяжемся», «свяжется» → «свяж*»), or null
+ * @param {string} a - A word, or a stem ending with *
+ * @param {string} b
+ * @returns {string|null}
+ */
+function sameWord(a, b) {
+  if (a === GAP || b === GAP) {
+    return null;
+  }
+  if (a === b) {
+    return a;
+  }
+  const [bareA, bareB] = [a.replace(/\*$/, ''), b.replace(/\*$/, '')];
+  let common = 0;
+  while (common < Math.min(bareA.length, bareB.length) && bareA[common] === bareB[common]) {
+    common++;
+  }
+  // A stem keeps at least 4 letters and loses at most an ending of 3
+  return common >= 4 && common >= Math.min(bareA.length, bareB.length) - 3 ? `${bareA.slice(0, common)}*` : null;
+}
+
+/**
+ * Two templates (or a pattern and a template) as one pattern: the words they share in order, with
+ * a gap (…) where either has words of its own
+ * @param {string[]} a - Tokens
+ * @param {string[]} b
+ * @returns {string[]}
+ */
+function mergeTokens(a, b) {
+  const lengths = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lengths[i][j] = sameWord(a[i], b[j]) ? lengths[i + 1][j + 1] + 1 : Math.max(lengths[i + 1][j], lengths[i][j + 1]);
+    }
+  }
+  const merged = [];
+  let [i, j, last] = [0, 0, null];
+  while (i < a.length && j < b.length) {
+    const word = sameWord(a[i], b[j]);
+    if (word && lengths[i][j] === lengths[i + 1][j + 1] + 1) {
+      if (last && (i > last[0] + 1 || j > last[1] + 1)) {
+        merged.push(GAP);
+      }
+      merged.push(word);
+      last = [i, j];
+      i++;
+      j++;
+    } else if (lengths[i + 1][j] >= lengths[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  // A short word alone between gaps («… и …») only makes the pattern miss other wordings
+  return merged
+    .filter((token, index) => token === GAP || meaningful([token]) > 0 ||
+      (merged[index - 1] && merged[index - 1] !== GAP) || (merged[index + 1] && merged[index + 1] !== GAP))
+    .filter((token, index, kept) => !(token === GAP && (index === 0 || kept[index - 1] === GAP)));
+}
+
+/**
+ * Whether a message is another wording of a pattern: its words in order, anything in the gaps,
+ * any ending after a stem
+ * @param {string} pattern - With or without the «pattern: » prefix
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function matchesPattern(pattern, text) {
+  const tokens = pattern.replace(PATTERN_PREFIX, '').split(' ').filter(Boolean);
+  const escape = (word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let source = '(?:^| )';
+  tokens.forEach((token, index) => {
+    if (token === GAP) {
+      source += '(?:\\S+ )*?';
+      return;
+    }
+    source += token.endsWith('*') ? `${escape(token.slice(0, -1))}\\S*` : escape(token);
+    if (index < tokens.length - 1) {
+      source += ' ';
+    }
+  });
+  return new RegExp(`${source}(?: |$)`, 'u').test(patternWords(text).join(' '));
+}
+
+/** Replies that say the same: equal, or nearly so («Благодарю, ожидаю» and «Благодарю, ожидаю!») */
+const sameReply = (a, b) => stringSimilarity(normalizeQuestion(answerText(a)), normalizeQuestion(answerText(b))) >= 0.85;
+
+/**
+ * Patterns learned from template messages the user answered the same way: the messages of a reply
+ * are merged while their shared words still make a pattern of at least `minWords` meaningful words
+ * and at least `minShare` of the shorter message, so different templates stay apart
+ * @param {Map<string, string>} templates - data/chat-templates.lino: template message -> reply
+ * @param {Object} [options]
+ * @param {number} [options.minWords=5]
+ * @param {number} [options.minShare=0.4]
+ * @returns {Map<string, string>} «pattern: …» -> reply
+ */
+export function learnPatterns(templates, { minWords = 5, minShare = 0.4 } = {}) {
+  const groups = [];
+  for (const [message, reply] of templates) {
+    if (message === REJECTION_KEY || isPattern(message)) {
+      continue;
+    }
+    const group = groups.find((candidate) => sameReply(candidate.reply, reply));
+    const example = { tokens: patternWords(message), size: meaningful(patternWords(message)), members: 1 };
+    group ? group.clusters.push(example) : groups.push({ reply, clusters: [example] });
+  }
+  const patterns = new Map();
+  for (const { reply, clusters } of groups) {
+    for (;;) {
+      let best = null;
+      clusters.forEach((a, i) => clusters.slice(i + 1).forEach((b, offset) => {
+        const tokens = mergeTokens(a.tokens, b.tokens);
+        const words = meaningful(tokens);
+        if (words >= minWords && words >= minShare * Math.min(a.size, b.size) && (!best || words > best.words)) {
+          best = { i, j: i + 1 + offset, tokens, words };
+        }
+      }));
+      if (!best) {
+        break;
+      }
+      const [a, b] = [clusters[best.i], clusters[best.j]];
+      clusters.splice(best.j, 1);
+      clusters[best.i] = { tokens: best.tokens, size: Math.min(a.size, b.size), members: a.members + b.members };
+    }
+    clusters.filter((cluster) => cluster.members > 1)
+      .forEach((cluster) => patterns.set(`${PATTERN_PREFIX}${cluster.tokens.join(' ')}`, reply));
+  }
+  return patterns;
+}
+
+/**
+ * Templates with their patterns learned anew: the examples as they are, then the patterns (old
+ * patterns are replaced, as each new example can widen or split them)
+ * @param {Map<string, string>} templates
+ * @returns {Map<string, string>}
+ */
+export function withLearnedPatterns(templates) {
+  const examples = [...templates].filter(([key]) => !isPattern(key));
+  return new Map([...examples, ...learnPatterns(new Map(examples))]);
 }
 
 /**
