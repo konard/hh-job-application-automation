@@ -18,6 +18,7 @@ import {
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
+import { waitForVisibleResume } from './resume-visibility.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
 import { askUser, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
@@ -279,6 +280,16 @@ export async function handleVacancyResponsePage({
       console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
       await vacancyFilters.remember(vacancyId, filterMatch);
       console.log(`Returning to: ${returnUrl}`);
+      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+      return;
+    }
+
+    const visibility = await waitForVisibleResume(commander, { vacancyId: extractVacancyIdFromResponseUrl(commander.getUrl()) });
+    if (visibility === 'withdrawn') {
+      return;
+    }
+    if (visibility === 'skip') {
+      console.log(`⏭️  Skipped: the resume is not visible to all employers. Returning to: ${returnUrl}`);
       await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
       return;
     }

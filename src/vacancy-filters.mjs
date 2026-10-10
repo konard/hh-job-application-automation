@@ -1,6 +1,6 @@
 /**
  * Vacancies filtered out automatically: not a programming job (electrical installation, circuit
- * design), or one that cannot be applied to as it is. The rules are in data/vacancy-filters.lino,
+ * design). The rules are in data/vacancy-filters.lino,
  * each filtered vacancy is kept in data/filtered-vacancies.lino with the rule that matched, and
  * is not opened again.
  *
@@ -9,8 +9,6 @@
  *     схемотехник
  *   question
  *     дифавтомат
- *   page
- *     поменяйте видимость резюме
  *
  * - vacancy: the vacancy card in the search list (title, company, labels), checked before it is
  *   opened, so a filtered vacancy costs no request; and the vacancy name on its response form

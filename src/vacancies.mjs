@@ -7,6 +7,7 @@ import { isNavigationError, isTimeoutError } from 'browser-commander';
 import { allAnswersExact, countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
+import { waitForVisibleResume } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { closeChatPanel, findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
@@ -94,6 +95,9 @@ export async function processModalApplication({
     console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
     await vacancyFilters.remember(vacancyId, filterMatch);
     return skipModal({ commander, reason: 'filtered_out' });
+  }
+  if (await waitForVisibleResume(commander, { scopeSelector: SELECTORS.applicationForm, vacancyId }) !== 'visible') {
+    return skipModal({ commander, reason: 'resume_not_visible' });
   }
 
   // Expand the cover letter section unless the textarea is already visible (cover letter might be mandatory)
