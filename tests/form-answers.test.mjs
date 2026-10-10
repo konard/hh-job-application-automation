@@ -137,6 +137,8 @@ describe('submission', () => {
     assert.ok(!isSubmitClick('Назад'));
     assert.ok(!isSubmitClick('Очистить форму'));
     assert.ok(!isSubmitClick(undefined));
+    assert.ok(isSubmitClick('Gửi'));
+    assert.ok(!isSubmitClick('Tiếp'));
   });
 
   const sent = { formSeen: true, fields: 0, ready: true, text: '', submitClicked: false };
@@ -179,5 +181,19 @@ describe('stableEdits: answers changed before the form is sent', () => {
     stableEdits(tracked, [{ title: 'Projects?', answer: 'my text' }], { now: 1030000, initial });
     assert.deepEqual(stableEdits(tracked, [{ title: 'Projects?', answer: 'my text' }], { now: 1070000, initial }), []);
     assert.equal(stableEdits(tracked, [{ title: 'Projects?', answer: 'my text' }], { now: 1090000, initial }).length, 1);
+  });
+});
+
+describe('a sent form in another language', () => {
+  const sent = { formSeen: true, fields: 0, ready: true, submitClicked: false };
+
+  test('the Vietnamese confirmation of Google Forms', () => {
+    assert.ok(isSubmitted({ ...sent, text: 'Опрос на вакансию Product Owner Câu trả lời của bạn đã được ghi lại. Gửi ý kiến phản hồi khác' }));
+  });
+
+  test('the /formResponse page, whatever its text', () => {
+    assert.ok(isSubmitted({ ...sent, text: '?', urls: ['https://docs.google.com/forms/d/e/1FAIpQLSc/formResponse'] }));
+    assert.ok(!isSubmitted({ ...sent, text: '?', urls: ['https://docs.google.com/forms/d/e/1FAIpQLSc/viewform'] }));
+    assert.ok(!isSubmitted({ ...sent, fields: 3, text: '?', urls: ['https://docs.google.com/forms/d/e/1FAIpQLSc/formResponse'] }));
   });
 });

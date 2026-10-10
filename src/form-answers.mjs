@@ -29,8 +29,14 @@ const POLL_MS = 2000;
 export const EDIT_STABLE_MS = 60000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Text the forms show once the answer is sent */
-export const CONFIRMATION = /ваш ответ (записан|отправлен|принят)|ответ (записан|отправлен|принят)|(анкета|форма|заявка) отправлена|спасибо|благодарим|your response has been (recorded|submitted)|response (was )?(submitted|sent|recorded)|thank you|thanks/i;
+/**
+ * Text the forms show once the answer is sent; Google Forms speaks the browser's language
+ * (Vietnamese here: «Câu trả lời của bạn đã được ghi lại»)
+ */
+export const CONFIRMATION = /ваш ответ (записан|отправлен|принят)|ответ (записан|отправлен|принят)|(анкета|форма|заявка) отправлена|спасибо|благодарим|your response has been (recorded|submitted)|response (was )?(submitted|sent|recorded)|thank you|thanks|câu trả lời của bạn đã được (ghi lại|gửi)|cảm ơn/iu;
+
+/** The page a sent form lands on, whatever the language: Google Forms' /formResponse */
+export const SENT_URL = /^https:\/\/docs\.google\.com\/forms\/[^?#]*\/formResponse(?:[?#]|$)/;
 
 /** The prefill's own answers that are not learned unless the user changes them */
 const NOT_LEARNED_SOURCES = new Set(['profile', 'company from the chat', 'test assignment repository']);
@@ -53,7 +59,7 @@ export const sameAnswer = (a, b) => normalized(a) === normalized(b);
  */
 export function isSubmitClick(label) {
   const text = String(label ?? '').replace(/\s+/g, ' ').trim();
-  return /^(отправить|submit|send|готово|завершить|finish|done)(?!\p{L})/iu.test(text) && !/далее|next|назад|back/i.test(text);
+  return /^(отправить|submit|send|готово|завершить|finish|done|gửi|nộp)(?!\p{L})/iu.test(text) && !/далее|next|назад|back|tiếp|quay lại/iu.test(text);
 }
 
 /**
@@ -170,10 +176,11 @@ export function notLearned(planned) {
  * @param {boolean} state.ready - The form's pages have loaded
  * @param {string} state.text - The text of the form's pages
  * @param {boolean} state.submitClicked
+ * @param {string[]} [state.urls] - The form's pages shown now (a /formResponse page means sent)
  * @returns {boolean}
  */
-export function isSubmitted({ formSeen, fields, ready, text, submitClicked }) {
-  return Boolean(formSeen && ready && fields === 0 && (submitClicked || CONFIRMATION.test(text ?? '')));
+export function isSubmitted({ formSeen, fields, ready, text, submitClicked, urls = [] }) {
+  return Boolean(formSeen && ready && fields === 0 && (submitClicked || CONFIRMATION.test(text ?? '') || urls.some((url) => SENT_URL.test(url))));
 }
 
 /**
@@ -286,7 +293,7 @@ export async function watchSentAnswers({
     if (isSubmitClick(click.label)) {
       submitClicked = true;
       shownSinceClick = 0;
-    } else if (/далее|next|назад|back/i.test(click.label)) {
+    } else if (/далее|next|назад|back|tiếp|quay lại/iu.test(click.label)) {
       submitClicked = false;
     }
   };
@@ -295,6 +302,7 @@ export async function watchSentAnswers({
       let fields = 0;
       let ready = true;
       let text = '';
+      const urls = [];
       clicks.splice(0).forEach(takeClick);
       const frames = browser.isConnected() ? context.pages().flatMap((page) => page.frames()) : [];
       for (const frame of frames) {
@@ -315,6 +323,7 @@ export async function watchSentAnswers({
         if (fieldsByOrigin.has(origin)) {
           ready &&= state.ready;
           text += ` ${state.text}`;
+          urls.push(state.url);
         }
       }
       // The form still shown a while after the click: it was not sent (a required answer is missing)
@@ -322,7 +331,7 @@ export async function watchSentAnswers({
         submitClicked = false;
       }
       // Twice in a row, so a page between two others is not taken for the end
-      streak = isSubmitted({ formSeen: fieldsByOrigin.size > 0, fields, ready, text, submitClicked }) ? streak + 1 : 0;
+      streak = isSubmitted({ formSeen: fieldsByOrigin.size > 0, fields, ready, text, submitClicked, urls }) ? streak + 1 : 0;
       if (streak >= 2) {
         return { submitted: true, answers: [...answers.values()] };
       }
