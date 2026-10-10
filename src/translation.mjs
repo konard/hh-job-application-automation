@@ -26,7 +26,8 @@ import path from 'path';
 import { CLAUDE_MODEL, READER_EFFORT, resolveLunaModel, run } from './captcha-solver.mjs';
 import { detectLanguage, textSimilarity } from './experience.mjs';
 
-export const TRANSLATORS = ['haiku', 'luna', 'formal-ai'];
+/** In order of preference: Formal AI first, Haiku when Formal AI fails, then Luna */
+export const TRANSLATORS = ['formal-ai', 'haiku', 'luna'];
 export const TRANSLATOR_NAMES = { haiku: 'Haiku', luna: 'Luna', 'formal-ai': 'Formal AI' };
 export const FORMAL_AI_REPO = 'link-assistant/formal-ai';
 const LANGUAGE_NAMES = { en: 'English', ru: 'Russian' };

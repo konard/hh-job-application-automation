@@ -122,10 +122,12 @@ describe('translator', () => {
     const translator = await createTranslator({ engines });
     await translator.translate(['Программист', 'Руководитель команды', 'Tech Lead'], 'en');
     assert.deepEqual(calls, { haiku: 1, luna: 1, formalAi: 2 });
-    assert.equal(translator.chosen('Программист', 'en'), 'H:Programmer');
+    // Formal AI first; where it fails, Haiku
+    assert.equal(translator.chosen('Программист', 'en'), 'Programmer');
+    assert.equal(translator.chosen('Руководитель команды', 'en'), 'H:Lead');
     assert.equal(translator.chosen('Tech Lead', 'en'), 'Tech Lead');
     const variants = translator.variantsOf('Программист', 'en');
-    assert.deepEqual(variants.map((variant) => variant.text), ['H:Programmer', 'Programmer', 'Programmer']);
+    assert.deepEqual(variants.map((variant) => variant.text), ['Programmer', 'H:Programmer', 'Programmer']);
     assert.equal(translator.failures().length, 1);
     assert.equal(translator.failures()[0].text, 'Руководитель команды');
     await translator.translate(['Программист'], 'en');
