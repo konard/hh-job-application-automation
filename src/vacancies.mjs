@@ -6,6 +6,7 @@
 import { isNavigationError, isTimeoutError } from 'browser-commander';
 import { allAnswersExact, countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
+import { describeFilterMatch } from './vacancy-filters.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { closeChatPanel, findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
@@ -71,6 +72,7 @@ export async function processModalApplication({
   deferredQuestions = null,
   readQADatabase = null,
   autoSendExact = false,
+  vacancyFilters = null,
 }) {
   const textareaSelector = SELECTORS.coverLetterTextareaPopup;
   if (isFullFormOpened(commander)) {
@@ -132,6 +134,22 @@ export async function processModalApplication({
     console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
     await rememberIgnoredVacancy(addIgnoredVacancyId, vacancyId);
     return skipModal({ commander, reason: 'questionnaire_ignored' });
+  }
+
+  const filterMatch = await vacancyFilters?.match({
+    questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
+    page: (await commander.safeEvaluate({
+      fn: (selector) => document.querySelector(selector)?.innerText ?? '',
+      args: [SELECTORS.applicationForm],
+      defaultValue: '',
+      operationName: 'popup text for the vacancy filters',
+      silent: true,
+    })).value,
+  });
+  if (filterMatch) {
+    console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
+    await vacancyFilters.remember(vacancyId, filterMatch);
+    return skipModal({ commander, reason: 'filtered_out' });
   }
 
   // Answered later: the vacancy is kept under its questions in deferred-questions.lino
@@ -422,22 +440,25 @@ function withButtonAt({ commander, selector, buttonIndex, action, defaultValue }
  * Title and company of the vacancy card holding the button at the given index
  * @returns {Promise<string>}
  */
-async function describeVacancyCard({ commander, selector, buttonIndex }) {
+async function readVacancyCard({ commander, selector, buttonIndex }) {
   const { value } = await commander.safeEvaluate({
     fn: (baseSelector, index) => {
       let card = document.querySelectorAll(baseSelector)[index];
       while (card && !card.querySelector('a[href*="/vacancy/"]')) {
         card = card.parentElement;
       }
-      const text = card?.innerText.split('\n').map((line) => line.trim()).filter(Boolean).slice(0, 4).join(' | ');
-      return text || null;
+      return card?.innerText.split('\n').map((line) => line.trim()).filter(Boolean) ?? [];
     },
     args: [selector, buttonIndex],
-    defaultValue: null,
-    operationName: 'vacancy card description',
+    defaultValue: [],
+    operationName: 'vacancy card text',
     silent: true,
   });
-  return value ? `"${value}"` : 'the next vacancy';
+  return value;
+}
+
+function describeVacancyCard(lines) {
+  return lines.length > 0 ? `"${lines.slice(0, 4).join(' | ')}"` : 'the next vacancy';
 }
 
 /**
@@ -558,6 +579,7 @@ export async function findAndProcessVacancyButton({
   deferredQuestions = null,
   readQADatabase = null,
   autoSendExact = false,
+  vacancyFilters = null,
   waitForUrlCondition,
   START_URL,
   pageClosedByUser,
@@ -582,8 +604,16 @@ export async function findAndProcessVacancyButton({
     log.debug(() => `🔍 Marked vacancy ID ${vacancyId} as processed (total: ${processedVacancyIds.size})`);
   }
 
+  const cardLines = await readVacancyCard({ commander, selector, buttonIndex });
+  // Checked before the click, so a vacancy filtered out costs no request
+  const filterMatch = await vacancyFilters?.match({ vacancy: cardLines.join('\n') });
+  if (filterMatch) {
+    console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)}): ${describeVacancyCard(cardLines)}`);
+    await vacancyFilters.remember(vacancyId, filterMatch);
+    return { status: 'filtered_out', vacancyId };
+  }
   if (isInteractive()) {
-    console.log(`🧪 Applying to ${await describeVacancyCard({ commander, selector, buttonIndex })}`);
+    console.log(`🧪 Applying to ${describeVacancyCard(cardLines)}`);
   }
 
   const clickResult = await clickVacancyButton({ commander, selector, buttonIndex });
@@ -616,6 +646,7 @@ export async function findAndProcessVacancyButton({
       deferredQuestions,
       readQADatabase,
       autoSendExact,
+      vacancyFilters,
     });
   } catch (error) {
     // A wait for a popup element fails once hh.ru has switched to the full form

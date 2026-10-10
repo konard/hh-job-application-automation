@@ -24,6 +24,7 @@ import { enableConfirmations, withConfirmations } from './confirmations.mjs';
 import { withCaptchaGuard } from './captcha.mjs';
 import { createCaptchaPrefill } from './captcha-solver.mjs';
 import { createDeferredQuestions, formatQuestions } from './deferred-questions.mjs';
+import { createVacancyFilters } from './vacancy-filters.mjs';
 
 const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
@@ -77,6 +78,17 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     console.log(`Loaded ${deferredVacancyIds.size} vacancy ID(s) that wait for answers in data/deferred-questions.lino`);
   }
 
+  // Vacancies that are not programming jobs, or cannot be applied to, are not opened
+  const vacancyFilters = createVacancyFilters({
+    rulesPath: path.join(process.cwd(), 'data', 'vacancy-filters.lino'),
+    filteredPath: path.join(process.cwd(), 'data', 'filtered-vacancies.lino'),
+  });
+  const filteredVacancyIds = await vacancyFilters.filteredVacancyIds();
+  filteredVacancyIds.forEach(markVacancyAsProcessed);
+  if (filteredVacancyIds.size > 0) {
+    console.log(`Loaded ${filteredVacancyIds.size} vacancy ID(s) filtered out before (data/filtered-vacancies.lino)`);
+  }
+
   if (argv.ignoreVacanciesWithQuestionnaire) {
     const ignoredVacancyIds = await readIgnoredVacancyIds();
     ignoredVacancyIds.forEach(markVacancyAsProcessed);
@@ -123,6 +135,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     argv,
     qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
     deferredQuestions,
+    vacancyFilters,
     onPageClosed: () => shutdown('Tab close detected'),
     onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),

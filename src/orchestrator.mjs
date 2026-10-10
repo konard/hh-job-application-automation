@@ -36,11 +36,13 @@ const PAGE_READY_TIMEOUT = 120000;
  * @param {Object} options.argv - Parsed configuration
  * @param {Object} options.qaDB - { readQADatabase, addOrUpdateQA, addIgnoredVacancyId }
  * @param {Object} [options.deferredQuestions] - Questions answered later (deferred-questions.mjs)
+ * @param {Object} [options.vacancyFilters] - Vacancies filtered out automatically (vacancy-filters.mjs)
  * @param {Function} options.onPageClosed - Called when the user closes the tab
  * @returns {Object} Orchestrator with start method
  */
 export function createOrchestrator({
-  commander, page, argv, qaDB, deferredQuestions = null, onPageClosed, onApplicationSent = async () => {},
+  commander, page, argv, qaDB, deferredQuestions = null, vacancyFilters = null, onPageClosed,
+  onApplicationSent = async () => {},
 }) {
   let START_URL = argv.url;
   const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
@@ -134,6 +136,7 @@ export function createOrchestrator({
     onApplicationSent: afterApplicationSent,
     deferredQuestions,
     autoSendExact: argv.autoSendExactAnswers,
+    vacancyFilters,
     verbose: argv.verbose,
   });
 
@@ -185,7 +188,7 @@ export function createOrchestrator({
   }
 
   /** Statuses after which no vacancy was opened, so no pause is needed */
-  const NO_VACANCY_OPENED = new Set(['not_on_target_page', 'no_buttons_found']);
+  const NO_VACANCY_OPENED = new Set(['not_on_target_page', 'no_buttons_found', 'filtered_out']);
 
   return {
     /**
@@ -281,6 +284,7 @@ export function createOrchestrator({
           deferredQuestions,
           readQADatabase: qaDB.readQADatabase,
           autoSendExact: argv.autoSendExactAnswers,
+          vacancyFilters,
           waitForUrlCondition,
           START_URL,
           pageClosedByUser: getPageClosedByUser,

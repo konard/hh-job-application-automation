@@ -28,6 +28,7 @@ src/
 ├── qa.mjs                    # Q&A matching logic
 ├── qa-database.mjs           # Q&A database operations (Links Notation format)
 ├── deferred-questions.mjs    # Questions answered later and the vacancies waiting for them
+├── vacancy-filters.mjs       # Vacancies filtered out automatically by data/vacancy-filters.lino
 ├── captcha.mjs               # Captcha detection; page actions wait while one is shown
 ├── captcha-solver.mjs        # Captcha answer prefill by local Claude Code (Haiku) and Codex (Luna)
 ├── config.mjs                # Configuration using lino-arguments
@@ -183,7 +184,9 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 3. `resumes.mjs` reads the resumes on the profile page and opens the suggested vacancies of the most
    recently updated one. hh.ru shows no update date now, so its list order is used.
 4. Vacancies in `data/deferred-questions.lino` whose question has no answer in `qa.lino` yet (or
-   matches `--skip-question`) are marked as processed, so they are not opened.
+   matches `--skip-question`) are marked as processed, so they are not opened; so are the vacancies in
+   `data/filtered-vacancies.lino`. A vacancy card, popup or response form that matches a rule in
+   `data/vacancy-filters.lino` is skipped without asking (cards before they are opened).
 5. The orchestrator opens vacancies an even pause apart (`pacing.mjs`), pauses while a captcha is shown (Haiku's
    reading is sent once, then the answer is only prefilled for the user) and stops when hh.ru does not confirm
    an application. Forms with questions are sent without asking only when autofill answered every question

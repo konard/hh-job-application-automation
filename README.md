@@ -224,6 +224,31 @@ Its vacancies are not opened again while the question has no answer in `data/qa.
 add the answer, they are opened like any other vacancy and the answer is filled in; a vacancy you
 have applied to is removed from the file.
 
+### Filter Out Vacancies Automatically
+
+Vacancies that are not programming jobs (electrical installation, circuit design) or that cannot be
+applied to as they are, are skipped without asking, by the rules in `data/vacancy-filters.lino`.
+A part of the text is enough; case and ё/е do not matter:
+
+```
+vacancy
+  схемотехник
+question
+  дифавтомат
+page
+  поменяйте видимость резюме
+```
+
+- `vacancy`: the vacancy card in the search list (title, company, labels), checked before the
+  vacancy is opened, so it costs no request; and the vacancy name on its response form
+- `question`: a question of the response form (full form or popup)
+- `page`: any text of the response form, e.g. hh.ru's «поменяйте видимость резюме» notice when the
+  vacancy only takes resumes visible to all employers
+
+Every filtered vacancy is logged with the rule (`🚫 Vacancy … filtered out by vacancy-filters.lino
+(question "кв.мм": …)`) and kept in `data/filtered-vacancies.lino`, so it is not opened again. Add a
+line to the rules when you see a vacancy that should have been skipped.
+
 ### Export the Resume and Collect the Stack
 
 ```bash
