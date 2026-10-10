@@ -144,7 +144,7 @@ Sections:
 | QA8 | «Не сейчас, а на последнем месте работы там был PostgreSQL, PHP Symphony, Go и т.п. Дополняй ответ и дай посмотреть.» · «Redis, RabbitMQ, Docker или ClickHouse именно ни все.» | The stack answer names the last job's stack (PHP Symfony, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker) and is shown to the user before use | «на каком стеке вы разрабатываете?» in `data/qa.lino` | ✅ | 3a630bd |
 | QA9 | «replace all such answers to Нячанг, Вьетнам и там где нужно указать часовой пояс укажи его.» | Every location answer says Нячанг, Вьетнам, with the time zone (UTC+7, +4 to Moscow) where asked | `grep -c Гоа data/qa.lino` = 0 | ✅ | 39d71ea |
 | QA10 | «На основе моего резюме и моих прошлых ответов помоги разработать качественный ответ на этот вопрос "Какой портфель автоматизаций и AI-продуктов вам удалось реализовать? Как считали эффекты для бизнеса?"» | A draft answer from the resume and saved answers, with an effect methodology and no invented numbers | Case study draft | ✅ | 1e02ee8; [case study](../case-studies/hard-question-ai-portfolio/case-study.md) |
-| QA11 | «we have linked in at `https://www.linkedin.com/in/konard` save it is as contact so we can paste a templated insert if contacts changes.» | Contacts live in `data/contacts.lino`; answers use placeholders (= [B4a](forms-and-chats.md#b-external-forms-google-forms-yandex-forms-a-companys-own-job-form)) | `tests/contacts.test.mjs` | 🚧 code done (src/contacts.mjs); qa.lino and the cover letter still hold contact values, migrated at the next run restart | ec58db0 |
+| QA11 | «we have linked in at `https://www.linkedin.com/in/konard` save it is as contact so we can paste a templated insert if contacts changes.» | Contacts live in `data/contacts.lino`; answers use placeholders (= [B4a](forms-and-chats.md#b-external-forms-google-forms-yandex-forms-a-companys-own-job-form)) | `tests/contacts.test.mjs` | ✅ `bun run contacts-migrate` ran on 2026-10-10: 29 answers and the cover letter use {{telegram}}/{{phone}}; every reader fills them in | ec58db0 |
 | QA12 | «Проверяй сохранились ли ответы и коммить и пуш всё что не закоммитили и не запушили.» · «qa.lino was not committed? Why?» | Answers the user saves during a run are checked and committed and pushed promptly | `git status data/qa.lino` clean after each run | ✅ | the «Save answers on …» commits (3a630bd … 28e6223) |
 
 ## CAP: captcha
@@ -198,7 +198,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B2 | Each form in its own browser slot (own Chrome, profile, port), apart from the hh.ru browser; stays open for review | ✅ |
 | B3 | Nothing is ever submitted | ✅ |
 | B4 | Contacts from the exported resume (not committed) and `data/profile.lino` | ✅ |
-| B4a | Contacts in `data/contacts.lino` as placeholders (LinkedIn) | 🚧 code done; data not migrated yet |
+| B4a | Contacts in `data/contacts.lino` as placeholders (LinkedIn) | ✅ `bun run contacts-migrate` ran on 2026-10-10: 29 answers and the cover letter use {{telegram}}/{{phone}}; every reader fills them in |
 | B5 | Link questions get the links they ask for | ✅ |
 | B6 | Saved answers from qa.lino by the same similarity and option matching as hh.ru forms | ✅ |
 | B7 | Open questions drafted by local Claude Code with «[уточнить: …]» marks; a choice gets one of its options | ✅ |
@@ -339,23 +339,23 @@ of them, so none is lost.
 
 | Section | Requirements | ✅ | 🧪 | 🚧 | ⬜ | ↪ |
 |---|---|---|---|---|---|---|
-| DEP | 5 | 4 | | 1 | | |
+| DEP | 5 | 5 | | | | |
 | LOGIN | 8 | 5 | 1 | 1 | 1 | |
 | RUN | 9 | 7 | 2 | | | |
 | PACE | 6 | 5 | | | | 1 |
 | BRW | 7 | 7 | | | | |
 | TRACE | 4 | 1 | 3 | | | |
 | CONF | 11 | 7 | 3 | | | 1 |
-| QA | 12 | 11 | | 1 | | |
+| QA | 12 | 12 | | | | |
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 21 | 11 | 9 | 1 | | |
+| FORM (B) | 21 | 12 | 9 | | | |
 | CHAT (C) | 13 | 7 | 6 | | | |
 | EXP | 7 | 3 | 2 | 2 | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 14 | 14 | | | | |
-| **Total** | **145** | **104** | **31** | **6** | **1** | **3** |
+| **Total** | **145** | **107** | **31** | **3** | **1** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
