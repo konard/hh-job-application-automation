@@ -18,7 +18,10 @@ src/
 ├── browser-watchdog.mjs      # Detached process closing a kept-open Chrome when idle
 ├── login.mjs                 # Detect logins in installed browsers, sign in to hh.ru
 ├── resumes.mjs               # Pick the most recently updated resume, its suggested vacancies
-├── tracing.mjs               # browser-commander trace + network log in logs/traces
+├── tracing.mjs               # browser-commander trace + network and DOM logs in logs/traces
+├── trace-network.mjs         # network.lino: requests and responses with headers and bodies
+├── trace-dom.mjs             # dom.lino: DOM snapshots after loads and the trace's DOM mutations
+├── trace-redaction.mjs       # Redaction, size caps and Links Notation fields for both logs
 ├── confirmations.mjs         # Per-step confirmations on stdin, waiting for missing answers
 ├── orchestrator.mjs          # Main coordination logic and state machine
 ├── page-triggers.mjs         # Declarative page handlers (browser-commander pageTrigger)
@@ -195,7 +198,11 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
    (Chrome decrypts its own cookies, so there is no Keychain prompt), signs in through hh.ru's social
    login when needed, and copies the hh.ru cookies into the automation browser.
 3. `resumes.mjs` reads the resumes on the profile page and opens the suggested vacancies of the most
-   recently updated one. hh.ru shows no update date now, so its list order is used.
+   recently updated one. The page shows no update date, so the dates are read from hh.ru's state
+   embedded in it (`<template class="ResumeProfileFront-InitialState">`: `applicantResumes[]._attributes.updated`,
+   `latestResumeHash`); a visible «Обновлено …» text, `latestResumeHash` and hh.ru's list order are the
+   fallbacks. A kept-open browser already on a search page fetches the resumes page once from inside the
+   page and switches only the `resume` parameter.
 4. Vacancies in `data/deferred-questions.lino` whose question has no answer in `qa.lino` yet (or
    matches `--skip-question`) are marked as processed, so they are not opened; so are the vacancies in
    `data/filtered-vacancies.lino`. A vacancy card, popup or response form that matches a rule in
@@ -204,6 +211,24 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
    reading is sent once, then the answer is only prefilled for the user) and stops when hh.ru does not confirm
    an application. Forms with questions are sent without asking only when autofill answered every question
    with the saved answer of the very same question.
+
+## Debug Traces
+
+`tracing.mjs` starts browser-commander's trace (continuous mode) and two local recorders that write
+Links Notation next to it in `logs/traces/<time>/`:
+
+| File | Written by | Holds |
+|------|------------|-------|
+| `trace/` | browser-commander | Bundle: DOM per checkpoint, mutations, timeline (`events.ndjson`), screenshots |
+| `trace.lino` | browser-commander | Timeline (navigations, interactions, console, page errors, failed requests) and checkpoints |
+| `network.lino` | `trace-network.mjs` | Document/XHR/fetch exchanges: headers and bodies, redacted and capped |
+| `dom.lino` | `trace-dom.mjs` | `(snapshot: …)` after every load, `(mutations: …)` converted from the bundle after each checkpoint |
+
+The local recorders are workarounds for gaps in browser-commander (#140): it records only failed
+requests, and its Links Notation export only points at the DOM files. Both never block the page: the
+listeners take a timestamp and the reading and writing happen afterwards. Trace options avoid two
+more gaps: `openShadowRoots: false` (copying shadow roots assigns `innerHTML`, which hh.ru's Trusted
+Types policy rejects) and a 1 GB bundle limit (the default 256 MB filled up in a 9-hour run).
 
 ## Logging
 

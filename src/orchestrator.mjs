@@ -18,7 +18,7 @@ import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
 import { dismissOverlays, isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { registerPageTriggers } from './page-triggers.mjs';
 import { ensureLoggedIn } from './login.mjs';
-import { findSuggestedVacanciesUrl } from './resumes.mjs';
+import { findSuggestedVacanciesUrl, latestResumeSearchUrl } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
@@ -208,7 +208,8 @@ export function createOrchestrator({
 
       if (!START_URL) {
         START_URL = URL_PATTERNS.searchVacancy.test(commander.getUrl()) && commander.getUrl().includes('resume=')
-          ? commander.getUrl() // The kept-open browser already shows suggested vacancies
+          // The kept-open browser already shows suggested vacancies: keep its filters, check the resume
+          ? await latestResumeSearchUrl(commander, commander.getUrl())
           : await findSuggestedVacanciesUrl(commander);
         if (!START_URL) {
           throw new Error('No resume found on hh.ru - create one or pass --url');
