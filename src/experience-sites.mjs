@@ -324,16 +324,23 @@ export async function addLinkedInSkills(page, skills) {
     }
     await input.fill(skill);
     await sleep(2000);
-    const option = page.getByRole('option', { name: skill, exact: true }).first();
-    if (await option.isVisible().catch(() => false)) {
+    // The skill itself, or LinkedIn's longer name of it: «Rust» is «Rust (Programming Language)»
+    const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let option = page.getByRole('option', { name: skill, exact: true }).first();
+    if (!await option.isVisible().catch(() => false)) {
+      option = page.getByRole('option', { name: new RegExp(`^${escaped} \\(`, 'i') }).first();
+    }
+    const offered = await option.isVisible().catch(() => false);
+    const name = offered ? (await option.innerText().catch(() => skill)).trim().split('\n')[0] : skill;
+    if (offered) {
       await option.click().catch(() => {});
       await sleep(800);
     }
     // A chosen skill shows as a checked chip; a skill outside the profile's Skills section is not taken
-    const chosen = await page.evaluate((name) => [...document.querySelectorAll('input[type="checkbox"]')]
-      .some((box) => box.checked && box.labels?.[0]?.innerText.trim().toLowerCase() === name.toLowerCase()), skill).catch(() => false);
+    const chosen = await page.evaluate((label) => [...document.querySelectorAll('input[type="checkbox"]')]
+      .some((box) => box.checked && box.labels?.[0]?.innerText.trim().toLowerCase() === label.toLowerCase()), name).catch(() => false);
     if (chosen) {
-      added.push(skill);
+      added.push(name);
     } else {
       if (await input.isVisible().catch(() => false)) {
         await input.fill('');
@@ -351,7 +358,8 @@ export async function addLinkedInSkills(page, skills) {
  * already has a media item with this title
  * @param {Object} page
  * @param {{url: string, title: string}} link
- * @returns {Promise<{added: boolean, problem: string}>} problem: '' when added or already there
+ * @returns {Promise<{added: boolean, problem: string, broken?: boolean}>} problem: '' when added or
+ *   already there; broken: the form broke and has to be opened again
  */
 export async function addLinkedInMedia(page, { url, title }) {
   const existing = page.locator('dialog[open], [role="dialog"]').getByText(title, { exact: true });
@@ -368,12 +376,21 @@ export async function addLinkedInMedia(page, { url, title }) {
   }
   await linkItem.click();
   const input = page.locator('input[aria-label^="Paste or type a link"], input[aria-label*="ссылк"]').first();
-  await input.pressSequentially(url, { delay: 30 });
-  await page.getByRole('button', { name: /^(Add|Добавить)$/ }).first().click();
   const titleInput = page.getByLabel(/^(Title|Название)\*?$/).first();
-  if (!await titleInput.waitFor({ timeout: 20000 }).then(() => true, () => false)) {
-    await page.getByRole('button', { name: /^(Back|Назад)$/ }).first().click().catch(() => {});
-    return { added: false, problem: `LinkedIn could not preview ${url}` };
+  // LinkedIn's preview of a link fails now and then: it is tried with and without its last «/»
+  const other = url.endsWith('/') ? url.slice(0, -1) : `${url}/`;
+  for (const link of [url, other, url, other]) {
+    await input.fill('');
+    await input.pressSequentially(link, { delay: 30 });
+    await page.getByRole('button', { name: /^(Add|Добавить)$/ }).first().click();
+    if (await titleInput.waitFor({ timeout: 20000 }).then(() => true, () => false)) {
+      break;
+    }
+  }
+  if (!await titleInput.isVisible().catch(() => false)) {
+    // «Add media» is a step of the position form: its ✕ discards the whole form and its Back works
+    // only with a preview, so the window is left for the user
+    return { added: false, problem: `LinkedIn could not preview ${url}: the «Add media» window is left open, use Try again or another link, then Back or Save` };
   }
   await sleep(1000);
   await titleInput.click();
@@ -382,6 +399,10 @@ export async function addLinkedInMedia(page, { url, title }) {
   await sleep(500);
   await page.getByRole('button', { name: /^(Save|Сохранить)$/ }).last().click();
   await sleep(3000);
+  // LinkedIn's form now and then breaks on saving a link («Something went wrong on our end»)
+  if (await page.getByText(/Something went wrong|Что-то пошло не так/).first().isVisible().catch(() => false)) {
+    return { added: false, broken: true, problem: `LinkedIn's form broke on adding ${url}` };
+  }
   const added = await existing.count().catch(() => 0) > 0;
   return { added, problem: added ? '' : `the link ${url} did not show in Media` };
 }
@@ -467,7 +488,14 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
   }
   if (change.fields.website) {
     const title = change.target?.company ?? change.fields.company ?? change.source?.company ?? '';
-    const { added, problem } = await addLinkedInMedia(page, { url: change.fields.website, title });
+    const { added, problem, broken } = await addLinkedInMedia(page, { url: change.fields.website, title });
+    if (broken) {
+      // Prefilled again from the start, without the link
+      const { website, ...fields } = change.fields;
+      const again = await prefillLinkedInPosition(page, { ...change, fields }, { profileUrl, port });
+      change.unchanged = false;
+      return [...again, `LinkedIn: ${problem}, so the form was prefilled again without it: add ${website} yourself in Media if you want it`];
+    }
     changed ||= added;
     if (problem || added) {
       notes.push(problem ? `LinkedIn: ${problem}` : `LinkedIn: media link ${change.fields.website} («${title}»)`);
