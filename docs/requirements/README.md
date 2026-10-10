@@ -248,18 +248,18 @@ support. Translation should be done using Haiku 5.5 or latest, Luna 6 or latest,
 https://github.com/link-foundation/formal-ai latest version, if Formal AI fails on any translation we must
 report it to its repository.»
 
-The detailed requirements are in [experience-sync.md](experience-sync.md) (written separately). Nothing of
-this is in `src/` yet.
+The detailed requirements are in [experience-sync.md](experience-sync.md) (written separately): `bun run experience -- export|diff|sync`. The Formal AI repository is
+link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 
 | ID | Requirement | Check | Status |
 |---|---|---|---|
-| EXP1 | Export the work experience from hh.ru (the resume export, RES1, is the starting point) | Structured list of jobs from hh.ru | ⬜ |
-| EXP2 | Export the work experience from LinkedIn (https://www.linkedin.com/in/konard) | Structured list of jobs from LinkedIn | ⬜ |
-| EXP3 | Show the differences between the two | A per-job diff report | ⬜ |
-| EXP4 | Sync the differences (in either direction, after review) | One side updated from the other | ⬜ |
-| EXP5 | Auto sync with automatic translation (Russian ↔ English) | A Russian hh.ru entry appears translated on LinkedIn and vice versa | ⬜ |
-| EXP6 | Translation by Haiku 5.5 or later, Luna 6 or later, and the latest Formal AI (link-foundation/formal-ai) | The three translations are produced for each text | ⬜ |
-| EXP7 | Any Formal AI translation failure is reported as an issue in link-foundation/formal-ai | An issue per failure | ⬜ |
+| EXP1 | Export the work experience from hh.ru (the resume export, RES1, is the starting point) | Structured list of jobs from hh.ru | ✅ `bun run experience -- export` reads data/resume/resume.json |
+| EXP2 | Export the work experience from LinkedIn (https://www.linkedin.com/in/konard) | Structured list of jobs from LinkedIn | 🚧 reader done; needs a LinkedIn login in slot 9350 (LOGIN7) |
+| EXP3 | Show the differences between the two | A per-job diff report | 🧪 `experience -- diff`, tests/experience.test.mjs |
+| EXP4 | Sync the differences (in either direction, after review) | One side updated from the other | 🚧 prefill verified on hh.ru (discarded); saving after `y` not yet exercised |
+| EXP5 | Auto sync with automatic translation (Russian ↔ English) | A Russian hh.ru entry appears translated on LinkedIn and vice versa | 🧪 `experience -- sync --auto` |
+| EXP6 | Translation by Haiku 5.5 or later, Luna 6 or later, and the latest Formal AI (link-assistant/formal-ai) | The three translations are produced for each text | ✅ Haiku 5.5, gpt-6-luna and Formal AI 0.352.1 on 19 real texts |
+| EXP7 | Any Formal AI translation failure is reported as an issue in link-assistant/formal-ai | An issue per failure | ✅ link-assistant/formal-ai #1192, #1193, comment on #1174; deduplicated on rerun |
 
 ## SEC: safety constraints
 
@@ -344,16 +344,16 @@ of them, so none is lost.
 | RES | 3 | 3 | | | | |
 | FORM (B) | 15 | 9 | 5 | | 1 | |
 | CHAT (C) | 13 | 7 | 6 | | | |
-| EXP | 7 | | | | 7 | |
+| EXP | 7 | 3 | 2 | 2 | | |
 | SEC | 9 | 9 | | | | |
 | PROC | 13 | 13 | | | | |
-| **Total** | **137** | **103** | **17** | **5** | **9** | **3** |
+| **Total** | **137** | **106** | **19** | **7** | **2** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
 requirement (contacts as placeholders), listed in both places. Section D of forms-and-chats.md (rules for
 all of it) is covered by SEC, PACE6 and PROC1.
 
-Open work, in order: live checks of the chat items (C4, C7, C9–C12), work experience sync (EXP1–EXP7), saving sent external-form
+Open work, in order: live checks of the chat items (C4, C7, C9–C12), LinkedIn login (LOGIN7) and the LinkedIn side of the experience sync (EXP2, EXP4) (EXP1–EXP7), saving sent external-form
 answers (B14), the most recently updated resume (RUN2), on-site-only vacancy filtering (FLT5), and the
 upstream trace gaps (TRACE1, TRACE3).

@@ -106,11 +106,19 @@ export function latestLunaModel(catalogJson) {
 }
 
 /**
- * Run a command, resolving with its stdout
+ * Run a command, resolving with its stdout (also used by the translators of translation.mjs)
+ * @param {string} command
+ * @param {string[]} args
+ * @param {Object} [options]
+ * @param {string} [options.cwd]
+ * @param {number} [options.timeout=90000]
+ * @param {Object} [options.env] - Variables added to the environment
+ * @returns {Promise<string>}
  */
-function run(command, args, { cwd, timeout = SOLVER_TIMEOUT_MS } = {}) {
+export function run(command, args, { cwd, timeout = SOLVER_TIMEOUT_MS, env } = {}) {
   return new Promise((resolve, reject) => {
-    const child = execFile(command, args, { cwd, timeout, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const options = { cwd, timeout, maxBuffer: 10 * 1024 * 1024, ...(env ? { env: { ...process.env, ...env } } : {}) };
+    const child = execFile(command, args, options, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`${command} failed: ${error.message.split('\n')[0]} ${String(stderr).trim().split('\n').pop() ?? ''}`));
       } else {
@@ -124,10 +132,10 @@ function run(command, args, { cwd, timeout = SOLVER_TIMEOUT_MS } = {}) {
 let lunaModel = null;
 
 /**
- * The newest Luna model the Codex account offers, looked up once
+ * The newest Luna model the Codex account offers, looked up once (also used by translation.mjs)
  * @returns {Promise<string>}
  */
-async function resolveLunaModel() {
+export async function resolveLunaModel() {
   lunaModel ??= await run('codex', ['debug', 'models'], { timeout: 30000 })
     .then((catalog) => latestLunaModel(catalog) ?? FALLBACK_LUNA_MODEL)
     .catch(() => FALLBACK_LUNA_MODEL);

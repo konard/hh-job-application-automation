@@ -36,6 +36,10 @@ src/
 ├── contacts.mjs              # data/contacts.lino and {{placeholders}} in answers
 ├── chat-answers.mjs          # Chat replies: templates, rejections, saved answers, learning
 ├── answer-chats.mjs          # `bun run answer-chats`: chats in their own browser slot
+├── experience-sync.mjs       # `bun run experience`: export, diff and sync of hh.ru and LinkedIn work experience
+├── experience.mjs            # Work experience of both sides in one shape: matching, diff, sync plan, report
+├── experience-sites.mjs      # LinkedIn experience reader, prefill of the LinkedIn and hh.ru experience forms
+├── translation.mjs           # Haiku, Luna and Formal AI translations side by side; Formal AI issue reports
 ├── captcha.mjs               # Captcha detection; page actions wait while one is shown
 ├── captcha-solver.mjs        # Captcha answer prefill by local Claude Code (Haiku) and Codex (Luna)
 ├── config.mjs                # Configuration using lino-arguments

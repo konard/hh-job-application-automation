@@ -302,6 +302,46 @@ browser. For the message waiting for an answer the reply is typed into the messa
 `--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
 quick replies are never clicked.
 
+### Sync Work Experience with LinkedIn
+
+```bash
+bun run experience -- export              # hh.ru and LinkedIn work experience → data/resume/experience.json
+bun run experience -- diff                # differences per job, report in logs/experience/
+bun run experience -- sync --to linkedin  # prefill LinkedIn from hh.ru (or --to hh)
+bun run experience -- sync --to hh --auto # export again, diff and sync in one go
+```
+
+- **Export**: hh.ru jobs come from `bun run resume` (`data/resume/resume.json`, exported first when
+  missing, `--refresh-hh` exports again). LinkedIn's experience page
+  (https://www.linkedin.com/in/konard/details/experience/, `--profile`) is read in its own browser
+  slot (profile `~/.hh-automation/linkedin-slot`, port 9350). When the slot has no LinkedIn session
+  (no `li_at` cookie, or a login wall), the run says so and waits: log in in that window yourself;
+  passwords are never read or typed. Both sides are saved in one shape (company, title, location,
+  dates, description, skills) to `data/resume/experience.json` (gitignored).
+- **Diff**: jobs are matched by company (Cyrillic or Latin spelling, legal forms ignored) and time;
+  titles and descriptions are compared through translations; skills, dates and locations are
+  compared directly. Jobs only on one side are listed.
+- **Translation**: every text is translated by three translators, shown side by side in the report:
+  Claude Haiku (`claude -p --model claude-haiku-5-5`), Codex with the latest Luna model (as the
+  captcha prefill picks it), and [Formal AI](https://github.com/link-assistant/formal-ai)
+  (`cargo install formal-ai`, run with `FORMAL_AI_LIVE_API=1`). The chosen translation is Haiku's,
+  else Luna's, else Formal AI's; an answer that is no translation is passed over. Results are cached
+  in `data/resume/translations.json`. `--translators haiku,luna,formal-ai` picks them.
+- **Formal AI failures** (an error, an empty or placeholder answer, «I could not translate», a web
+  search instead of a translation, text not in the target language) are reported to
+  `link-assistant/formal-ai`: an open issue on the same failure gets one comment per Formal AI
+  version, otherwise a new issue is filed with the version, the input, the command, the output and
+  what the other translators gave. `--dry-run-issues` only prints them, `--no-report-formal-ai`
+  turns it off.
+- **Sync**: the changes that bring the target in line with the source (titles, dates, descriptions,
+  missing skills, jobs only on the source) are translated and prefilled one by one in the target's
+  form in a browser slot (LinkedIn: port 9350; hh.ru: `hh-experience-slot`, port 9351, logged in by
+  copying the automation browser's hh.ru cookies). Each is saved only after you type `y`; `s`
+  discards it, `q` stops and leaves the current form prefilled for you. Nothing is ever deleted;
+  hh.ru keeps skills per resume, so missing skills are only listed.
+
+See [the requirements](docs/requirements/experience-sync.md).
+
 ### Export the Resume and Collect the Stack
 
 ```bash
