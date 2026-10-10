@@ -17,7 +17,7 @@ A `?` after a status means the evidence is incomplete; the note says what is mis
 
 Detailed lists that this index includes:
 
-- [forms-and-chats.md](forms-and-chats.md): hh.ru application forms (A1–A8), external forms (B1–B20)
+- [forms-and-chats.md](forms-and-chats.md): hh.ru application forms (A1–A8), external forms (B1–B22)
   and hh.ru chats (C1–C15). Every row there is listed below under [FORM](#form-external-forms) and
   [CHAT](#chat-hhru-chats), with the same status.
 - [experience-sync.md](experience-sync.md): LinkedIn and hh.ru work experience export, diff, sync and
@@ -215,6 +215,8 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B18 | A form with a test assignment is not answered until the assignment's repository exists | 🧪 |
 | B19 | The assignment's repository starts from the hive-mind CI/CD template of the vacancy's language (or the most fitting one); the issue asks for the most fitting stack | ✅ konard/marketplace-retail-ai-control (Python template, issue #1) |
 | B20 | A form sent in a chat remembers the chat's vacancy for its assignment | 🧪 |
+| B21 | Templates are read from hive-mind's CI/CD guide; a new assignment repository always starts from the template, never empty | ✅ |
+| B22 | A written (no-code) assignment asks for a document in the assignment's language, not code | ✅ konard/marketplace-retail-ai-control #1 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -353,12 +355,12 @@ of them, so none is lost.
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 21 | 12 | 9 | | | |
-| CHAT (C) | 13 | 7 | 6 | | | |
+| FORM (B) | 23 | 14 | 9 | | | |
+| CHAT (C) | 15 | 7 | 8 | | | |
 | EXP | 7 | 3 | 2 | 2 | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 14 | 14 | | | | |
-| **Total** | **145** | **107** | **31** | **3** | **1** | **3** |
+| **Total** | **149** | **109** | **33** | **3** | **1** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
