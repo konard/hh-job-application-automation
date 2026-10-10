@@ -157,3 +157,7 @@ ignored-vacancy-ids.txt
 data/resume/
 # Contact overrides for prefilled forms (personal data)
 data/profile.lino
+
+# Formal AI caches (formal-ai chat run in the repository)
+data/wikidata-cache/
+data/wiktionary-cache/
