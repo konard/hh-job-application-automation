@@ -56,6 +56,8 @@ export function readChat() {
     vacancy: clean(document.querySelector('[data-qa="chatik-header-sub-header"]')?.innerText)
       .split('\n').map((line) => line.trim()).filter((line) => line && !/^(вакансия|перейти)$/i.test(line))[0] ?? '',
     company: clean(document.querySelector('[data-qa="participant-info-title"]')?.innerText),
+    // «Перейти» leads to the vacancy
+    vacancyUrl: document.querySelector('[data-qa="chatik-header-sub-header"] a[href*="/vacancy/"], a[href*="hh.ru/vacancy/"]')?.href.split('?')[0] ?? '',
     messages,
     // After a rejection hh.ru may close the chat: «Переписка будет доступна после приглашения работодателя»
     canReply: Boolean(document.querySelector('textarea[data-qa="text-input"]')),

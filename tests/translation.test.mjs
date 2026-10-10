@@ -33,6 +33,8 @@ describe('failures', () => {
     const gap = translationFailure('Программист', 'I could not translate "Программист" from ru to en with the available formalization data. I recorded this as a translation gap for follow-up.', 'en');
     assert.ok(gap.startsWith('not translated'));
     assert.equal(failureKind(gap), 'gap');
+    assert.equal(failureKind(gap, 'Ведущий разработчик'), 'short-phrase');
+    assert.equal(failureKind(gap, 'Руководство командой из 5-ти старших разработчиков, архитектура и код-ревью.'), 'gap');
     assert.equal(failureKind(translationFailure('Программист', '', 'en')), 'empty');
     assert.equal(failureKind(translationFailure('Программист', 'response:translate', 'en')), 'placeholder');
   });
@@ -152,9 +154,9 @@ describe('judging every translator', () => {
 
 describe('Formal AI issues', () => {
   const failure = {
-    text: 'Руководитель команды разработки', to: 'en', reason: 'not translated: I could not translate "Руководитель команды разработки"',
-    output: 'I could not translate "Руководитель команды разработки" from ru to en with the available formalization data. I recorded this as a translation gap for follow-up.',
-    command: 'FORMAL_AI_LIVE_API=1 formal-ai chat --silent --prompt "Translate \\"Руководитель команды разработки\\" to English"',
+    text: 'Руководство командой разработки из пяти человек', to: 'en', reason: 'not translated: I could not translate "Руководство командой разработки из пяти человек"',
+    output: 'I could not translate "Руководство командой разработки из пяти человек" from ru to en with the available formalization data. I recorded this as a translation gap for follow-up.',
+    command: 'FORMAL_AI_LIVE_API=1 formal-ai chat --silent --prompt "Translate \\"Руководство командой разработки из пяти человек\\" to English"',
     others: ['Haiku: Head of Development Team'],
   };
 
@@ -172,7 +174,7 @@ describe('Formal AI issues', () => {
   test('a new issue has the version, the exact input, the command, the output and the expected behavior', () => {
     const { title, body } = buildIssue({ kind: 'gap', version: '0.352.1', failures: [failure] });
     assert.ok(title.includes('formal-ai 0.352.1'));
-    assert.ok(body.includes('Руководитель команды разработки'));
+    assert.ok(body.includes('Руководство командой разработки из пяти человек'));
     assert.ok(body.includes('FORMAL_AI_LIVE_API=1 formal-ai chat'));
     assert.ok(body.includes('### Expected behavior'));
     assert.ok(body.includes('Haiku: Head of Development Team'));

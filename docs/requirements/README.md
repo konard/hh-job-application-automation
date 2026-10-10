@@ -213,6 +213,8 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B16 | A form's test assignment becomes a repository (given name) with an issue restated in English, without the employer, via gh | ✅ konard/marketplace-retail-ai-control #1 |
 | B17 | The completed-assignment link question gets the repository link | 🧪 |
 | B18 | A form with a test assignment is not answered until the assignment's repository exists | 🧪 |
+| B19 | The assignment's repository starts from the hive-mind CI/CD template of the vacancy's language (or the most fitting one); the issue asks for the most fitting stack | ✅ konard/marketplace-retail-ai-control (Python template, issue #1) |
+| B20 | A form sent in a chat remembers the chat's vacancy for its assignment | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -263,7 +265,7 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | EXP4 | Sync the differences (in either direction, after review) | One side updated from the other | 🚧 prefill verified on hh.ru (discarded); saving after `y` not yet exercised |
 | EXP5 | Auto sync with automatic translation (Russian ↔ English) | A Russian hh.ru entry appears translated on LinkedIn and vice versa | 🧪 `experience -- sync --auto` |
 | EXP6 | Translation by Haiku 5.5 or later, Luna 6 or later, and the latest Formal AI (link-assistant/formal-ai) | The three translations are produced for each text | ✅ Haiku 5.5, gpt-6-luna and Formal AI 0.352.1 on 19 real texts |
-| EXP7 | Any Formal AI translation failure is reported as an issue in link-assistant/formal-ai | An issue per failure | ✅ link-assistant/formal-ai #1192, #1193, comment on #1174; deduplicated on rerun |
+| EXP7 | Any Formal AI translation failure is reported as an issue in link-assistant/formal-ai | An issue per failure | ✅ link-assistant/formal-ai #1192, #1193, comment on #1174; deduplicated on rerun; #1194 (short phrases, 2026-10-10: Formal AI translated 1 of 27 texts, Haiku 26, Luna 27) |
 
 ## SEC: safety constraints
 
@@ -348,12 +350,12 @@ of them, so none is lost.
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 3 | 1 | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 19 | 9 | 8 | 1 | 1 | |
+| FORM (B) | 21 | 11 | 8 | 1 | 1 | |
 | CHAT (C) | 13 | 7 | 6 | | | |
 | EXP | 7 | 3 | 2 | 2 | | |
 | SEC | 10 | 9 | | 1 | | |
 | PROC | 14 | 14 | | | | |
-| **Total** | **143** | **105** | **21** | **12** | **2** | **3** |
+| **Total** | **145** | **107** | **21** | **12** | **2** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

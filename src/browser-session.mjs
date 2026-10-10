@@ -151,6 +151,14 @@ export async function keepSingleTab({ port, userDataDir }) {
   } catch {
     // No tab recorded yet
   }
+  // The user closed the last window: the browser keeps running without a page, and nothing can
+  // attach to it until a tab is open again
+  if (tabs.length === 0) {
+    const opened = await fetch(`${endpoint(port)}/json/new?about:blank`, { method: 'PUT' }).then((response) => response.json());
+    console.log(`🗂️  The browser on port ${port} had no window open: opened one`);
+    fs.writeFileSync(tabFile(userDataDir), opened.id);
+    return opened;
+  }
   const kept = chooseTab(tabs, rememberedId);
   for (const tab of tabs.filter((item) => item !== kept)) {
     await fetch(`${endpoint(port)}/json/close/${tab.id}`);

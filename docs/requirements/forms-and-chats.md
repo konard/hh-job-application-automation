@@ -48,6 +48,11 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
     we should first create repository with an issue containing test assignment without any mentions of this specific
     employer.» · «We must create a tool to use gh tool to create test assignment as repository + issue with provided name
     and task description converted into English, it should be not the same text as in the actual form.»
+16. «Which language and stack is required by `Натур Пласт — анкета AI Solution Architect` vacancy? Can we use our chat
+    history to find the exact vacancy? … we must actually make sure we are able to automate it, so we take into the
+    account language and stack that is expected, and also we should use our CI/CD templates from
+    github.com/link-assistant/hive-mind to match exact language at least, and in the issue clearly request doing it with
+    the most fitting stack.»
 
 ## A. hh.ru application forms
 
@@ -85,6 +90,8 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 | B16 | A test assignment in a form comes first: `bun run test-assignment -- <name>` restates it as a GitHub issue in English in other words (not a translation of the form's text), without any mention of the employer, checks that (employer names in any case ending, English, no six words in a row from the original) and creates the repository with the given name and the issue with gh | Натур Пласт's «Тестовое задание — система управления бизнесом с ИИ», dry run; `tests/assignments.test.mjs` | 🧪 |
 | B17 | The form question asking for the completed assignment («Ссылка на выполненное тестовое задание») is prefilled with the assignment's repository link; until the repository exists, the prefill says to create it first | `[slot N] 🧪 Test assignment …: create its repository first` | 🧪 |
 | B18 | A form with a test assignment is not answered until the assignment's repository exists: the prefill stops with the `test-assignment` command to run, and the next prefill links the repository | Натур Пласт form → https://github.com/konard/marketplace-retail-ai-control (issue #1), link prefilled in slot 1 | 🧪 |
+| B19 | The assignment's repository follows the vacancy's language and stack: the vacancy (`--vacancy`, or the one of the chat the form was sent in) is read; the language it names, or the most fitting one when it names none, selects the hive-mind CI/CD template (`link-foundation/<language>-ai-driven-development-pipeline-template`); the issue ends with a «Stack» section that clearly asks for the most fitting stack; a rerun updates the issue and brings the template into a repository without a pipeline | Натур Пласт (vacancy 138213782 names no language) → Python template merged into konard/marketplace-retail-ai-control, issue #1 updated with the Stack section; `tests/assignments.test.mjs` | ✅ |
+| B20 | A form sent in an hh.ru chat remembers the chat's vacancy (`logs/form-vacancies.json`), so its test assignment finds the vacancy without `--vacancy` | `answer-chats` → `rememberFormVacancy`; `tests/assignments.test.mjs` | 🧪 |
 
 ## C. hh.ru chats
 

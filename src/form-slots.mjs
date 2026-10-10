@@ -129,7 +129,7 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
       // The assignment comes before any answer: the form is left as it is until its repository exists
       log(`🧪 Test assignment «${assignment.title}»: create its repository first, then prefill again: bun run test-assignment -- <repository name> --from ${url}`);
       await session.release();
-      return { url, slot, title: form.title, fields: planned.map((field) => ({ ...field, open: true, note: 'waits for the test assignment repository' })) };
+      return { url, pageUrl: page.url(), slot, title: form.title, fields: planned.map((field) => ({ ...field, open: true, note: 'waits for the test assignment repository' })) };
     }
   }
 
@@ -166,7 +166,7 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
     log('ℹ️  The form has a next page ("Далее"): open it yourself and run the prefill again for it');
   }
   await session.release();
-  return { url, slot, title: form.title, fields: planned };
+  return { url, pageUrl: page.url(), slot, title: form.title, fields: planned };
 }
 
 function report({ url, slot, title, fields }) {
@@ -245,5 +245,5 @@ export async function prefillForms(urls, { firstSlot, draft = true, keepOpenHour
   await fs.mkdir(reportDir, { recursive: true });
   const reportFile = path.join(reportDir, `${new Date().toISOString().replace(/[:.]/g, '-')}.md`);
   await fs.writeFile(reportFile, text);
-  return { text, reportFile };
+  return { text, reportFile, results };
 }

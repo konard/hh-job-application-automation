@@ -19,6 +19,7 @@ import { askUser, enableConfirmations, withdrawPrompt } from './confirmations.mj
 import { createQADatabase, findBestMatch } from './qa-database.mjs';
 import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
+import { rememberFormVacancy } from './assignments.mjs';
 import {
   TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
@@ -134,7 +135,13 @@ async function prefillChat(id) {
     links.forEach((link) => handledForms.add(link));
     console.log(`📝 Prefilling the questionnaire(s) from the chat in form slots: ${links.join(', ')}`);
     prefillForms(links, { draft: argv.draft, sources, company: chat.company })
-      .then(({ reportFile }) => console.log(`📄 Questionnaire report: ${reportFile}`))
+      .then(async ({ reportFile, results }) => {
+        console.log(`📄 Questionnaire report: ${reportFile}`);
+        // A test assignment in the form takes the language and stack of this vacancy
+        if (chat.vacancyUrl) {
+          await rememberFormVacancy([...links, ...results.map((result) => result.pageUrl)], chat.vacancyUrl);
+        }
+      })
       .catch((error) => console.log(`⚠️  Questionnaire prefill failed: ${error.message}`));
   }
 

@@ -131,11 +131,13 @@ export function translationFailure(source, output, to) {
 /**
  * The kind of a failure, for one issue per kind
  * @param {string} reason - Of translationFailure, or an error message
- * @returns {'gap'|'empty'|'placeholder'|'untranslated'|'wrong-language'|'error'}
+ * @param {string} [text] - The source text
+ * @returns {'gap'|'short-phrase'|'empty'|'placeholder'|'untranslated'|'wrong-language'|'error'}
  */
-export function failureKind(reason) {
+export function failureKind(reason, text = '') {
   if (/^not translated/.test(reason)) {
-    return 'gap';
+    // A job title of a few words (each translated on its own) is a narrower gap than a sentence
+    return text && String(text).trim().split(/\s+/).length <= 4 ? 'short-phrase' : 'gap';
   }
   if (/^empty answer/.test(reason)) {
     return 'empty';
@@ -384,6 +386,11 @@ const KNOWN_FAILURES = {
     matches: /could not translate|translation gap|could not identify a source phrase|translation of an arbitrary sentence/i,
     summary: 'phrases and sentences are not translated ("I could not translate … translation gap")',
   },
+  'short-phrase': {
+    searches: ['"kind=short-phrase"', 'short phrases of known words'],
+    matches: /short phrases of known words|kind=short-phrase/i,
+    summary: 'short phrases of known words (job titles) are not translated',
+  },
   empty: {
     searches: ['translate "empty answer"', 'translation empty output'],
     matches: /translat[\s\S]*(empty (answer|output|reply)|no answer)/i,
@@ -526,7 +533,7 @@ export function buildIssueComment({ kind, version, failures }) {
 export async function reportFormalAiFailures({ failures, version, repo = FORMAL_AI_REPO, dryRun = false, gh = (args) => run('gh', args, { timeout: 60000 }) }) {
   const byKind = new Map();
   failures.filter((failure) => failure.reportable !== false).forEach((failure) => {
-    const kind = failureKind(failure.reason);
+    const kind = failureKind(failure.reason, failure.text);
     byKind.set(kind, [...(byKind.get(kind) ?? []), failure]);
   });
   const results = [];

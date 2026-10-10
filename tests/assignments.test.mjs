@@ -6,7 +6,8 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import {
-  employerStems, isAssignmentLinkQuestion, issueProblems, parseIssue, readAssignments, rememberAssignment,
+  CI_CD_TEMPLATES, employerStems, formVacancy, isAssignmentLinkQuestion, issueProblems, namedLanguages, parseIssue, parseStack,
+  readAssignments, rememberAssignment, rememberFormVacancy, stackSection,
 } from '../src/assignments.mjs';
 
 const ORIGINAL = '«Натурпласт» продаёт товары, в том числе на Wildberries и Ozon. Используем 1С, Битрикс24, данные маркетплейсов и сервисов аналитики.\n' +
@@ -41,5 +42,31 @@ describe('test assignments', () => {
     const file = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'assignments-')), 'assignments.json');
     await rememberAssignment('https://forms.example/x', { repo: 'me/task', repoUrl: 'https://github.com/me/task', issueUrl: 'https://github.com/me/task/issues/1' }, file);
     assert.equal((await readAssignments(file))['https://forms.example/x'].repoUrl, 'https://github.com/me/task');
+  });
+});
+
+describe('the stack of a test assignment', () => {
+  test('languages the vacancy names are found, most mentioned first; none for a vacancy without one', () => {
+    assert.deepEqual(namedLanguages('Senior Python developer: Python, FastAPI, PostgreSQL; TypeScript is a plus'), ['python', 'typescript']);
+    assert.deepEqual(namedLanguages('Golang разработчик, Go (gRPC)'), ['go']);
+    assert.deepEqual(namedLanguages('C# / .NET 9, ASP.NET Core'), ['csharp']);
+    assert.deepEqual(namedLanguages('понимание LLM, AI-агентов, RAG, API, баз данных и интеграций; Битрикс24, 1С'), []);
+  });
+
+  test('the chosen stack maps to a hive-mind CI/CD template, and the issue asks for it', () => {
+    const stack = parseStack('```json\n{"language": "Python", "stack": "FastAPI, PostgreSQL, LangChain", "reason": "Fits data integrations and LLM work."}\n```');
+    assert.equal(stack.language, 'python');
+    assert.equal(CI_CD_TEMPLATES[stack.language], 'link-foundation/python-ai-driven-development-pipeline-template');
+    const section = stackSection(stack);
+    assert.ok(section.includes('most fitting stack') && section.includes('**Python**') && section.includes('python-ai-driven-development-pipeline-template'));
+    assert.equal(parseStack('{"language": "Cobol"}'), null);
+    assert.equal(parseStack('{"language": "C#", "stack": ".NET"}').language, 'csharp');
+  });
+
+  test('a form sent in a chat remembers its vacancy, also under the page it led to', async () => {
+    const file = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'form-vacancies-')), 'form-vacancies.json');
+    await rememberFormVacancy(['https://forms.gle/abc', 'https://docs.google.com/forms/d/e/x/viewform'], 'https://hh.ru/vacancy/1', file);
+    assert.equal(await formVacancy('https://docs.google.com/forms/d/e/x/viewform', file), 'https://hh.ru/vacancy/1');
+    assert.equal(await formVacancy('https://forms.gle/other', file), null);
   });
 });

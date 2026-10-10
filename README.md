@@ -290,9 +290,20 @@ When a form contains a test assignment, it gets its own GitHub repository before
 answered. The tool takes the assignment from the form open in a form slot (or `--from <file>`, `-` for
 stdin), has local Claude Code restate it in English in its own words, and checks the result before
 publishing: no employer name (the form title and «quoted» names, in any case ending), English only,
-no six words in a row from the original. Then `gh` creates the repository (public unless `--private`;
-the owner is the gh user unless `--owner`) and the issue. The next prefill of that form puts the
-repository link into the question asking for the completed assignment.
+no six words in a row from the original.
+
+The vacancy sets the stack: `--vacancy <id>` (or, for a form sent in an hh.ru chat, the chat's vacancy,
+remembered by `answer-chats`) is read once in the chat slot. The language it names (or, when it names
+none, the most fitting one, chosen by local Claude Code from the vacancy and the assignment;
+`--language` overrides) picks the CI/CD template recommended by
+[hive-mind](https://github.com/link-assistant/hive-mind/blob/main/docs/CI-CD-BEST-PRACTICES.md)
+(`link-foundation/<language>-ai-driven-development-pipeline-template`), and the issue ends with a
+«Stack» section that asks for the most fitting stack and keeping the template's checks green.
+
+Then `gh` creates the repository from the template (public unless `--private`; the owner is the gh
+user unless `--owner`; an existing repository without a pipeline gets the template merged in) and
+the issue (a rerun updates the issue it created). The next prefill of that form puts the repository
+link into the question asking for the completed assignment.
 
 ### Answer Chats
 

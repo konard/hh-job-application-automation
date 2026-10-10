@@ -54,7 +54,7 @@ needs rustc 1.98).
 
 | # | Requirement | Check | Status |
 |---|---|---|---|
-| D1 | Each Formal AI failure is reported to its repository with the version, the exact input (work experience text only), the command, the output, the expected behavior and the other translators' answers | https://github.com/link-assistant/formal-ai/issues/1192, /1193 | ✅ |
+| D1 | Each Formal AI failure is reported to its repository with the version, the exact input (work experience text only), the command, the output, the expected behavior and the other translators' answers | https://github.com/link-assistant/formal-ai/issues/1192, /1193, /1194 | ✅ |
 | D2 | No duplicates: existing issues are searched first (this tool's marker, then known phrases); an open issue on the same failure gets one comment per Formal AI version (several kinds share one comment), a closed one is named as a regression of a new issue | Phrase and sentence gaps and the web-search misroute → one comment on #1174 (https://github.com/link-assistant/formal-ai/issues/1174#issuecomment-6097723241); a rerun says «already reported for 0.352.1» | ✅ |
 | D3 | Failures that are not Formal AI's (a wrong command line, a timeout, a missing binary, or keeping a text every translator keeps) are not reported | A `--silent` + `FORMAL_AI_SILENT` usage error of this tool was caught and not reported | ✅ |
 | D4 | `--dry-run-issues` prints what would be filed; `--no-report-formal-ai` turns reporting off; the report lists the issue URLs | Report section «Formal AI» | ✅ |
@@ -63,7 +63,12 @@ Failures found with Formal AI 0.352.1 on the resume texts: phrases and sentences
 («I could not translate … translation gap»; single words such as «Программист» are), a long
 multi-line description is answered with a web search request, «Веб-программист» gives
 «-- Английский-->» (#1192), and «Translate to English: Программист» gives an empty answer, routed
-to the en→en handler with the placeholder `response:translate` (#1193).
+to the en→en handler with the placeholder `response:translate` (#1193). Job titles of two or more
+known words fail in both directions («Ведущий разработчик», «Team Lead»; «Ведущий» alone is «Host»),
+reported as #1194 (failure kind `short-phrase`); sentences are part of #1174.
+
+Comparison on the 27 resume texts (2026-10-10): Formal AI translated 1 («Программист» → «Programmer»),
+Haiku 26, Luna 27. Haiku's translation is used; Formal AI is run and reported on every sync.
 
 ## E. Sync
 
