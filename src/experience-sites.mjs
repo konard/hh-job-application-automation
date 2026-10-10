@@ -268,6 +268,26 @@ const fieldsOfLinkedIn = (fields) => {
 };
 
 /**
+ * Close the suggestion list a typed field opened, the way a person does: the suggestion that is
+ * exactly the typed value is chosen, else the form's heading is clicked; no field is left focused
+ * @param {Object} page
+ * @param {string} [value] - The value just typed
+ */
+export async function closeSuggestions(page, value) {
+  const listbox = page.locator('[role="listbox"]:visible').first();
+  if (value && await listbox.isVisible().catch(() => false)) {
+    const option = listbox.getByRole('option', { name: String(value), exact: true }).first();
+    if (await option.isVisible().catch(() => false)) {
+      await option.click().catch(() => {});
+    }
+  }
+  if (await listbox.isVisible().catch(() => false)) {
+    await page.locator('h2:visible').first().click().catch(() => {});
+  }
+  await page.evaluate(() => document.activeElement?.blur?.()).catch(() => {});
+}
+
+/**
  * Open LinkedIn's position form (the position's edit form, or a new one) and prefill it.
  * Skills are typed one by one in LinkedIn's skill picker, so they are listed for the user
  * @param {Object} page
@@ -304,7 +324,13 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
     if (field.kind === 'checkbox') {
       await sleep(700);
     }
+    // A typed title, company or place opens LinkedIn's suggestions
+    if (field.kind === 'text' && !problem) {
+      await sleep(800);
+      await closeSuggestions(page, field.value);
+    }
   }
+  await closeSuggestions(page);
   if (change.fields.skills?.length) {
     notes.push(`LinkedIn: add the skills yourself in the form: ${change.fields.skills.join(', ')}`);
   }
