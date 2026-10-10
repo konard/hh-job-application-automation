@@ -1,0 +1,454 @@
+/**
+ * The browser side of the experience sync: reading the LinkedIn experience page, and prefilling
+ * the experience forms of LinkedIn and hh.ru in a browser slot. Saving is a separate step the
+ * caller takes only after the user typed `y`.
+ *
+ * @module experience-sites
+ */
+
+import { formatMonthYear } from './experience.mjs';
+
+export const LINKEDIN_PROFILE = 'https://www.linkedin.com/in/konard';
+const LOGIN_URL = /linkedin\.com\/(authwall|login|uas\/login|checkpoint|signup|start\/join)/i;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Whether a LinkedIn URL is a login or sign-up wall
+ * @param {string} url
+ * @returns {boolean}
+ */
+export const isLinkedInLoginPage = (url) => LOGIN_URL.test(String(url));
+
+/**
+ * Whether the slot has a LinkedIn session: its li_at cookie is set. Only the cookie's presence
+ * is checked; its value is never read out
+ * @param {Object} page - Playwright page of the slot
+ * @returns {Promise<boolean>}
+ */
+export async function hasLinkedInSession(page) {
+  const cookies = await page.context().cookies('https://www.linkedin.com').catch(() => []);
+  return cookies.some((cookie) => cookie.name === 'li_at' && cookie.value !== '');
+}
+
+/**
+ * The "show all experiences" page of a profile
+ * @param {string} profileUrl - https://www.linkedin.com/in/<name>
+ * @returns {string}
+ */
+export const linkedInExperienceUrl = (profileUrl) => `${profileUrl.replace(/\/+$/, '')}/details/experience/`;
+
+/**
+ * Runs in the page: the positions on LinkedIn's experience page as the text lines of each item
+ * (the visible spans, in order), with nested roles for a company with several positions and the
+ * edit link of each when the profile is the user's own
+ * @returns {{items: Array<{lines: string[], editUrl: string|null, roles: Array<{lines: string[], editUrl: string|null}>}>, text: string}}
+ */
+export function readLinkedInExperienceItems() {
+  const ENTITY = '[data-view-name="profile-component-entity"]';
+  const main = document.querySelector('main') ?? document.body;
+  let entities = [...main.querySelectorAll(ENTITY)];
+  // Older or newer markup without the entity mark: list items of the main list
+  const isEntity = (element) => (entities.length > 0 ? element.matches(ENTITY) : element.matches('li'));
+  if (entities.length === 0) {
+    entities = [...main.querySelectorAll('li')].filter((li) => /\b\d{4}\b/.test(li.innerText));
+  }
+  const nestedIn = (element, root) => {
+    for (let node = element.parentElement; node && node !== root; node = node.parentElement) {
+      if (isEntity(node)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const linesOf = (root) => {
+    const spans = [...root.querySelectorAll('span[aria-hidden="true"]')].filter((span) => !nestedIn(span, root));
+    const raw = spans.length > 0
+      ? spans.map((span) => span.innerText)
+      : root.innerText.split('\n');
+    const lines = [];
+    for (const line of raw.map((text) => text.replace(/\s+/g, ' ').trim()).filter(Boolean)) {
+      // Screen reader copies repeat the visible text
+      if (lines[lines.length - 1] !== line) {
+        lines.push(line);
+      }
+    }
+    return lines;
+  };
+  const editUrlOf = (root) => {
+    const link = [...root.querySelectorAll('a[href*="/edit/forms/"], a[href*="add-edit"], a[href*="/edit/"]')].find((a) => !nestedIn(a, root));
+    return link ? new URL(link.getAttribute('href'), window.location.href).href : null;
+  };
+  const top = entities.filter((entity) => !entities.some((other) => other !== entity && other.contains(entity)));
+  const items = top.map((entity) => {
+    const roles = entities.filter((other) => other !== entity && entity.contains(other));
+    return {
+      lines: linesOf(entity),
+      editUrl: editUrlOf(entity),
+      roles: roles.map((role) => ({ lines: linesOf(role), editUrl: editUrlOf(role) })),
+    };
+  });
+  return { items, text: main.innerText };
+}
+
+/**
+ * Open the experience page in the slot, waiting while LinkedIn asks to log in (the user logs in
+ * in the slot's window; nothing here reads or types a password), then load every position
+ * @param {Object} page - Playwright page of the slot
+ * @param {Object} [options]
+ * @param {string} [options.profileUrl=LINKEDIN_PROFILE]
+ * @param {number} [options.waitMinutes=30] - How long to wait for the login
+ * @returns {Promise<{items: Object[], text: string, url: string}>}
+ */
+export async function readLinkedInExperience(page, { profileUrl = LINKEDIN_PROFILE, waitMinutes = 30, port = 9350 } = {}) {
+  const url = linkedInExperienceUrl(profileUrl);
+  if (!page.url().startsWith(url)) {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  }
+  await waitForLinkedInLogin(page, { url, port, waitMinutes });
+  await page.waitForSelector('main', { timeout: 30000 }).catch(() => {});
+  // Positions load as the page scrolls; "Show more results" loads the rest
+  for (let i = 0; i < 15; i++) {
+    const more = await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+      const button = [...document.querySelectorAll('main button')].find((element) => /show more results|показать больше/i.test(element.innerText));
+      button?.click();
+      return Boolean(button);
+    });
+    await sleep(more ? 2500 : 1200);
+    if (!more && i >= 2) {
+      break;
+    }
+  }
+  const { items, text } = await page.evaluate(readLinkedInExperienceItems);
+  return { items, text, url: page.url() };
+}
+
+/**
+ * Wait, when the slot has no LinkedIn session (no li_at cookie) or shows a login wall, until the
+ * user logs in in the slot's window, then open `url`. Login stays manual: nothing here reads,
+ * types or copies a password
+ * @param {Object} page
+ * @param {Object} options
+ * @param {string} options.url - The page to be on afterwards
+ * @param {number} [options.port=9350] - Shown in the message, to find the window
+ * @param {number} [options.waitMinutes=30]
+ */
+export async function waitForLinkedInLogin(page, { url, port = 9350, waitMinutes = 30 }) {
+  if (await hasLinkedInSession(page) && !isLinkedInLoginPage(page.url())) {
+    return;
+  }
+  console.log(`🔐 Not logged in to LinkedIn: log in to LinkedIn in the slot window (port ${port}). The run goes on by itself`);
+  console.log('   once you are logged in. This script never reads, types or stores your password.');
+  // The sign-in form rather than the sign-up wall, coming back to `url` after the login
+  await page.goto(`https://www.linkedin.com/login?session_redirect=${encodeURIComponent(url)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  const deadline = Date.now() + waitMinutes * 60000;
+  let reported = Date.now();
+  while (!(await hasLinkedInSession(page) && page.url().startsWith(url))) {
+    if (Date.now() > deadline) {
+      throw new Error(`Not logged in to LinkedIn after ${waitMinutes} minutes`);
+    }
+    // Logged in (the session cookie is there) but landed elsewhere, e.g. the feed: open `url`
+    if (await hasLinkedInSession(page) && !isLinkedInLoginPage(page.url()) && !page.url().startsWith(url)) {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    }
+    if (Date.now() - reported > 60000) {
+      console.log('⏳ Still waiting for the LinkedIn login in the slot window...');
+      reported = Date.now();
+    }
+    await sleep(3000);
+  }
+  console.log('✅ Logged in to LinkedIn');
+}
+
+/**
+ * Runs in the page: set a form control by its label (label element, aria-label, or the text of
+ * its group), firing the events frameworks listen to
+ * @param {{label: string, value: string|boolean, kind: 'text'|'checkbox'|'select', group?: string}} field -
+ *   label and group are regular expression sources, matched case-insensitively
+ * @returns {string|null} Why it was not set, or null
+ */
+export function setFieldByLabel({ label, value, kind, group }) {
+  const pattern = new RegExp(label, 'i');
+  const groupPattern = group ? new RegExp(group, 'i') : null;
+  const labelOf = (element) => [
+    element.getAttribute('aria-label'),
+    ...[...(element.labels ?? [])].map((item) => item.innerText),
+    (element.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' '),
+    element.getAttribute('placeholder'),
+  ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  const groupOf = (element) => element.closest('fieldset')?.innerText ?? element.parentElement?.parentElement?.innerText ?? '';
+  const selector = kind === 'select' ? 'select' : kind === 'checkbox' ? 'input[type="checkbox"]' : 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea';
+  const control = [...document.querySelectorAll(selector)].find((element) => element.getClientRects().length > 0 &&
+    pattern.test(labelOf(element)) && (!groupPattern || groupPattern.test(groupOf(element))));
+  if (!control) {
+    return `no field labelled ${label}${group ? ` in ${group}` : ''}`;
+  }
+  if (kind === 'checkbox') {
+    if (control.checked !== Boolean(value)) {
+      control.click();
+    }
+    return null;
+  }
+  if (kind === 'select') {
+    const option = [...control.options].find((item) => item.text.trim().toLowerCase() === String(value).toLowerCase() || item.value === String(value));
+    if (!option) {
+      return `no option ${value} in ${label}`;
+    }
+    control.value = option.value;
+  } else {
+    const prototype = control.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value').set.call(control, String(value));
+  }
+  control.dispatchEvent(new Event('input', { bubbles: true }));
+  control.dispatchEvent(new Event('change', { bubbles: true }));
+  return null;
+}
+
+const fieldsOfLinkedIn = (fields) => {
+  const list = [];
+  const month = (date) => (date?.includes('-') ? formatMonthYear(date).split(' ')[0] : null);
+  if (fields.title) {
+    list.push({ label: '^title', value: fields.title, kind: 'text' });
+  }
+  if (fields.company) {
+    list.push({ label: 'company', value: fields.company, kind: 'text' });
+  }
+  if (fields.location) {
+    list.push({ label: '^location', value: fields.location, kind: 'text' });
+  }
+  if (fields.description) {
+    list.push({ label: '^description', value: fields.description, kind: 'text' });
+  }
+  if ('current' in fields) {
+    list.push({ label: 'currently working', value: fields.current, kind: 'checkbox' });
+  }
+  if (fields.start) {
+    if (month(fields.start)) {
+      list.push({ label: 'month', group: '^start date', value: month(fields.start), kind: 'select' });
+    }
+    list.push({ label: 'year', group: '^start date', value: fields.start.slice(0, 4), kind: 'select' });
+  }
+  if (fields.end && !fields.current) {
+    if (month(fields.end)) {
+      list.push({ label: 'month', group: '^end date', value: month(fields.end), kind: 'select' });
+    }
+    list.push({ label: 'year', group: '^end date', value: fields.end.slice(0, 4), kind: 'select' });
+  }
+  return list;
+};
+
+/**
+ * Open LinkedIn's position form (the position's edit form, or a new one) and prefill it.
+ * Skills are typed one by one in LinkedIn's skill picker, so they are listed for the user
+ * @param {Object} page
+ * @param {Object} change - Of planSync
+ * @param {Object} [options]
+ * @param {string} [options.profileUrl=LINKEDIN_PROFILE]
+ * @returns {Promise<string[]>} Notes: fields that could not be set
+ */
+export async function prefillLinkedInPosition(page, change, { profileUrl = LINKEDIN_PROFILE, port = 9350 } = {}) {
+  const url = change.target?.editUrl ?? `${profileUrl.replace(/\/+$/, '')}/add-edit/POSITION/`;
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await waitForLinkedInLogin(page, { url, port });
+  await page.waitForSelector('[role="dialog"] input, form input', { timeout: 30000 }).catch(() => {});
+  await sleep(1500);
+  const notes = [];
+  for (const field of fieldsOfLinkedIn(change.fields)) {
+    const problem = await page.evaluate(setFieldByLabel, field).catch((error) => error.message.split('\n')[0]);
+    if (problem) {
+      notes.push(`LinkedIn: ${problem}`);
+    }
+  }
+  if (change.fields.skills?.length) {
+    notes.push(`LinkedIn: add the skills yourself in the form: ${change.fields.skills.join(', ')}`);
+  }
+  return notes;
+}
+
+/** Fields each site's form takes from a change; the rest (e.g. hh.ru per-job skills) are notes */
+const FILLABLE = {
+  linkedin: ['title', 'company', 'location', 'description', 'start', 'end', 'current'],
+  hh: ['title', 'company', 'description', 'start', 'end', 'current'],
+};
+
+/**
+ * Whether a change sets anything in the target site's form (else it is only notes for the user)
+ * @param {Object} change - Of planSync
+ * @param {'linkedin'|'hh'} site
+ * @returns {boolean}
+ */
+export const hasFillableFields = (change, site) => Object.keys(change.fields).some((field) => FILLABLE[site].includes(field));
+
+/**
+ * Save LinkedIn's open position form (only after the user's `y`)
+ * @param {Object} page
+ */
+export async function saveLinkedInPosition(page) {
+  await page.locator('[role="dialog"] button:has-text("Save"), [role="dialog"] button:has-text("Сохранить")').first().click();
+}
+
+const HH = {
+  experienceCard: '[data-qa="profile-experience-company-card"]',
+  editButton: '[data-qa^="edit-experience-button-"]',
+  company: 'input[name="company"]',
+  position: 'input[name="position"]',
+  startYear: '[data-qa="resume-editor-experience-start-year-input"]',
+  endYear: '[data-qa="resume-editor-experience-end-year-input"]',
+  present: '[data-qa="resume-editor-experience-present-checkbox"]',
+  description: '[data-qa="resume-editor-experience-description-input"]',
+  monthSelect: '[data-qa="magritte-select-activator"]',
+  save: '[data-qa="profile-layout-save-button"]',
+  cancel: '[data-qa="profile-layout-cancel-button"]',
+};
+
+/**
+ * Runs in the page: click the edit button of the hh.ru experience card of a company and title
+ * (cards hold "company / duration / title / period"), after expanding the list
+ * @param {{company: string, title: string, editButton: string, card: string}} target
+ * @returns {boolean}
+ */
+export function clickHhExperienceEdit({ company, title, editButton, card }) {
+  const norm = (text) => String(text).toLowerCase().replace(/\s+/g, ' ').trim();
+  const cards = [...document.querySelectorAll(card)];
+  const match = cards.find((element) => norm(element.innerText).includes(norm(company)) && norm(element.innerText).includes(norm(title))) ??
+    cards.find((element) => norm(element.innerText).includes(norm(company)));
+  const button = match?.querySelector(editButton) ?? match?.parentElement?.querySelector(editButton);
+  button?.click();
+  return Boolean(button);
+}
+
+/**
+ * Open hh.ru's form for a job of the resume (its edit form, or a new one) and prefill it
+ * @param {Object} page
+ * @param {Object} change - Of planSync
+ * @param {Object} options
+ * @param {string} options.resumeHash
+ * @returns {Promise<string[]>} Notes: fields that could not be set
+ */
+export async function prefillHhExperience(page, change, { resumeHash }) {
+  const notes = [];
+  await page.goto(`https://hh.ru/resume/${resumeHash}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
+  // The list shows the latest jobs until it is expanded
+  await page.evaluate(() => [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button')]
+    .filter((button) => /развернуть|показать (все|ещё)/i.test(button.innerText)).forEach((button) => button.click()));
+  await sleep(1000);
+  if (change.kind === 'update') {
+    const found = await page.evaluate(clickHhExperienceEdit, {
+      company: change.target.company, title: change.target.title, editButton: HH.editButton, card: HH.experienceCard,
+    });
+    if (!found) {
+      return [`hh.ru: no experience card of ${change.target.company} found on the resume page`];
+    }
+  } else {
+    const added = await page.evaluate(() => {
+      const button = [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button, [data-qa="resume-list-card-experience"] a')]
+        .find((element) => /^добавить/i.test(element.innerText.trim()));
+      button?.click();
+      return Boolean(button);
+    });
+    if (!added) {
+      return ['hh.ru: the «Добавить» button of the experience list was not found'];
+    }
+  }
+  await page.waitForSelector(HH.position, { timeout: 30000 }).catch(() => notes.push('hh.ru: the experience form did not open'));
+  await sleep(1000);
+  const fill = async (selector, value) => {
+    const field = page.locator(selector).first();
+    if (await field.count() === 0) {
+      notes.push(`hh.ru: no field ${selector}`);
+      return;
+    }
+    await field.fill(String(value));
+  };
+  const { fields } = change;
+  if (fields.company && change.kind === 'add') {
+    await fill(HH.company, fields.company);
+  }
+  if (fields.title) {
+    await fill(HH.position, fields.title);
+  }
+  if (fields.description) {
+    await fill(HH.description, fields.description);
+  }
+  if (fields.start) {
+    await fill(HH.startYear, fields.start.slice(0, 4));
+    await chooseHhMonth(page, 0, fields.start, notes);
+  }
+  if ('current' in fields) {
+    const present = page.locator(HH.present).first();
+    if (await present.count() > 0 && await present.isChecked() !== Boolean(fields.current)) {
+      await present.click({ force: true });
+    }
+  }
+  if (fields.end && !fields.current) {
+    await fill(HH.endYear, fields.end.slice(0, 4));
+    await chooseHhMonth(page, 1, fields.end, notes);
+  }
+  if (fields.skills?.length) {
+    notes.push(`hh.ru: skills are kept for the whole resume («Навыки»), check that it has: ${fields.skills.join(', ')}`);
+  }
+  if (change.kind === 'add') {
+    notes.push('hh.ru: fill «Город или регион» and the industry of the new job yourself if hh.ru asks for them');
+  }
+  return notes;
+}
+
+/** Choose the month of hh.ru's start (0) or end (1) date in its custom select */
+async function chooseHhMonth(page, index, date, notes) {
+  if (!date.includes('-')) {
+    return;
+  }
+  const name = formatMonthYear(date, 'ru').split(' ')[0];
+  // The visible trigger shows "Месяц" and the chosen month; its combobox input is hidden
+  const trigger = page.locator(`${HH.monthSelect}:visible`).filter({ hasText: /^\s*Месяц/ }).nth(index);
+  if (await trigger.count() === 0) {
+    notes.push(`hh.ru: set the ${index === 0 ? 'start' : 'end'} month (${name}) yourself`);
+    return;
+  }
+  const current = await trigger.locator('[data-qa="trigger-values-wrapper"]').innerText().catch(() => '');
+  if (current.trim().toLowerCase() === name.toLowerCase()) {
+    return;
+  }
+  await trigger.click();
+  const option = page.getByRole('option', { name, exact: true }).first();
+  if (await option.waitFor({ timeout: 5000 }).then(() => true, () => false)) {
+    await option.click();
+  } else {
+    await page.keyboard.press('Escape');
+    notes.push(`hh.ru: set the ${index === 0 ? 'start' : 'end'} month (${name}) yourself`);
+  }
+}
+
+/**
+ * Save hh.ru's open experience form (only after the user's `y`)
+ * @param {Object} page
+ */
+export async function saveHhExperience(page) {
+  await page.locator(HH.save).first().click();
+}
+
+/**
+ * Leave hh.ru's experience form without saving: «Отменить», then «Не надо» in hh.ru's
+ * «Сохранить изменения?» question
+ * @param {Object} page
+ */
+export async function discardHhExperience(page) {
+  await page.locator(HH.cancel).first().click().catch(() => {});
+  const discard = page.getByRole('button', { name: 'Не надо', exact: true });
+  if (await discard.waitFor({ timeout: 5000 }).then(() => true, () => false)) {
+    await discard.click();
+  }
+}
+
+/**
+ * Close LinkedIn's position form without saving (Escape, then "Discard" when it asks)
+ * @param {Object} page
+ */
+export async function discardLinkedInPosition(page) {
+  await page.keyboard.press('Escape').catch(() => {});
+  const discard = page.locator('button:has-text("Discard"), button:has-text("Отменить изменения")').first();
+  if (await discard.waitFor({ timeout: 3000 }).then(() => true, () => false)) {
+    await discard.click();
+  }
+}
