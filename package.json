@@ -15,6 +15,7 @@
     "answer-chats": "bun src/answer-chats.mjs",
     "experience": "bun src/experience-sync.mjs",
     "test-assignment": "bun src/test-assignment.mjs",
+    "contacts-migrate": "bun src/contacts-migrate.mjs",
     "playwright": "bun src/apply.mjs --engine playwright",
     "puppeteer": "bun src/apply.mjs --engine puppeteer",
     "lint": "eslint .",

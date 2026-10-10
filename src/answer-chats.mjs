@@ -17,6 +17,7 @@ import path from 'path';
 import { openSlot, copySession } from './browser-slots.mjs';
 import { askUser, enableConfirmations, withdrawPrompt } from './confirmations.mjs';
 import { createQADatabase, findBestMatch } from './qa-database.mjs';
+import { withContacts } from './contacts.mjs';
 import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
@@ -66,7 +67,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const chatUrl = (id) => `https://hh.ru/chat/${id}`;
 
 const sources = await loadAnswerSources();
-const templatesDb = createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino'));
+// Template replies may hold contact placeholders too
+const templatesDb = withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), sources.contacts);
 const handledForms = new Set();
 
 const session = await openSlot({ name: 'chat-slot', port: CHAT_SLOT_PORT });
