@@ -9,12 +9,13 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { isAssignmentLinkQuestion, readAssignment, readAssignments } from './assignments.mjs';
+import { formVacancy, isAssignmentLinkQuestion, readAssignment, readAssignments } from './assignments.mjs';
 import { copySession, openSlot, slotDir } from './browser-slots.mjs';
 import { isBrowserRunning } from './browser-session.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { startFormWatch } from './form-answers.mjs';
 import { createQADatabase } from './qa-database.mjs';
+import { fetchVacancy, isPayQuestion, payGuidance } from './vacancy-context.mjs';
 import {
   askClaude, draftPrompt, loadProfile, pickOptions, plainText, planAnswers, readFormFields, relatedAnswers, TO_CHECK,
 } from './form-prefill.mjs';
@@ -81,7 +82,7 @@ async function fill(field) {
   await control.fill(date ? `${date[3]}-${date[2]}-${date[1]}` : field.answer);
 }
 
-async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepOpenHours, company }) {
+async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepOpenHours, company, vacancyUrl }) {
   const log = (message) => console.log(`[slot ${slot}] ${message}`);
   const port = 9330 + slot;
   const session = await openSlot({ name: `form-slot-${slot}`, port, keepOpenHours });
@@ -116,6 +117,12 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
   };
   log(`📝 "${form.title}": ${form.fields.length} question(s)${frames.some(({ frame }) => frame !== page.mainFrame()) ? ' (in a frame)' : ''}`);
   const planned = planAnswers(form.fields, { profile, qaMap, company });
+  // The vacancy of the form: a pay question is answered against its pay, not with a saved sum
+  const vacancy = await fetchVacancy(vacancyUrl ?? await formVacancy(url));
+  if (vacancy?.salary) {
+    planned.filter((field) => isPayQuestion(field.title) && field.kind !== 'file' && field.source !== 'company from the chat')
+      .forEach((field) => Object.assign(field, { open: true, answer: undefined, choices: undefined, source: undefined }));
+  }
 
   // A test assignment comes first: its repository is where the form's result link points
   const assignment = (await Promise.all(frames.map(({ frame }) => frame.evaluate(readAssignment).catch(() => null)))).find(Boolean);
@@ -140,7 +147,8 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
       log(`🤖 Drafting ${open.length} answer(s) with local Claude Code from the resume and qa.lino...`);
     }
     await Promise.all(open.map(async (field) => {
-      const drafted = await askClaude(draftPrompt({ form, field, resume, related: relatedAnswers(field.title, qaMap) }));
+      const pay = isPayQuestion(field.title) ? payGuidance({ vacancy, profile }) : '';
+      const drafted = await askClaude(draftPrompt({ form, field, resume, related: relatedAnswers(field.title, qaMap), vacancy, pay }));
       if (!drafted) {
         return;
       }
@@ -234,10 +242,10 @@ export async function nextFreeSlot() {
  * @param {boolean} [options.learn=true] - Save the answers the user sends to qa.lino (a detached watcher per slot)
  * @returns {Promise<{text: string, reportFile: string}>}
  */
-export async function prefillForms(urls, { firstSlot, draft = true, keepOpenHours = 24, sources, company, learn = true } = {}) {
+export async function prefillForms(urls, { firstSlot, draft = true, keepOpenHours = 24, sources, company, vacancyUrl, learn = true } = {}) {
   const known = sources ?? await loadAnswerSources();
   const first = firstSlot ?? await nextFreeSlot();
-  const results = await Promise.all(urls.map((url, index) => prefillSlot(String(url), first + index, known, { draft, keepOpenHours, company })
+  const results = await Promise.all(urls.map((url, index) => prefillSlot(String(url), first + index, known, { draft, keepOpenHours, company, vacancyUrl })
     .catch((error) => {
       console.log(`[slot ${first + index}] ❌ ${error.message}`);
       return { url, slot: first + index, fields: [], failed: true };

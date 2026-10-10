@@ -197,3 +197,10 @@ describe('a sent form in another language', () => {
     assert.ok(!isSubmitted({ ...sent, fields: 3, text: '?', urls: ['https://docs.google.com/forms/d/e/1FAIpQLSc/formResponse'] }));
   });
 });
+
+describe('pay answers are not learned', () => {
+  test('a sum given for one vacancy is not saved as a rule', () => {
+    assert.deepEqual(pairsToSave([{ title: 'За какую минимальную оплату в час готовы работать?', answer: 'около 476 ₽ в час' }, { title: 'Ваш город', answer: 'Нячанг' }], { qaMap: new Map() })
+      .map((pair) => pair.question), ['Ваш город']);
+  });
+});

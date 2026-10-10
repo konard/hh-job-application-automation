@@ -22,6 +22,7 @@ import { isAssignmentLinkQuestion } from './assignments.mjs';
 import { findBestMatch } from './qa-database.mjs';
 import { answerText } from './qa.mjs';
 import { readFormFields, TO_CHECK } from './form-prefill.mjs';
+import { isPayQuestion } from './vacancy-context.mjs';
 
 const WATCH_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'form-watch.mjs');
 const POLL_MS = 2000;
@@ -116,7 +117,8 @@ export function answersFromSnapshot(fields, values) {
  */
 export function pairsToSave(answers, { qaMap, prefilled = [] }) {
   return answers.filter(({ title, answer }) => {
-    if (!title || isEmpty(answer) || answerText(answer).includes(`[${TO_CHECK}`) || isAssignmentLinkQuestion(title)) {
+    // A pay answer follows its vacancy's pay (vacancy-context.mjs): one vacancy's sum is not a rule
+    if (!title || isEmpty(answer) || answerText(answer).includes(`[${TO_CHECK}`) || isAssignmentLinkQuestion(title) || isPayQuestion(title)) {
       return false;
     }
     if (prefilled.some((item) => item.title === title && sameAnswer(item.answer, answer))) {

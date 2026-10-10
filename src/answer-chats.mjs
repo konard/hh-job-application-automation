@@ -145,7 +145,7 @@ async function prefillChat(id) {
   if (links.length > 0) {
     links.forEach((link) => handledForms.add(link));
     console.log(`📝 Prefilling the questionnaire(s) from the chat in form slots: ${links.join(', ')}`);
-    prefillForms(links, { draft: argv.draft, learn: argv.learn, sources, company: chat.company })
+    prefillForms(links, { draft: argv.draft, learn: argv.learn, sources, company: chat.company, vacancyUrl: chat.vacancyUrl })
       .then(async ({ reportFile, results }) => {
         console.log(`📄 Questionnaire report: ${reportFile}`);
         // A test assignment in the form takes the language and stack of this vacancy

@@ -54,6 +54,8 @@ const CONTACT_PARTS = [
   { key: 'email', test: /e-?mail|почт/i },
   { key: 'links', test: /резюме|\bcv\b|портфолио|профессиональный профиль|linkedin|github|гитхаб/i },
   { key: 'city', test: /город|локаци|страна прожив|где вы (находитесь|живете|проживаете)|location|\bcity\b/i },
+  // «Ваш город и сколько от мск (+- х мск)»: the city with its time zone (profile.lino «timezone»)
+  { key: 'timezone', test: /мск|\bmsk\b|часов\p{L}* пояс|time ?zone|\butc\b|\bgmt\b/iu },
 ];
 
 /**
@@ -194,7 +196,7 @@ export function relatedAnswers(question, qaMap, limit = 8) {
  * The prompt for a draft answer: only facts from the resume and the saved answers
  * @returns {string}
  */
-export function draftPrompt({ form, field, resume, related }) {
+export function draftPrompt({ form, field, resume, related, vacancy = null, pay = '' }) {
   const choice = field.options?.length
     ? `\nЭто вопрос с вариантами. Ответь ТОЛЬКО точным текстом одного варианта${field.kind === 'checkbox' ? ' (или нескольких, по одному на строке)' : ''}:\n${field.options.map((option) => `- ${option}`).join('\n')}\n`
     : '';
@@ -207,8 +209,8 @@ export function draftPrompt({ form, field, resume, related }) {
 Анкета: ${form.title}
 ${form.description ? `Описание анкеты: ${form.description}\n` : ''}
 Вопрос: ${field.title}
-${field.description ? `Пояснение к вопросу: ${field.description}\n` : ''}${choice}
-=== Моё резюме ===
+${field.description ? `Пояснение к вопросу: ${field.description}\n` : ''}${choice}${pay ? `\n${pay}\n` : ''}
+${vacancy ? `=== Вакансия, на которую эта анкета ===\n${vacancy.title}${vacancy.salary ? `\nОплата: ${vacancy.salary}` : ''}\n${String(vacancy.description ?? '').slice(0, 2500)}\n\n` : ''}=== Моё резюме ===
 ${resume}
 
 === Мои прошлые ответы на похожие вопросы ===

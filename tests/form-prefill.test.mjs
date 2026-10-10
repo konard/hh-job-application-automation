@@ -118,3 +118,11 @@ describe('plain text drafts', () => {
     assert.equal(plainText(draft), 'Проект: ИИ-роутер — единая точка доступа.\n\nИтог\n— первый пункт\n— второй, с кодом\nGitHub (https://github.com/konard)');
   });
 });
+
+describe('a city question that asks for the time zone', () => {
+  test('gets the city with the time zone of the profile', () => {
+    const profile = { city: 'Нячанг, Вьетнам', timezone: 'UTC+7, МСК+4' };
+    assert.equal(contactAnswer('Ваш город и сколько от мск (+- х мск)', profile).answer, 'Нячанг, Вьетнам, UTC+7, МСК+4');
+    assert.equal(contactAnswer('Ваш город', profile).answer, 'Нячанг, Вьетнам');
+  });
+});
