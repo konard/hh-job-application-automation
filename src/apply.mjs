@@ -11,6 +11,7 @@
  */
 
 import path from 'path';
+import { spawn } from 'child_process';
 import { isNavigationError, isTimeoutError, makeBrowserCommander } from 'browser-commander';
 import { createQADatabase } from './qa-database.mjs';
 import { enableDebugLevel } from './logging.mjs';
@@ -31,6 +32,7 @@ const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'))
 
 let session = null;
 let commander = null;
+let chatProcess = null;
 let shuttingDown = false;
 
 /**
@@ -43,6 +45,10 @@ async function shutdown(reason, exitCode = 0) {
   shuttingDown = true;
   console.log(`\n${reason}, shutting down...`);
   try {
+    if (chatProcess) {
+      chatProcess.kill('SIGTERM');
+      chatProcess = null;
+    }
     await stopTracing();
     await commander?.destroy();
     await session?.release();
@@ -151,6 +157,23 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),
   });
+
+  if (argv.processChats) {
+    const intervalSeconds = argv.chatsIntervalMinutes * 60;
+    const chatScriptPath = new URL('./answer-chats.mjs', import.meta.url).pathname;
+    chatProcess = spawn(process.execPath, [chatScriptPath, '--auto', `--poll=${intervalSeconds}`], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    chatProcess.stdout.on('data', (data) => process.stdout.write(data));
+    chatProcess.stderr.on('data', (data) => process.stderr.write(data));
+    chatProcess.on('exit', (code) => {
+      chatProcess = null;
+      if (code !== 0 && !shuttingDown) {
+        console.log(`⚠️  Chat processor exited with code ${code}`);
+      }
+    });
+    console.log(`💬 Chat processor started (checking unread chats every ${argv.chatsIntervalMinutes} min)`);
+  }
 
   await orchestrator.start();
 })().catch((error) => {

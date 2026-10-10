@@ -22,20 +22,23 @@ import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
   --watch                Go through the chats waiting for an answer, one at a time, and keep watching
+  --auto                 Unread chats only, without prompts (apply --process-chats): chats that need nothing
+                         sent are handled; at the first one that needs a message (a reply typed or drafted
+                         for you to check, or none found) it stops with that chat open and waits until you
+                         have answered it
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
   --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
-  --poll <seconds>       How often the chat list is checked in --watch (default 300: hh.ru is not polled often
-                         while the automation browser applies)`;
+  --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, auto: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -43,6 +46,9 @@ function parseArgs(args) {
       process.exit(0);
     } else if (flag === '--watch') {
       parsed.watch = true;
+    } else if (flag === '--auto') {
+      parsed.auto = true;
+      parsed.watch = true; // --auto implies watch mode
     } else if (flag === '--no-draft') {
       parsed.draft = false;
     } else if (flag === '--no-forms') {
@@ -166,16 +172,16 @@ async function prefillChat(id) {
   }
   if (!reply) {
     console.log('❓ No saved or drafted reply: answer it yourself');
-    return last.id;
+    return { id: last.id, replied: false, title: chat.vacancy };
   }
   const input = page.locator(MESSAGE_INPUT).first();
   if ((await input.inputValue().catch(() => '')).trim()) {
     console.log('✋ The message field already has text: left as it is');
-    return last.id;
+    return { id: last.id, replied: true, title: chat.vacancy };
   }
   await input.fill(reply.answer);
   console.log(`✍️  Typed the reply (${reply.source}${reply.matched ? `: ${reply.matched.slice(0, 80)}` : ''}): check it and send it yourself\n   ${reply.answer.replace(/\n/g, '\n   ')}`);
-  return last.id;
+  return { id: last.id, replied: true, title: chat.vacancy };
 }
 
 /** Wait until the user has sent a message after the one answered, or chose to skip (s) */
@@ -201,8 +207,8 @@ async function waitForSend(answeredId) {
 
 for (const id of argv.chats) {
   const answered = await prefillChat(id);
-  if (answered && (argv.watch || argv.chats.length > 1)) {
-    await waitForSend(answered);
+  if (answered && !argv.auto && (argv.watch || argv.chats.length > 1)) {
+    await waitForSend(answered.id);
   }
 }
 
@@ -210,8 +216,25 @@ if (argv.watch) {
   // A chat is seen again when its last message changes (the employer wrote again)
   const seen = new Set();
   const seenKey = (chat) => `${chat.id}\n${chat.subtitle}`;
-  console.log(`👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
+  // --auto: the chat left open for the user; nothing else is processed until it is answered
+  let stuckChat = null;
+  console.log(argv.auto
+    ? `💬 Processing unread chats every ${argv.poll} s`
+    : `👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
   for (;;) {
+    if (stuckChat) {
+      // Read where it was left (the typed reply stays), without the chat list
+      if (!page.url().startsWith(chatUrl(stuckChat.id))) {
+        await page.goto(chatUrl(stuckChat.id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
+      }
+      const chat = await page.evaluate(readChat).catch(() => null);
+      if (!chat || !isChatAnswered(chat)) {
+        await sleep(argv.poll * 1000);
+        continue;
+      }
+      console.log(`💬 Chat answered, processing unread chats again: ${stuckChat.title}`);
+      stuckChat = null;
+    }
     await page.goto('https://hh.ru/chat', { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
     await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
     if (!await waitForCaptcha(page, console.log)) {
@@ -219,14 +242,22 @@ if (argv.watch) {
       continue;
     }
     const chats = await page.evaluate(readChatList);
-    const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) && !argv.chats.includes(chat.id));
+    const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) &&
+      (argv.auto ? chat.unread : !argv.chats.includes(chat.id)));
     argv.chats.length = 0;
     for (const chat of waiting) {
       seen.add(seenKey(chat));
       const answered = await prefillChat(chat.id);
-      if (answered) {
-        await waitForSend(answered);
+      if (!answered) {
+        continue;
       }
+      if (argv.auto) {
+        // Nothing is sent by the tool: stop here with the chat open until the user has answered it
+        console.log(`💬 ${answered.replied ? 'Check the typed reply and send it' : 'Chat needs your reply'}: ${chat.title} ${chatUrl(chat.id)}`);
+        stuckChat = { id: chat.id, title: chat.title };
+        break;
+      }
+      await waitForSend(answered.id);
     }
     await sleep(argv.poll * 1000);
   }

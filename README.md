@@ -206,6 +206,18 @@ answer is missing:
 bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 ```
 
+To also process unread hh.ru chats automatically alongside the application loop, add
+`--process-chats`. The chat processor runs in the separate chat browser slot (port 9340, never
+the application browser) and checks for unread messages every 2 hours (change with
+`--chats-interval-minutes`). Chats with a known reply or no reply needed are handled quietly;
+when a chat cannot be handled it is left open in the chat slot with any available draft, and
+`apply` prints `💬 Chat needs your reply: <title> <url>` — applications keep running meanwhile:
+
+```bash
+bun run apply -- --message-file data/cover-letter.txt --process-chats
+bun run apply -- --message-file data/cover-letter.txt --process-chats --chats-interval-minutes 60
+```
+
 You can also send a form yourself in the browser: the run notices the sent application (it
 counts towards `--max-applications`), withdraws its pending question, keeps the interval
 pause and returns to the vacancy list.
