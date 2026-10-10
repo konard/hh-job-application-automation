@@ -13,6 +13,43 @@ import { askUser, isInteractive } from './confirmations.mjs';
 export const RESUME_HIDDEN_NOTICE = 'поменяйте видимость резюме';
 
 /**
+ * Runs in the page: whether the notice is rendered in the scope. hh.ru keeps it in every response
+ * popup inside a collapsed block (data-qa="hidden-resume-warning", height 0) that opens only for a
+ * hidden resume, so text inside a collapsed or hidden element does not count
+ * @param {string|null} selector - The popup; the whole page when null
+ * @param {string} notice - Lowercase text, ё as е
+ * @returns {boolean}
+ */
+export function findShownNotice(selector, notice) {
+  const scope = selector ? document.querySelector(selector) : document.body;
+  if (!scope) {
+    return false;
+  }
+  const collapsed = (element) => {
+    const style = window.getComputedStyle(element);
+    return style.display === 'none' || style.visibility === 'hidden' ||
+      (element.getBoundingClientRect().height === 0 && style.overflow !== 'visible');
+  };
+  const walker = document.createTreeWalker(scope, window.NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent.toLowerCase().replace(/ё/g, 'е').includes(notice)) {
+      continue;
+    }
+    let shown = true;
+    for (let element = node.parentElement; element && element !== scope.parentElement; element = element.parentElement) {
+      if (collapsed(element)) {
+        shown = false;
+        break;
+      }
+    }
+    if (shown) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Whether the form (or the page) shows the notice
  * @param {Object} commander
  * @param {string} [scopeSelector] - The popup; the whole page when not given
@@ -20,8 +57,7 @@ export const RESUME_HIDDEN_NOTICE = 'поменяйте видимость ре�
  */
 export async function isResumeHiddenNoticeShown(commander, scopeSelector) {
   const { value } = await commander.safeEvaluate({
-    fn: (selector, notice) => ((selector ? document.querySelector(selector) : document.body)?.innerText ?? '')
-      .toLowerCase().replace(/ё/g, 'е').includes(notice),
+    fn: findShownNotice,
     args: [scopeSelector ?? null, RESUME_HIDDEN_NOTICE],
     defaultValue: false,
     operationName: 'resume visibility notice',

@@ -247,7 +247,9 @@ Every filtered vacancy is logged with the rule (`🚫 Vacancy … filtered out b
 line to the rules when you see a vacancy that should have been skipped.
 
 hh.ru's notice «поменяйте видимость резюме на «Видно всем работодателям…»» is not a filter: it
-depends on the resume, so once it shows, every such vacancy shows it. The run asks you to make the
+depends on the resume, so once it shows, every such vacancy shows it. Only a rendered notice counts:
+every response popup carries it in a collapsed `hidden-resume-warning` block that opens only for a
+hidden resume. The run asks you to make the
 resume visible (on hh.ru in your own browser or the app; the automation browser keeps to one tab)
 and then goes on, or `s` skips the vacancy. Unattended runs skip it.
 
