@@ -164,6 +164,9 @@ export async function extractQAPairs(options = {}) {
       textareas.forEach((textarea) => {
         const taskBody = textarea.closest('[data-qa="task-body"]');
         if (!taskBody) return;
+        // The "Свой вариант" box of a choice question: its text is the answer only when that
+        // option is checked, which the choice part below reads
+        if (taskBody.querySelector('input[type="radio"], input[type="checkbox"]')) return;
 
         const questionEl = taskBody.querySelector('[data-qa="task-question"]');
         if (!questionEl) return;

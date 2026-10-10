@@ -17,6 +17,7 @@ import {
   collectMarkedQAPairs,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
+import { describeFilterMatch } from './vacancy-filters.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
 import { askUser, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
@@ -51,7 +52,10 @@ const savedAnswers = new Map();
  */
 async function savePairs(pairs, addOrUpdateQA) {
   let saved = 0;
-  for (const { question, answer } of pairs) {
+  // One answer per question: two (e.g. a choice and the text of its "Свой вариант" box) would
+  // overwrite each other on every save
+  const answers = new Map(pairs.map(({ question, answer }) => [question, answer]));
+  for (const [question, answer] of answers) {
     const key = JSON.stringify(answer);
     if (savedAnswers.get(question) === key) {
       continue;
@@ -196,6 +200,25 @@ function countEmptyTestTextareas({ commander }) {
 }
 
 /**
+ * What the vacancy filters check on the response form: the vacancy name, the questions and the
+ * text of the form (without the site header and footer)
+ * @returns {Promise<{vacancy: string, questions: string[], page: string}>}
+ */
+async function readFormForFilters(commander) {
+  const { value } = await commander.safeEvaluate({
+    fn: () => ({
+      vacancy: document.querySelector('[data-qa="vacancy-credentials"]')?.innerText ?? '',
+      page: (document.querySelector('main') ?? document.body).innerText,
+    }),
+    defaultValue: { vacancy: '', page: '' },
+    operationName: 'response form text for the vacancy filters',
+    silent: true,
+  });
+  const questions = (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question);
+  return { ...value, questions };
+}
+
+/**
  * Handle the vacancy_response page
  *
  * Note: This function is called exclusively from the pageTrigger system
@@ -215,6 +238,7 @@ export async function handleVacancyResponsePage({
   onMissingAnswers = 'wait',
   deferredQuestions = null,
   autoSendExact = true,
+  vacancyFilters = null,
   verbose,
 }) {
   const skipQuestionnaireVacancy = async () => {
@@ -246,6 +270,16 @@ export async function handleVacancyResponsePage({
 
     // Direct application vacancies are applied on the employer's site - skip them
     if ((await checkAndCloseDirectApplicationModal({ commander })).isDirectApplication) {
+      return;
+    }
+
+    const filterMatch = await vacancyFilters?.match(await readFormForFilters(commander));
+    if (filterMatch) {
+      const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
+      console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
+      await vacancyFilters.remember(vacancyId, filterMatch);
+      console.log(`Returning to: ${returnUrl}`);
+      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
       return;
     }
 
