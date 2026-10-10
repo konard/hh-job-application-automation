@@ -97,6 +97,8 @@ export default [
       'node_modules/**',
       'package-lock.json',
       '.git/**',
+      // Worktrees of Claude Code agents: their work is linted on its own branch
+      '.claude/**',
     ],
   },
 ];

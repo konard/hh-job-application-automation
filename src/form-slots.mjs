@@ -250,7 +250,8 @@ export async function prefillForms(urls, { firstSlot, draft = true, keepOpenHour
   await fs.writeFile(reportFile, text);
   if (learn) {
     // The prefill exits while the forms wait for the user: a watcher per slot learns what is sent
-    for (const result of results.filter((item) => !item.failed)) {
+    // The employer rating poll is not learned: its ratings belong to one employer
+    for (const result of results.filter((item) => !item.failed && !/(^|\.)rating\.hh\.ru$/.test(new URL(item.url).hostname))) {
       startFormWatch({
         slot: result.slot, port: 9330 + result.slot, userDataDir: slotDir(`form-slot-${result.slot}`), planned: result.fields, reportFile, keepOpenHours,
       });

@@ -36,7 +36,7 @@
 import { Parser } from 'links-notation';
 import fs from 'fs/promises';
 import path from 'path';
-import { createMutex } from './helpers/mutex.mjs';
+import { createMutex, withFileLock } from './helpers/mutex.mjs';
 
 /**
  * Creates a Q&A database instance with the specified file path
@@ -270,8 +270,11 @@ export function createQADatabase(filePath) {
         return;
       }
 
-      // Write new content
-      await fs.writeFile(QA_FILE_PATH, newContent, 'utf8');
+      // Write new content: a temporary file renamed over the old one, so a reader in another
+      // process never sees a half-written file
+      const temporary = `${QA_FILE_PATH}.${process.pid}.tmp`;
+      await fs.writeFile(temporary, newContent, 'utf8');
+      await fs.rename(temporary, QA_FILE_PATH);
     } catch (error) {
       console.error('Error writing Q&A database:', error);
       throw error;
@@ -285,11 +288,12 @@ export function createQADatabase(filePath) {
    * @param {string} answer - The answer
    */
   function addOrUpdateQA(question, answer) {
-    return exclusive(async () => {
+    // One write at a time in this process, and across processes (the run, form watchers, chats)
+    return exclusive(() => withFileLock(QA_FILE_PATH, async () => {
       const qaMap = await readQADatabase();
       qaMap.set(question, answer);
       await writeQADatabase(qaMap);
-    });
+    }));
   }
 
   /**
