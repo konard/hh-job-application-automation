@@ -144,6 +144,10 @@ async function prefillChat(id) {
     }));
     reply = drafted && { answer: drafted, source: 'draft, check it' };
   }
+  if (reply?.noReply) {
+    console.log(`📭 No reply needed (${reply.source}${reply.matched ? `: ${reply.matched.slice(0, 80)}` : ''}): read`);
+    return null;
+  }
   if (!reply) {
     console.log('❓ No saved or drafted reply: answer it yourself');
     return last.id;

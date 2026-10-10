@@ -4,7 +4,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   formLinks, isPattern, isRejection, knownReply, learnedPairs, learnPatterns, matchesPattern, pendingMessages, PATTERN_PREFIX,
-  REJECTION_KEY, templateCore, withLearnedPatterns,
+  NO_REPLY, REJECTION_KEY, summaryPairs, templateCore, withLearnedPatterns,
 } from '../src/chat-answers.mjs';
 
 const templates = new Map([
@@ -105,5 +105,29 @@ describe('template patterns', () => {
     const stale = new Map([...examples, [`${PATTERN_PREFIX}старый шаблон`, reply]]);
     assert.ok(!withLearnedPatterns(stale).has(`${PATTERN_PREFIX}старый шаблон`));
     assert.ok([...withLearnedPatterns(stale).keys()].some(isPattern));
+  });
+});
+
+describe('recruiter bot summaries and messages without a reply', () => {
+  const summary = 'Есть ли у вас опыт работы в качестве ML инженера в направлении CV? Если есть, то сколько лет?: Можно без опыта?\n' +
+    'Работали ли с архитектурными или строительными чертежами?: Нет.\n' +
+    'Какой у вас уровень владения английским языком?: Английский — C1.';
+
+  test('the summary lines are learned, answers that are questions back are not', () => {
+    const { questions } = learnedPairs([{ mine: false, title: 'Робот-рекрутер', text: summary }]);
+    assert.deepEqual(questions, [
+      ['Работали ли с архитектурными или строительными чертежами?', 'Нет.'],
+      ['Какой у вас уровень владения английским языком?', 'Английский — C1.'],
+    ]);
+    assert.deepEqual(summaryPairs('Есть ли опыт? Расскажите'), []);
+  });
+
+  test('a summary and a template saved without a reply need no reply', () => {
+    const closing = 'Спасибо!\nВаши ответы отправлены работодателю. Если ваш отклик его заинтересует, он напишет в этом же чате или позвонит по номеру, который вы указали.';
+    const withClosing = new Map([...templates, [closing.replace('\n', ' '), NO_REPLY]]);
+    assert.equal(knownReply({ title: 'Робот-рекрутер', text: summary }, { templates, qaMap })?.noReply, true);
+    const reply = knownReply({ title: 'Робот-рекрутер', text: closing }, { templates: withClosing, qaMap });
+    assert.equal(reply?.noReply, true);
+    assert.equal(reply?.answer, '');
   });
 });

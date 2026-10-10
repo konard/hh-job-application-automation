@@ -236,6 +236,7 @@ Details and checks: [forms-and-chats.md, section C](forms-and-chats.md#c-hhru-ch
 | C10 | Questionnaire links from chats are prefilled in form slots | 🧪 |
 | C11 | hh.ru's employer rating poll from a chat opens prefilled (company) in a form slot; ratings stay the user's | 🧪 |
 | C12 | Template messages answered the same way are generalized into learned patterns (`…` gaps, `*` endings) | 🧪 |
+| C13 | Messages that need no reply (a bot's summary of answers, `[без ответа]` templates) are only read; summaries are learned | ✅ |
 
 ## EXP: work experience export, sync and translation
 
@@ -340,11 +341,11 @@ of them, so none is lost.
 | FLT | 6 | 2 | 3 | 1 | | |
 | RES | 3 | 3 | | | | |
 | FORM (B) | 15 | 9 | 5 | | 1 | |
-| CHAT (C) | 12 | 6 | 6 | | | |
+| CHAT (C) | 13 | 7 | 6 | | | |
 | EXP | 7 | | | | 7 | |
 | SEC | 9 | 9 | | | | |
 | PROC | 13 | 13 | | | | |
-| **Total** | **134** | **102** | **17** | **4** | **8** | **3** |
+| **Total** | **135** | **103** | **17** | **4** | **8** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

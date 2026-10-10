@@ -94,6 +94,7 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 | C10 | Questionnaire links sent in chats (Google Forms, Yandex Forms, Microsoft Forms, Typeform) are prefilled in a free form slot (B1–B13) | Maria's «анкета: https://forms.gle/NTRexHv7bxQQxnKZA» → form slot | 🧪 |
 | C11 | hh.ru's employer rating poll (https://rating.hh.ru/poll) from a chat opens in a form slot logged in to hh.ru with the company typed into the search; the ratings are the user's to choose (never invented, never submitted) | Контур's message → rating poll slot | 🧪 |
 | C12 | Template messages answered the same (or a similar) way are generalized into learned patterns in chat-templates.lino: the words they share in order, `…` for what differs, `*` for word endings; patterns are learned again whenever a new template reply is learned, a different template with the same reply stays apart, a question never matches a pattern | Ирина's and Технократия's messages → `pattern: ваше резюме … опыт* … позиции … свяже* с вами`; `tests/chat-answers.test.mjs` | 🧪 |
+| C13 | Messages that need no reply are only read: a recruiter bot's summary («Вопрос?: Ответ» lines, whose answers are learned into qa.lino, answers that are questions back aside) and templates saved with the reply `[без ответа]` (the bot's «Спасибо! Ваши ответы отправлены работодателю…») | Mad Devs chat 5698827730: «📭 No reply needed», the English/salary answer learned | ✅ |
 
 ## D. Rules for all of it
 

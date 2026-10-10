@@ -38,12 +38,13 @@ export function readChat() {
     .map((element) => {
       const bubble = element.querySelector('[data-qa="chat-bubble-wrapper"]');
       const left = element.getBoundingClientRect().left;
-      const mine = Boolean(element.querySelector('[data-qa^="status-icon"]')) ||
+      const mine = Boolean(element.querySelector('[data-qa^="status-icon"], [data-qa^="chat-bubble-icon"], [class*="message_my"], [class*="chat-bubble_outgoing"]')) ||
         (bubble ? bubble.getBoundingClientRect().left - left > 40 : false);
       return {
         id: element.getAttribute('data-qa').replace('chatik-chat-message-', ''),
         mine,
-        title: clean(element.querySelector('[data-qa="chat-bubble-title"]')?.innerText),
+        // The sender: «Отклик на вакансию», a person's name or «Робот-рекрутер»
+        title: clean(element.querySelector('[data-qa="chat-bubble-title"], [data-qa="chat-bubble-author-name"]')?.innerText),
         text: clean(element.querySelector('[data-qa="chat-bubble-text"]')?.innerText),
         // hh.ru marks a rejection with an «Отказ» line in the bubble
         rejection: !mine && /^\s*Отказ\s*$/m.test(element.innerText),
@@ -107,6 +108,20 @@ export function templateCore(text, { sender = '' } = {}) {
   return lines.join('\n');
 }
 
+/** The reply of a template that needs none (a bot's «Ваши ответы отправлены работодателю») */
+export const NO_REPLY = '[без ответа]';
+
+/**
+ * The questions and answers of a recruiter bot's summary: each line «Вопрос?: Ответ»
+ * @param {string} text
+ * @returns {Array<[string, string]>} Empty when the message is not such a summary
+ */
+export function summaryPairs(text) {
+  const lines = String(text).split('\n').map((line) => line.trim()).filter(Boolean);
+  const pairs = lines.map((line) => line.match(/^(.+\?)\s*:\s+(.+)$/)).filter(Boolean).map(([, question, answer]) => [question.trim(), answer.trim()]);
+  return pairs.length > 0 && pairs.length === lines.length ? pairs : [];
+}
+
 /** Key of the reply to a rejection in data/chat-templates.lino (asking for the reason) */
 export const REJECTION_KEY = 'Отказ';
 
@@ -131,6 +146,10 @@ const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
  * @returns {{answer: string, source: string, matched: string}|null}
  */
 export function knownReply(message, { templates, qaMap }) {
+  // A bot's summary of the answers given is not a question to the user
+  if (summaryPairs(message.text).length > 0) {
+    return { answer: '', noReply: true, source: 'summary of the answers given', matched: '' };
+  }
   // A rejection gets the saved question about its reason, whatever its wording
   if (isRejection(message) && templates.has(REJECTION_KEY)) {
     return { answer: answerText(templates.get(REJECTION_KEY)), source: 'rejection: asking for the reason', matched: REJECTION_KEY };
@@ -147,7 +166,8 @@ export function knownReply(message, { templates, qaMap }) {
     ? { question: contained || pattern, answer: templates.get(contained || pattern), score: 1 }
     : findBestMatch(core, examples, { threshold: TEMPLATE_THRESHOLD });
   if (template) {
-    return { answer: answerText(template.answer), source: `chat-templates.lino ${template.score.toFixed(2)}`, matched: template.question };
+    const answer = answerText(template.answer);
+    return { answer: answer === NO_REPLY ? '' : answer, noReply: answer === NO_REPLY, source: `chat-templates.lino ${template.score.toFixed(2)}`, matched: template.question };
   }
   if (isQuestion(core)) {
     const saved = findBestMatch(core, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
@@ -316,7 +336,7 @@ export function withLearnedPatterns(templates) {
 
 /**
  * Pairs the user has answered in a chat, to learn: an employer's message followed by the user's
- * reply. Questions go to qa.lino, other messages are templates. The application itself and
+ * reply, and the lines of a recruiter bot's summary. Questions go to qa.lino, other messages are templates. The application itself and
  * replies that are questions back («Можно без опыта?») are not answers
  * @param {Array<{mine: boolean, title: string, text: string}>} messages
  * @returns {{questions: Array<[string, string]>, templates: Array<[string, string]>}}
@@ -325,7 +345,12 @@ export function learnedPairs(messages) {
   const questions = [];
   const templates = [];
   messages.forEach((message, index) => {
-    if (!message.mine || message.title === APPLICATION_TITLE || isQuestion(message.text)) {
+    // A recruiter bot repeats the questions with the answers given; answers that are questions back are not answers
+    if (!message.mine) {
+      questions.push(...summaryPairs(message.text).filter(([, answer]) => !isQuestion(answer)));
+      return;
+    }
+    if (message.title === APPLICATION_TITLE || isQuestion(message.text)) {
       return;
     }
     const asked = messages[index - 1];
