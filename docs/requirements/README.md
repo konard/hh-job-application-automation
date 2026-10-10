@@ -129,7 +129,7 @@ Sections:
 | CONF9 | «We only auto-submit on exact symbol by symbol match, but prefill should use similarity search.» | Prefill uses similarity (fuzzy) matching, without mixing subjects (= [A1, A4](forms-and-chats.md#a-hhru-application-forms)) | Live: Project Manager form prefilled by similarity (0.69 / 0.55); `tests/fuzzy-matching.test.mjs` | ✅ | baade6b, efe3a38, f5b1de8 |
 | CONF10 | Derived from «Forms with questions only with my confirmation» (a stale «y» nearly confirmed an unseen form) | A form the user sends in the browser counts as sent; the waiting prompt is withdrawn, and a `y` typed before a prompt was shown is ignored | `tests/confirmations.test.mjs` («answers typed for a withdrawn prompt … do not confirm the next prompt») | 🧪 | 6ec31d8, 5c77637, 70e0acd |
 | CONF11 | «All errors and warnings must be fixed.» (run 19 ended with a TimeoutError) | When hh.ru switches from the popup to the full form, the popup steps stop and the full-form handler takes over | Live: vacancy 138276367; `tests/popup-full-form-switch.test.mjs` | ✅ | 965531d |
-| CONF12 | English cover letter (`data/cover-letter.en.txt`) when the vacancy's questions are clearly English | 🧪 |
+| CONF12 | «we need to add language detection, and post the same [cover letter] but in english when question are clearly in English» | The English cover letter (`data/cover-letter.en.txt` next to the chosen one, or `--message-file-en`) is typed when the vacancy's questions are clearly English (≥90% Latin letters), in the popup and the full form | `src/cover-letter.mjs`; `tests/cover-letter.test.mjs`; live: the Go Team Lead form 137908044 got the English letter | 🧪 | 74d45f6 |
 
 ## QA: answers
 
