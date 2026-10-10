@@ -5,6 +5,8 @@ the hh.ru application rules it follows, external questionnaires (Google Forms, Y
 company's own job form), and hh.ru chats (recruiter bots, template messages). Status as of
 2026-10-10; each requirement has the check that shows it works.
 
+Part of [the full list of requirements](README.md).
+
 Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 in progress · ⬜ to do
 
 ## The user's words
