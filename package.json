@@ -29,12 +29,12 @@
     "test-anywhere": "^0.9.1"
   },
   "dependencies": {
-    "browser-commander": "^0.26.3",
-    "links-notation": "^0.23.0",
+    "browser-commander": "^0.27.0",
+    "links-notation": "^0.25.1",
     "lino-arguments": "^0.3.0",
     "log-lazy": "^1.0.4",
     "playwright": "^1.64.0",
-    "puppeteer": "^25.12.0",
+    "puppeteer": "^25.13.0",
     "turndown": "^7.2.4"
   },
   "engines": {
