@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
 /**
- * Detached watcher of a prefilled form slot: once the user sends the form, the answers sent are
- * saved to data/qa.lino (contacts as {{placeholders}}) and listed in the prefill report; then it
+ * Detached watcher of a prefilled form slot: an answer the user changes is saved to data/qa.lino
+ * once it stays the same for a minute, before the form is sent (so it is kept even if the form is
+ * never sent); once the user sends the form, the answers sent are saved too (contacts as
+ * {{placeholders}}) and listed in the prefill report; then it
  * exits. It also exits when the slot browser closes, after the slot's keep-open time, or when a
  * newer prefill of the slot starts its own watcher.
  *
@@ -27,13 +29,20 @@ const isCurrent = () => {
   }
 };
 
-log(`👀 Watching the form on port ${state.port}: what you send is saved to qa.lino`);
+log(`👀 Watching the form on port ${state.port}: answers you change are saved to qa.lino, and what you send`);
 try {
-  const { submitted, answers } = await watchSentAnswers({ port: state.port, timeoutMs: state.timeoutMs, isCurrent, log });
+  const qaDatabase = withContacts(createQADatabase(path.join(DATA, 'qa.lino')), await loadContacts(path.join(DATA, 'contacts.lino')));
+  // An answer changed and left as it is for a minute is saved before the form is sent
+  const onEdit = async (edited) => {
+    const saved = await saveSentAnswers(edited, { qaDatabase, prefilled: state.prefilled });
+    saved.forEach(({ question }) => log(`💾 Changed before sending, saved: ${question}`));
+  };
+  const { submitted, answers } = await watchSentAnswers({
+    port: state.port, timeoutMs: state.timeoutMs, isCurrent, log, initial: state.initial ?? [], onEdit,
+  });
   if (!submitted) {
-    log(isCurrent() ? '⏹️  The form was not sent (the browser closed or the time ran out): nothing saved' : '⏹️  A newer prefill watches this slot');
+    log(isCurrent() ? '⏹️  The form was not sent (the browser closed or the time ran out): only the changed answers were saved' : '⏹️  A newer prefill watches this slot');
   } else {
-    const qaDatabase = withContacts(createQADatabase(path.join(DATA, 'qa.lino')), await loadContacts(path.join(DATA, 'contacts.lino')));
     const saved = await saveSentAnswers(answers, { qaDatabase, prefilled: state.prefilled });
     log(`📨 The form was sent: ${saved.length} of ${answers.length} answer(s) saved to qa.lino`);
     saved.forEach(({ question }) => log(`💾 ${question}`));

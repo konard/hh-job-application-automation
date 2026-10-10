@@ -25,6 +25,8 @@ import { readFormFields, TO_CHECK } from './form-prefill.mjs';
 
 const WATCH_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'form-watch.mjs');
 const POLL_MS = 2000;
+/** An answer changed by the user is saved before the form is sent once it stays the same this long */
+export const EDIT_STABLE_MS = 60000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Text the forms show once the answer is sent */
@@ -117,6 +119,35 @@ export function pairsToSave(answers, { qaMap, prefilled = [] }) {
     const match = findBestMatch(title, qaMap);
     return !(match && sameAnswer(match.answer, answer));
   }).map(({ title, answer }) => ({ question: title, answer }));
+}
+
+/**
+ * Answers the user changed and then left as they are for `stableMs`: saved before the form is
+ * sent, so an edit is kept even when the form is never sent. Each value is given once; the
+ * prefill's own answers (`initial`) are not, as long as they are unchanged.
+ * @param {Map<string, {answer: string|string[], since: number, given: boolean}>} tracked - Kept between polls
+ * @param {Array<{title: string, answer: string|string[]}>} answers - The form's answers now
+ * @param {Object} options
+ * @param {number} options.now
+ * @param {number} [options.stableMs=EDIT_STABLE_MS]
+ * @param {Array<{title: string, answer: string|string[]}>} [options.initial] - The answers as prefilled
+ * @returns {Array<{title: string, answer: string|string[]}>}
+ */
+export function stableEdits(tracked, answers, { now, stableMs = EDIT_STABLE_MS, initial = [] }) {
+  const ready = [];
+  for (const answer of answers) {
+    const seen = tracked.get(answer.title);
+    if (!seen || !sameAnswer(seen.answer, answer.answer)) {
+      tracked.set(answer.title, { answer: answer.answer, since: now, given: false });
+      continue;
+    }
+    const asPrefilled = initial.some((item) => item.title === answer.title && sameAnswer(item.answer, answer.answer));
+    if (!seen.given && !asPrefilled && !isEmpty(answer.answer) && now - seen.since >= stableMs) {
+      seen.given = true;
+      ready.push(answer);
+    }
+  }
+  return ready;
 }
 
 /**
@@ -228,7 +259,9 @@ const originOf = (url) => {
  * @param {Function} [options.log]
  * @returns {Promise<{submitted: boolean, answers: Array<{title: string, kind: string, answer: string|string[]}>}>}
  */
-export async function watchSentAnswers({ port, timeoutMs = 24 * 3600000, pollMs = POLL_MS, isCurrent = () => true, log = console.log }) {
+export async function watchSentAnswers({
+  port, timeoutMs = 24 * 3600000, pollMs = POLL_MS, isCurrent = () => true, log = console.log, initial = [], onEdit = null,
+}) {
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
   const context = browser.contexts()[0];
   const answers = new Map();
@@ -238,6 +271,7 @@ export async function watchSentAnswers({ port, timeoutMs = 24 * 3600000, pollMs 
   let submitClicked = false;
   let shownSinceClick = 0;
   let streak = 0;
+  const edits = new Map();
   const started = Date.now();
   // A send that navigates to another site leaves no storage behind: the binding gets the click first
   await context.exposeBinding('hhAutomationFormSent', ({ frame }, click) => clicks.push({ origin: originOf(frame.url()), click }))
@@ -292,6 +326,11 @@ export async function watchSentAnswers({ port, timeoutMs = 24 * 3600000, pollMs 
       if (streak >= 2) {
         return { submitted: true, answers: [...answers.values()] };
       }
+      // Answers changed and left as they are: saved now, before the form is sent
+      const edited = onEdit && fields > 0 ? stableEdits(edits, [...answers.values()], { now: Date.now(), initial }) : [];
+      if (edited.length > 0) {
+        await onEdit(edited);
+      }
       await sleep(pollMs);
     }
     return { submitted: false, answers: [...answers.values()] };
@@ -334,6 +373,7 @@ export function startFormWatch({ slot, port, userDataDir, planned = [], reportFi
   fs.mkdirSync(logDir, { recursive: true });
   fs.writeFileSync(stateFile, JSON.stringify({
     id: `${Date.now()}-${process.pid}`, slot, port, reportFile, timeoutMs: keepOpenHours * 3600000, prefilled: notLearned(planned),
+    initial: planned.map((field) => ({ title: field.title, answer: field.choices ?? field.answer ?? '' })),
   }));
   const output = fs.openSync(path.join(logDir, `watch-slot-${slot}.log`), 'a');
   spawn(process.execPath, [WATCH_SCRIPT, stateFile], { detached: true, stdio: ['ignore', output, output], cwd: process.cwd() }).unref();

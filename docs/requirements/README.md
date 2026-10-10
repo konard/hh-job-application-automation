@@ -17,7 +17,7 @@ A `?` after a status means the evidence is incomplete; the note says what is mis
 
 Detailed lists that this index includes:
 
-- [forms-and-chats.md](forms-and-chats.md): hh.ru application forms (A1–A8), external forms (B1–B22)
+- [forms-and-chats.md](forms-and-chats.md): hh.ru application forms (A1–A8), external forms (B1–B23)
   and hh.ru chats (C1–C15). Every row there is listed below under [FORM](#form-external-forms) and
   [CHAT](#chat-hhru-chats), with the same status.
 - [experience-sync.md](experience-sync.md): LinkedIn and hh.ru work experience export, diff, sync and
@@ -217,6 +217,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B20 | A form sent in a chat remembers the chat's vacancy for its assignment | 🧪 |
 | B21 | Templates are read from hive-mind's CI/CD guide; a new assignment repository always starts from the template, never empty | ✅ |
 | B22 | A written (no-code) assignment asks for a document in the assignment's language, not code | ✅ konard/marketplace-retail-ai-control #1 |
+| B23 | Answers changed in a prefilled form are saved to qa.lino a minute after the last change, before the form is sent | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -370,12 +371,12 @@ of them, so none is lost.
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 23 | 14 | 9 | | | |
+| FORM (B) | 24 | 14 | 10 | | | |
 | CHAT (C) | 15 | 8 | 7 | | | |
 | EXP | 7 | 3 | 4 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **150** | **111** | **35** | **1** | **0** | **3** |
+| **Total** | **151** | **111** | **36** | **1** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

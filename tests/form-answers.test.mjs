@@ -4,7 +4,7 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import {
-  answersFromSnapshot, isSubmitClick, isSubmitted, notLearned, pairsToSave, sameAnswer, saveSentAnswers,
+  answersFromSnapshot, isSubmitClick, isSubmitted, notLearned, pairsToSave, sameAnswer, saveSentAnswers, stableEdits,
 } from '../src/form-answers.mjs';
 import { withContacts } from '../src/contacts.mjs';
 
@@ -155,5 +155,29 @@ describe('submission', () => {
     assert.ok(!isSubmitted({ ...sent, ready: false, submitClicked: true }));
     assert.ok(!isSubmitted({ ...sent, formSeen: false, text: 'Спасибо' }));
     assert.ok(!isSubmitted({ ...sent, text: 'Страница 2 из 3' }));
+  });
+});
+
+describe('stableEdits: answers changed before the form is sent', () => {
+  const initial = [{ title: 'English?', answer: '(3) Fluent' }, { title: 'Projects?', answer: 'draft' }];
+
+  test('an answer changed and left as it is for the stable time is given once', () => {
+    const tracked = new Map();
+    const at = (now, english) => stableEdits(tracked, [{ title: 'English?', answer: english }, { title: 'Projects?', answer: 'draft' }], { now, stableMs: 60000, initial });
+    assert.deepEqual(at(0, '(3) Fluent'), []);
+    assert.deepEqual(at(10000, '(2) Upper'), []);
+    assert.deepEqual(at(60000, '(2) Upper'), []);
+    assert.deepEqual(at(70000, '(2) Upper').map((answer) => answer.title), ['English?']);
+    assert.deepEqual(at(200000, '(2) Upper'), []);
+  });
+
+  test('the prefilled answers, unchanged, are never given; typing restarts the wait', () => {
+    const tracked = new Map();
+    stableEdits(tracked, [{ title: 'Projects?', answer: 'draft' }], { now: 0, initial });
+    assert.deepEqual(stableEdits(tracked, [{ title: 'Projects?', answer: 'draft' }], { now: 999999, initial }), []);
+    stableEdits(tracked, [{ title: 'Projects?', answer: 'my te' }], { now: 1000000, initial });
+    stableEdits(tracked, [{ title: 'Projects?', answer: 'my text' }], { now: 1030000, initial });
+    assert.deepEqual(stableEdits(tracked, [{ title: 'Projects?', answer: 'my text' }], { now: 1070000, initial }), []);
+    assert.equal(stableEdits(tracked, [{ title: 'Projects?', answer: 'my text' }], { now: 1090000, initial }).length, 1);
   });
 });
