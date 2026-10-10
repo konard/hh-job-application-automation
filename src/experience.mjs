@@ -538,6 +538,26 @@ export function formatDiffReport(diff, { variantsOf = () => [], title = 'Work ex
 }
 
 /**
+ * Apply the user's save decision for one change: save the prefilled form on 'continue',
+ * discard it on anything else (skip, withdrawn). Discard errors are swallowed so a form
+ * that was already closed does not fail the run.
+ * @param {'continue'|'skip'|'withdrawn'} answer
+ * @param {Object} change - Of planSync
+ * @param {string[]} notes
+ * @param {() => Promise<void>} saveFn
+ * @param {() => Promise<void>} discardFn
+ * @returns {Promise<{change: Object, result: 'saved'|'skipped', notes: string[]}>}
+ */
+export async function applySyncDecision(answer, change, notes, saveFn, discardFn) {
+  if (answer === 'continue') {
+    await saveFn();
+    return { change, result: 'saved', notes };
+  }
+  await discardFn().catch(() => {});
+  return { change, result: 'skipped', notes };
+}
+
+/**
  * A planned change as text for the console and the report
  * @param {Object} change - Of planSync
  * @param {'linkedin'|'hh'} to

@@ -4,8 +4,9 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import {
-  companyKey, companySimilarity, detectLanguage, diffExperience, formatChange, formatDiffReport, matchJobs,
-  normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync, textSimilarity,
+  applySyncDecision, companyKey, companySimilarity, detectLanguage, diffExperience, formatChange, formatDiffReport,
+  matchJobs, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
+  textSimilarity,
 } from '../src/experience.mjs';
 import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl } from '../src/experience-sites.mjs';
 
@@ -182,6 +183,47 @@ describe('diff', () => {
     assert.ok(report.includes('ООО «Абракар»'));
     assert.ok(report.includes('- Haiku: Programmer'));
     assert.ok(report.includes('- Formal AI: ❌ not translated'));
+  });
+});
+
+describe('save decision', () => {
+  const change = { kind: 'update', target: { company: 'Kaiten' }, source: {}, fields: { title: 'Lead' }, notes: [] };
+
+  test('continue calls saveFn, result is saved', async () => {
+    let saved = false;
+    let discarded = false;
+    const outcome = await applySyncDecision('continue', change, ['note'],
+      async () => { saved = true; }, async () => { discarded = true; });
+    assert.ok(saved, 'saveFn must be called');
+    assert.ok(!discarded, 'discardFn must not be called');
+    assert.equal(outcome.result, 'saved');
+    assert.deepEqual(outcome.notes, ['note']);
+    assert.equal(outcome.change, change);
+  });
+
+  test('skip calls discardFn, result is skipped', async () => {
+    let saved = false;
+    let discarded = false;
+    const outcome = await applySyncDecision('skip', change, [],
+      async () => { saved = true; }, async () => { discarded = true; });
+    assert.ok(!saved, 'saveFn must not be called');
+    assert.ok(discarded, 'discardFn must be called');
+    assert.equal(outcome.result, 'skipped');
+  });
+
+  test('withdrawn calls discardFn, result is skipped', async () => {
+    let discarded = false;
+    const outcome = await applySyncDecision('withdrawn', change, [],
+      async () => {}, async () => { discarded = true; });
+    assert.ok(discarded, 'discardFn must be called on withdrawn');
+    assert.equal(outcome.result, 'skipped');
+  });
+
+  test('discardFn error is swallowed (form already closed)', async () => {
+    // discardFn throws because the page navigated away — must not propagate
+    const outcome = await applySyncDecision('skip', change, [],
+      async () => {}, async () => { throw new Error('Target closed'); });
+    assert.equal(outcome.result, 'skipped');
   });
 });
 

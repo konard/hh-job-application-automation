@@ -79,7 +79,7 @@ Haiku 26, Luna 27. Haiku's translation is used; Formal AI is run and reported on
 | E3 | Nothing is saved without `y` typed on stdin; `s` discards the change («Отменить» → «Не надо» on hh.ru), `q` stops and leaves the form prefilled for the user; closed stdin stops | Closed stdin: stopped at the first prompt, nothing saved; reopening Kaiten shows «Июль 2024» | ✅ |
 | E4 | A change with nothing for the form (hh.ru keeps skills per resume; its city is picked from a list) opens no form and is listed as a note | Evirma «location: Remote» → note only | ✅ |
 | E5 | `--auto` runs export, diff and sync in one go and still asks before every save | `sync --auto` | 🧪 |
-| E6 | Saving after `y` clicks the form's save button (hh.ru «Сохранить», LinkedIn «Save») | — | ⬜ (not exercised: nothing was saved in testing) |
+| E6 | Saving after `y` clicks the form's save button (hh.ru «Сохранить», LinkedIn «Save») and waits for the form to close | `applySyncDecision` unit-tested in tests/experience.test.mjs (save/skip/withdrawn/error cases); live: type `y` during sync to save, check the form closes | 🧪 |
 
 ## F. Rules
 
