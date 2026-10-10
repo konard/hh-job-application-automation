@@ -355,7 +355,7 @@ of them, so none is lost.
 | Section | Requirements | ✅ | 🧪 | 🚧 | ⬜ | ↪ |
 |---|---|---|---|---|---|---|
 | DEP | 5 | 5 | | | | |
-| LOGIN | 8 | 5 | 1 | 1 | 1 | |
+| LOGIN | 8 | 5 | 2 | 1 | | |
 | RUN | 9 | 7 | 2 | | | |
 | PACE | 6 | 5 | | | | 1 |
 | BRW | 7 | 7 | | | | |
@@ -370,7 +370,7 @@ of them, so none is lost.
 | EXP | 7 | 3 | 4 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 14 | 14 | | | | |
-| **Total** | **149** | **110** | **34** | **1** | **1** | **3** |
+| **Total** | **149** | **110** | **35** | **1** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
