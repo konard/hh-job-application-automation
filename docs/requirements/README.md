@@ -65,7 +65,7 @@ Sections:
 | LOGIN4 | «Try login via vk, we have session there in on of the browsers.» | When no profile has an hh.ru session, sign in through a social provider session (VK first) | VK sign-in worked in a Chrome snapshot (one-time «Continue as» approval) | 🧪? | `signInWithProvider` in `src/login.mjs`; proven live by a probe, but the integrated path has not been needed since (Chrome had an hh.ru session) |
 | LOGIN5 | «we also should use the same playwright profile after login to hh.ru to speed up» | After the first login the automation keeps its own profile, so later runs start logged in | Restarted runs reuse `~/.hh-automation/chrome-profile` and stay logged in | ✅ | `getUserDataDir()` in `src/config.mjs`; 101b754 |
 | LOGIN6 | «we need to click on accept cookies when shown» | The cookies banner (and the salary popup) is closed when shown | «🍪 Accepted the cookies policy banner» | ✅ | `dismissOverlays()` in `src/helpers/page-helpers.mjs`; 101b754 |
-| LOGIN7 | «to login to linkedin, we should use already active sessions from other browsers, and if there a login + passpords we do prefill of them.» | `bun run linkedin-login` lists installed browsers holding linkedin.com cookies (counts only), copies the one with the most into the LinkedIn slot (port 9350), checks the feed, and falls back to a visible login page that waits for the user to log in manually; the session is kept in the slot profile for later runs; no password is ever read, typed or stored | `! bun run linkedin-login` (in Claude Code) | 🚧 fallback complete; reading browser cookie stores needs Keychain access (Chrome) or Full Disk Access (Safari), which the user runs deliberately; not yet run live | `src/linkedin-login.mjs`, `tests/linkedin-login.test.mjs`; 7c1289b; fallback: `waitForLinkedInLogin` in `src/experience-sites.mjs` |
+| LOGIN7 | «to login to linkedin, we should use already active sessions from other browsers, and if there a login + passpords we do prefill of them.» | `bun run linkedin-login` lists installed browsers holding linkedin.com cookies (counts only), copies the one with the most into the LinkedIn slot (port 9350), checks the feed, and falls back to a visible login page that waits for the user to log in manually; the session is kept in the slot profile for later runs; no password is ever read, typed or stored | `! bun run linkedin-login` (in Claude Code) | ✅ live 2026-10-11: `bun run linkedin-login` copied the Chrome (Default) LinkedIn session (14 cookies, values not shown) into the LinkedIn slot; Safari needs Full Disk Access for the terminal | 7c1289b |
 | LOGIN8 | «browser-commander must fully support import of data from all possible real browsers.» | Every data class (cookies, passwords, storage, autofill, …) from every installed browser (Chromium family, Firefox forks, Safari) can be imported | browser-commander #114, #117–#120, #126 (all closed by 0.28.0); `readBrowserCookies` used in `src/linkedin-login.mjs` | 🧪 | browser-commander 0.28.0; import issues #114 (parent), #117 (Safari), #118 (Firefox/WebKit import), #119 (storage/autofill), #120 (diagnostics matrix), #126 (launch Safari still import-only) all closed; not run live against every browser |
 
 ## RUN: the application run
@@ -266,7 +266,7 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | ID | Requirement | Check | Status |
 |---|---|---|---|
 | EXP1 | Export the work experience from hh.ru (the resume export, RES1, is the starting point) | Structured list of jobs from hh.ru | ✅ `bun run experience -- export` reads data/resume/resume.json |
-| EXP2 | Export the work experience from LinkedIn (https://www.linkedin.com/in/konard) | Structured list of jobs from LinkedIn | 🧪 reader done, tested on fixtures; live: `bun run experience -- export` — log in to LinkedIn in the slot window (port 9350) when prompted, then check data/resume/linkedin-experience.txt |
+| EXP2 | Export the work experience from LinkedIn (https://www.linkedin.com/in/konard) | Structured list of jobs from LinkedIn | ✅ live 2026-10-11: 10 LinkedIn positions read (from the page text: LinkedIn changed its markup), with their edit links |
 | EXP3 | Show the differences between the two | A per-job diff report | 🧪 `experience -- diff`, tests/experience.test.mjs; live: check the report in logs/experience/ |
 | EXP4 | Sync the differences (in either direction, after review) | One side updated from the other | 🧪 prefill verified on hh.ru; save path robust (waitFor visible + close), decision logic unit-tested (applySyncDecision, tests/experience.test.mjs); live: `bun run experience -- sync --to hh`, check prefill, type y to save |
 | EXP5 | Auto sync with automatic translation (Russian ↔ English) | A Russian hh.ru entry appears translated on LinkedIn and vice versa | 🧪 `experience -- sync --auto` |
@@ -362,7 +362,7 @@ of them, so none is lost.
 | Section | Requirements | ✅ | 🧪 | 🚧 | ⬜ | ↪ |
 |---|---|---|---|---|---|---|
 | DEP | 5 | 5 | | | | |
-| LOGIN | 8 | 5 | 2 | 1 | | |
+| LOGIN | 8 | 6 | 2 | | | |
 | RUN | 9 | 7 | 2 | | | |
 | PACE | 6 | 5 | | | | 1 |
 | BRW | 7 | 7 | | | | |
@@ -374,10 +374,10 @@ of them, so none is lost.
 | RES | 3 | 3 | | | | |
 | FORM (B) | 25 | 14 | 11 | | | |
 | CHAT (C) | 15 | 8 | 7 | | | |
-| EXP | 7 | 3 | 4 | | | |
+| EXP | 7 | 4 | 3 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **152** | **111** | **37** | **1** | **0** | **3** |
+| **Total** | **152** | **113** | **36** | **0** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

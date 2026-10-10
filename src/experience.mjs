@@ -240,6 +240,25 @@ export function linkedInItemsFromText(text) {
   });
 }
 
+/**
+ * The edit links of LinkedIn positions read from the text, by their labels
+ * («Edit Senior Software Engineer at Kaiten.ru»)
+ * @param {Object[]} jobs - normalizeLinkedInJobs
+ * @param {Array<{label: string, url: string}>} edits - readLinkedInExperienceItems().edits
+ * @returns {Object[]} The jobs, with editUrl where a link names their title and company
+ */
+export function withEditLinks(jobs, edits = []) {
+  const plain = (text) => String(text ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return jobs.map((job) => {
+    if (job.editUrl) {
+      return job;
+    }
+    const edit = edits.find((item) => plain(item.label) === plain(`Edit ${job.title} at ${job.company}`)) ??
+      edits.find((item) => plain(item.label).includes(plain(job.title)) && plain(item.label).includes(plain(job.company)));
+    return { ...job, editUrl: edit?.url ?? null };
+  });
+}
+
 const CYRILLIC_TO_LATIN = {
   а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm',
   н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch',

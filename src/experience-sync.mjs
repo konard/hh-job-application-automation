@@ -24,7 +24,7 @@ import { openSlot, copySession } from './browser-slots.mjs';
 import { enableConfirmations, askUser } from './confirmations.mjs';
 import {
   applySyncDecision, detectLanguage, diffExperience, formatChange, formatDiffReport, linkedInItemsFromText, normalizeHhJobs, normalizeLinkedInJobs,
-  planSync,
+  planSync, withEditLinks,
 } from './experience.mjs';
 import {
   discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, prefillHhExperience, prefillLinkedInPosition,
@@ -125,11 +125,11 @@ async function exportLinkedIn(argv) {
   const session = await openSlot({ name: 'linkedin-slot', port: argv.linkedinPort, keepOpenHours: argv.keepOpenHours });
   try {
     console.log(`🌐 LinkedIn slot on port ${argv.linkedinPort}: ${argv.profile}`);
-    const { items, text, url } = await readLinkedInExperience(session.page, { profileUrl: argv.profile, port: argv.linkedinPort });
+    const { items, text, edits, url } = await readLinkedInExperience(session.page, { profileUrl: argv.profile, port: argv.linkedinPort });
     let jobs = normalizeLinkedInJobs(items);
     // LinkedIn's markup changes; its text keeps the same order of lines
     if (jobs.length === 0) {
-      jobs = normalizeLinkedInJobs(linkedInItemsFromText(text));
+      jobs = withEditLinks(normalizeLinkedInJobs(linkedInItemsFromText(text)), edits);
       if (jobs.length > 0) {
         console.log(`ℹ️  The page's items were not recognized: ${jobs.length} position(s) read from its text`);
       }

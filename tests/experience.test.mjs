@@ -5,7 +5,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   applySyncDecision, companyKey, companySimilarity, detectLanguage, diffExperience, formatChange, formatDiffReport,
-  linkedInItemsFromText, matchJobs, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
+  linkedInItemsFromText, matchJobs, withEditLinks, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
   textSimilarity,
 } from '../src/experience.mjs';
 import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl } from '../src/experience-sites.mjs';
@@ -292,5 +292,15 @@ LinkedIn Corporation © 2026`;
     assert.equal(jobs[0].location, 'Tel-Aviv');
     assert.equal(jobs[0].description, 'Built the add-ons subsystem.');
     assert.ok(!jobs[2].description.includes('Profile language'));
+  });
+});
+
+describe('withEditLinks', () => {
+  test('a position read from the text gets the edit link that names its title and company', () => {
+    const jobs = withEditLinks([{ title: 'Senior Software Engineer', company: 'Kaiten.ru', editUrl: null }, { title: 'Web Developer', company: 'Shop', editUrl: null }], [
+      { label: 'Edit Senior Software Engineer at Kaiten.ru', url: 'https://www.linkedin.com/in/x/details/experience/edit/forms/1/' },
+      { label: 'Edit profile language', url: 'https://www.linkedin.com/in/x/edit/secondary-language/' },
+    ]);
+    assert.deepEqual(jobs.map((job) => job.editUrl), ['https://www.linkedin.com/in/x/details/experience/edit/forms/1/', null]);
   });
 });

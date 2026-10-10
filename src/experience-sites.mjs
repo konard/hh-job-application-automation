@@ -42,7 +42,7 @@ export const linkedInExperienceUrl = (profileUrl) => `${profileUrl.replace(/\/+$
  * Runs in the page: the positions on LinkedIn's experience page as the text lines of each item
  * (the visible spans, in order), with nested roles for a company with several positions and the
  * edit link of each when the profile is the user's own
- * @returns {{items: Array<{lines: string[], editUrl: string|null, roles: Array<{lines: string[], editUrl: string|null}>}>, text: string}}
+ * @returns {{items: Array<{lines: string[], editUrl: string|null, roles: Array<{lines: string[], editUrl: string|null}>}>, text: string, edits: Array<{label: string, url: string}>}}
  */
 export function readLinkedInExperienceItems() {
   const ENTITY = '[data-view-name="profile-component-entity"]';
@@ -88,7 +88,12 @@ export function readLinkedInExperienceItems() {
       roles: roles.map((role) => ({ lines: linesOf(role), editUrl: editUrlOf(role) })),
     };
   });
-  return { items, text: main.innerText };
+  // «Edit Senior Software Engineer at Kaiten.ru»: the edit link of each position, also when the
+  // items are not recognized and the positions are read from the text
+  const edits = [...new Map([...main.querySelectorAll('a[href*="/edit/forms/"][aria-label]')]
+    .map((link) => [link.getAttribute('aria-label'), new URL(link.getAttribute('href'), window.location.href).href])).entries()]
+    .map(([label, url]) => ({ label, url }));
+  return { items, text: main.innerText, edits };
 }
 
 /**
@@ -98,7 +103,7 @@ export function readLinkedInExperienceItems() {
  * @param {Object} [options]
  * @param {string} [options.profileUrl=LINKEDIN_PROFILE]
  * @param {number} [options.waitMinutes=30] - How long to wait for the login
- * @returns {Promise<{items: Object[], text: string, url: string}>}
+ * @returns {Promise<{items: Object[], text: string, edits: Array<{label: string, url: string}>, url: string}>}
  */
 export async function readLinkedInExperience(page, { profileUrl = LINKEDIN_PROFILE, waitMinutes = 30, port = 9350 } = {}) {
   const url = linkedInExperienceUrl(profileUrl);
@@ -120,8 +125,8 @@ export async function readLinkedInExperience(page, { profileUrl = LINKEDIN_PROFI
       break;
     }
   }
-  const { items, text } = await page.evaluate(readLinkedInExperienceItems);
-  return { items, text, url: page.url() };
+  const { items, text, edits } = await page.evaluate(readLinkedInExperienceItems);
+  return { items, text, edits, url: page.url() };
 }
 
 /**
@@ -171,14 +176,29 @@ export async function waitForLinkedInLogin(page, { url, port = 9350, waitMinutes
 export function setFieldByLabel({ label, value, kind, group }) {
   const pattern = new RegExp(label, 'i');
   const groupPattern = group ? new RegExp(group, 'i') : null;
-  const labelOf = (element) => [
-    element.getAttribute('aria-label'),
-    ...[...(element.labels ?? [])].map((item) => item.innerText),
-    (element.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' '),
-    element.getAttribute('placeholder'),
-  ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  // A checkbox without a label is named by the short text next to it («I am currently working in this role»)
+  const nearText = (element) => {
+    for (let node = element.parentElement, depth = 0; node && depth < 3; node = node.parentElement, depth++) {
+      const text = node.innerText?.trim();
+      if (text) {
+        return text.length <= 120 ? text : '';
+      }
+    }
+    return '';
+  };
+  const labelOf = (element) => {
+    const own = [
+      element.getAttribute('aria-label'),
+      ...[...(element.labels ?? [])].map((item) => item.innerText),
+      (element.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => document.getElementById(id)?.innerText ?? '').join(' '),
+      element.getAttribute('placeholder'),
+    ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    return own || (kind === 'checkbox' ? nearText(element).replace(/\s+/g, ' ').trim() : '');
+  };
   const groupOf = (element) => element.closest('fieldset')?.innerText ?? element.parentElement?.parentElement?.innerText ?? '';
-  const selector = kind === 'select' ? 'select' : kind === 'checkbox' ? 'input[type="checkbox"]' : 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea';
+  // A rich text box (LinkedIn's description) is a contenteditable with role=textbox
+  const selector = kind === 'select' ? 'select' : kind === 'checkbox' ? 'input[type="checkbox"]'
+    : 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"][role="textbox"]';
   const control = [...document.querySelectorAll(selector)].find((element) => element.getClientRects().length > 0 &&
     pattern.test(labelOf(element)) && (!groupPattern || groupPattern.test(groupOf(element))));
   if (!control) {
@@ -196,44 +216,53 @@ export function setFieldByLabel({ label, value, kind, group }) {
       return `no option ${value} in ${label}`;
     }
     control.value = option.value;
+  } else if (control.isContentEditable) {
+    control.focus();
+    document.execCommand('selectAll', false);
+    document.execCommand('insertText', false, String(value));
+    return null;
   } else {
     const prototype = control.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(control, String(value));
   }
   control.dispatchEvent(new Event('input', { bubbles: true }));
   control.dispatchEvent(new Event('change', { bubbles: true }));
+  // Closes a suggestion list the typing opened
+  control.blur();
   return null;
 }
 
 const fieldsOfLinkedIn = (fields) => {
   const list = [];
   const month = (date) => (date?.includes('-') ? formatMonthYear(date).split(' ')[0] : null);
+  // Labels of the position form: «Job title*», «Organization*», «Location», «Description, maximum
+  // 2,000 characters», «I am currently working in this role», «Start month», «Start year*»
   if (fields.title) {
-    list.push({ label: '^title', value: fields.title, kind: 'text' });
+    list.push({ label: '^(job )?title|^должность', value: fields.title, kind: 'text' });
   }
   if (fields.company) {
-    list.push({ label: 'company', value: fields.company, kind: 'text' });
+    list.push({ label: 'company|organization|компани|организаци', value: fields.company, kind: 'text' });
   }
   if (fields.location) {
-    list.push({ label: '^location', value: fields.location, kind: 'text' });
+    list.push({ label: '^location|^местоположение', value: fields.location, kind: 'text' });
   }
   if (fields.description) {
-    list.push({ label: '^description', value: fields.description, kind: 'text' });
+    list.push({ label: '^description|^описание', value: fields.description, kind: 'text' });
   }
   if ('current' in fields) {
-    list.push({ label: 'currently working', value: fields.current, kind: 'checkbox' });
+    list.push({ label: 'currently work|сейчас работаю|в настоящее время', value: fields.current, kind: 'checkbox' });
   }
   if (fields.start) {
     if (month(fields.start)) {
-      list.push({ label: 'month', group: '^start date', value: month(fields.start), kind: 'select' });
+      list.push({ label: '^start month|^месяц начала', value: month(fields.start), kind: 'select' });
     }
-    list.push({ label: 'year', group: '^start date', value: fields.start.slice(0, 4), kind: 'select' });
+    list.push({ label: '^start year|^год начала', value: fields.start.slice(0, 4), kind: 'select' });
   }
   if (fields.end && !fields.current) {
     if (month(fields.end)) {
-      list.push({ label: 'month', group: '^end date', value: month(fields.end), kind: 'select' });
+      list.push({ label: '^end month|^месяц окончания', value: month(fields.end), kind: 'select' });
     }
-    list.push({ label: 'year', group: '^end date', value: fields.end.slice(0, 4), kind: 'select' });
+    list.push({ label: '^end year|^год окончания', value: fields.end.slice(0, 4), kind: 'select' });
   }
   return list;
 };
@@ -251,13 +280,29 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
   const url = change.target?.editUrl ?? `${profileUrl.replace(/\/+$/, '')}/add-edit/POSITION/`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await waitForLinkedInLogin(page, { url, port });
-  await page.waitForSelector('[role="dialog"] input, form input', { timeout: 30000 }).catch(() => {});
+  await page.waitForSelector('[role="dialog"] input, form input, input[placeholder="Role title"]', { timeout: 30000 }).catch(() => {});
   await sleep(1500);
   const notes = [];
+  // Saving a change is not news for the network: «Notify network» is switched off
+  const notifyOff = await page.evaluate(() => {
+    const toggle = [...document.querySelectorAll('[role="switch"]')].find((element) => /notify your network|уведом/i.test(element.getAttribute('aria-label') ?? element.parentElement?.innerText ?? ''));
+    if (toggle?.getAttribute('aria-checked') === 'true') {
+      toggle.click();
+      return true;
+    }
+    return false;
+  }).catch(() => false);
+  if (notifyOff) {
+    notes.push('LinkedIn: «Notify network» switched off');
+  }
   for (const field of fieldsOfLinkedIn(change.fields)) {
     const problem = await page.evaluate(setFieldByLabel, field).catch((error) => error.message.split('\n')[0]);
     if (problem) {
       notes.push(`LinkedIn: ${problem}`);
+    }
+    // Unchecking «currently working» shows the end date fields
+    if (field.kind === 'checkbox') {
+      await sleep(700);
     }
   }
   if (change.fields.skills?.length) {
@@ -460,6 +505,11 @@ export async function discardHhExperience(page) {
  */
 export async function discardLinkedInPosition(page) {
   await page.keyboard.press('Escape').catch(() => {});
+  // The form opened as its own page does not close on Escape: its close button does
+  const close = page.locator('button[aria-label="Dismiss"], button[aria-label="Закрыть"]').first();
+  if (await close.isVisible().catch(() => false)) {
+    await close.click().catch(() => {});
+  }
   const discard = page.locator('button:has-text("Discard"), button:has-text("Отменить изменения")').first();
   if (await discard.waitFor({ timeout: 3000 }).then(() => true, () => false)) {
     await discard.click();
