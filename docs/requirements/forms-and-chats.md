@@ -32,6 +32,15 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 9. «we have linked in at `https://www.linkedin.com/in/konard` save it is as contact so we can paste
    a templated insert if contacts changes.»
 
+10. «add form prefilling support if not yet supported» (Maria's chat message with https://forms.gle/NTRexHv7bxQQxnKZA)
+11. «we also need to support auto-reading all rejections where it is impossible to make answer, if answer is possible we ask
+    for the reason of rejection, but better only prefill - I will confirm or reject sending.» and «that may be used as
+    default template for rejection» (the user's reply «Здравствуйте, а можете раскрыть конкретнее причины отказа? …»)
+12. «we also need to add support for auto filling answers or rating here» (Контур's template message with
+    https://rating.hh.ru/poll)
+13. «We also need to develop ability to export both linked in and hh.ru working experince and display differences, that
+    needs to be synced …» — see [experience-sync.md](experience-sync.md)
+
 ## A. hh.ru application forms
 
 | # | Requirement | Check | Status |
@@ -69,14 +78,17 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 
 | # | Requirement | Check | Status |
 |---|---|---|---|
-| C1 | Chats are answered in their own slot (separate browser and page, e.g. https://hh.ru/chat/5698827730), not in the single-tab automation browser | The hh.ru run goes on while the chat slot works | ⬜ |
-| C2 | The chat slot is logged in to hh.ru by copying the automation browser's hh.ru cookies; cookie values are never printed or stored in the repository | Chat slot opens the chat logged in | ⬜ |
-| C3 | The last message(s) from the employer or recruiter bot without a reply are found; questions are answered from qa.lino by the same similarity rules (A1, A4), drafts (B7) for the rest | Bot question «Работали ли с архитектурными … чертежами?» gets an answer | ⬜ |
-| C4 | Template messages from different companies get the saved template reply: matched by similarity after leaving out the greeting with the user's name, the sender's name and signature (`data/chat-templates.lino`: message → reply) | «Рассмотрим ваше резюме … свяжемся с вами» from any company → «Здравствуйте, благодарю, ожидаю.» | ⬜ |
-| C5 | The answer is typed into the message field and not sent; the user checks, changes and sends (same rule as B3) | Message field filled, nothing sent | ⬜ |
-| C6 | Previous answers in chats are learned: an employer question followed by the user's reply is saved to qa.lino (questions) or chat-templates.lino (template messages) | After a chat, the pairs appear in the files | ⬜ |
-| C7 | Chats that open right after an application are picked up: a watch mode goes through the chat list (new and unread chats with an unanswered message) one by one and waits for the user to send before the next | Apply → the chat slot prefills the bot's first question | ⬜ |
-| C8 | hh.ru's suggested quick replies («Можно без опыта?», «Какая схема оплаты?») are never clicked | No message is sent by the slot | ⬜ |
+| C1 | Chats are answered in their own slot (separate browser and page, e.g. https://hh.ru/chat/5698827730), not in the single-tab automation browser: `bun run answer-chats -- <chat url or id>` (port 9340, profile `chat-slot`) | The hh.ru run goes on while the chat slot works | ✅ |
+| C2 | The chat slot is logged in to hh.ru by copying the automation browser's hh.ru cookies; cookie values are never printed or stored in the repository | «Logged in with the hh.ru session … (50 cookies, values not shown)» | ✅ |
+| C3 | The last message(s) from the employer or recruiter bot without a reply are found; questions are answered from qa.lino (close match ≥ 0.7, as chat questions often ask two things), drafts (B7, from the chat history, resume and saved answers) for the rest | Chat 5698827730: «уровень английского и зарплаты на старте» → drafted reply with both | ✅ |
+| C4 | Template messages from different companies get the saved template reply: matched by similarity after leaving out the greeting with the user's name, the sender's name and signature, or when the template is contained in a longer message (`data/chat-templates.lino`: message → reply) | «Рассмотрим ваше резюме … свяжемся с вами» (Ирина), Контур's «В течение двух рабочих дней…» → «Здравствуйте, благодарю, ожидаю.»; `tests/chat-answers.test.mjs` | 🧪 |
+| C5 | The answer is typed into the message field and not sent; the user checks, changes and sends (same rule as B3) | Message field filled, nothing sent | ✅ |
+| C6 | Previous answers in chats are learned: an employer question followed by the user's reply is saved to qa.lino (questions) or chat-templates.lino (template messages); replies that are questions back («Можно без опыта?») and the application itself are not answers | Learned «компьютерного зрения…» and «BIM-моделями…» from chat 5698827730 | ✅ |
+| C7 | Chats that open right after an application are picked up: `--watch` goes through the chat list (chats whose last message is not the user's) one by one and waits until the user sends (or `s` skips) before the next | Apply → the chat slot prefills the bot's first question | 🧪 |
+| C8 | hh.ru's suggested quick replies («Можно без опыта?», «Какая схема оплаты?») are never clicked | No message is sent by the slot | ✅ |
+| C9 | Rejections are read automatically: a closed chat («Переписка будет доступна после приглашения работодателя») is only opened (read); when a reply is possible, the saved rejection reply asking for the reason is typed, not sent (`Отказ` in chat-templates.lino: «Здравствуйте, а можете раскрыть конкретнее причины отказа? Если это вилка зарплатных ожиданий, может быть мы можем рассмотреть другие варианты вместе?») | VK «Отказ» chat: read; an open one: the reply typed | 🧪 |
+| C10 | Questionnaire links sent in chats (Google Forms, Yandex Forms, Microsoft Forms, Typeform) are prefilled in a free form slot (B1–B13) | Maria's «анкета: https://forms.gle/NTRexHv7bxQQxnKZA» → form slot | 🧪 |
+| C11 | hh.ru's employer rating poll (https://rating.hh.ru/poll) from a chat opens in a form slot logged in to hh.ru with the company typed into the search; the ratings are the user's to choose (never invented, never submitted) | Контур's message → rating poll slot | 🧪 |
 
 ## D. Rules for all of it
 

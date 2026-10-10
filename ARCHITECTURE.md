@@ -31,6 +31,11 @@ src/
 ├── vacancy-filters.mjs       # Vacancies filtered out automatically by data/vacancy-filters.lino
 ├── form-prefill.mjs          # Prefill of external forms: contacts, saved answers, drafts
 ├── prefill-form.mjs          # `bun run prefill-form`: forms in separate browser slots
+├── form-slots.mjs            # Prefilled forms in browser slots (used by prefill-form and answer-chats)
+├── browser-slots.mjs         # Separate browser slots and copying the hh.ru session into them
+├── contacts.mjs              # data/contacts.lino and {{placeholders}} in answers
+├── chat-answers.mjs          # Chat replies: templates, rejections, saved answers, learning
+├── answer-chats.mjs          # `bun run answer-chats`: chats in their own browser slot
 ├── captcha.mjs               # Captcha detection; page actions wait while one is shown
 ├── captcha-solver.mjs        # Captcha answer prefill by local Claude Code (Haiku) and Codex (Luna)
 ├── config.mjs                # Configuration using lino-arguments

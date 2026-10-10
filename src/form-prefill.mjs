@@ -141,8 +141,12 @@ export function pickOptions(options, saved) {
  * @param {Map<string, string|string[]>} sources.qaMap
  * @returns {Array<Object>} The fields with {answer|choices, source, note} or {open: true}
  */
-export function planAnswers(fields, { profile, qaMap }) {
+export function planAnswers(fields, { profile, qaMap, company = '' }) {
   return fields.map((field) => {
+    // The employer's own poll (rating.hh.ru) asks to find the company; the ratings are the user's
+    if (company && field.kind === 'text' && /компани|работодател|organization|company/i.test(field.title)) {
+      return { ...field, answer: company, source: 'company from the chat' };
+    }
     if (field.kind === 'file') {
       return /резюме|\bcv\b/i.test(field.title) && profile.resumeFile
         ? { ...field, file: profile.resumeFile, source: 'resume file' }

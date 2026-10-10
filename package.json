@@ -12,6 +12,7 @@
     "apply": "bun src/apply.mjs",
     "resume": "bun src/resume-export.mjs",
     "prefill-form": "bun src/prefill-form.mjs",
+    "answer-chats": "bun src/answer-chats.mjs",
     "playwright": "bun src/apply.mjs --engine playwright",
     "puppeteer": "bun src/apply.mjs --engine puppeteer",
     "lint": "eslint .",

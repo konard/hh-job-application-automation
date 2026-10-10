@@ -277,6 +277,27 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
 
 See [the requirements](docs/requirements/forms-and-chats.md) for what is done and what is planned.
 
+### Answer Chats
+
+```bash
+bun run answer-chats -- https://hh.ru/chat/5698827730   # one chat
+bun run answer-chats -- --watch                        # every chat waiting for an answer, one at a time
+```
+
+Chats open in their own browser slot (port 9340), logged in with the hh.ru session of the automation
+browser. For the message waiting for an answer the reply is typed into the message field, never sent:
+
+- a template message (the same text from many companies, greeting and signature aside) gets its saved
+  reply from `data/chat-templates.lino`; a rejection gets the saved question about its reason (`Отказ`),
+  a closed chat is only read;
+- a question gets the saved answer of a close question in `data/qa.lino`, otherwise local Claude Code
+  drafts the reply from the chat, the resume and saved answers;
+- questionnaire links (and hh.ru's employer rating poll) are prefilled in form slots;
+- what you have answered in chats is learned into `qa.lino` and `chat-templates.lino`.
+
+`--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
+quick replies are never clicked.
+
 ### Export the Resume and Collect the Stack
 
 ```bash
