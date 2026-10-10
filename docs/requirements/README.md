@@ -264,9 +264,9 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | ID | Requirement | Check | Status |
 |---|---|---|---|
 | EXP1 | Export the work experience from hh.ru (the resume export, RES1, is the starting point) | Structured list of jobs from hh.ru | ✅ `bun run experience -- export` reads data/resume/resume.json |
-| EXP2 | Export the work experience from LinkedIn (https://www.linkedin.com/in/konard) | Structured list of jobs from LinkedIn | 🚧 reader done; needs a LinkedIn login in slot 9350 (LOGIN7) |
-| EXP3 | Show the differences between the two | A per-job diff report | 🧪 `experience -- diff`, tests/experience.test.mjs |
-| EXP4 | Sync the differences (in either direction, after review) | One side updated from the other | 🚧 prefill verified on hh.ru (discarded); saving after `y` not yet exercised |
+| EXP2 | Export the work experience from LinkedIn (https://www.linkedin.com/in/konard) | Structured list of jobs from LinkedIn | 🧪 reader done, tested on fixtures; live: `bun run experience -- export` — log in to LinkedIn in the slot window (port 9350) when prompted, then check data/resume/linkedin-experience.txt |
+| EXP3 | Show the differences between the two | A per-job diff report | 🧪 `experience -- diff`, tests/experience.test.mjs; live: check the report in logs/experience/ |
+| EXP4 | Sync the differences (in either direction, after review) | One side updated from the other | 🧪 prefill verified on hh.ru; save path robust (waitFor visible + close), decision logic unit-tested (applySyncDecision, tests/experience.test.mjs); live: `bun run experience -- sync --to hh`, check prefill, type y to save |
 | EXP5 | Auto sync with automatic translation (Russian ↔ English) | A Russian hh.ru entry appears translated on LinkedIn and vice versa | 🧪 `experience -- sync --auto` |
 | EXP6 | Translation by Haiku 5.5 or later, Luna 6 or later, and the latest Formal AI (link-assistant/formal-ai) | The three translations are produced for each text | ✅ Haiku 5.5, gpt-6-luna and Formal AI 0.352.1 on 19 real texts |
 | EXP7 | Any Formal AI translation failure is reported as an issue in link-assistant/formal-ai | An issue per failure | ✅ link-assistant/formal-ai #1192, #1193, comment on #1174; deduplicated on rerun; #1194 (short phrases, 2026-10-10: Formal AI translated 1 of 27 texts, Haiku 26, Luna 27) |

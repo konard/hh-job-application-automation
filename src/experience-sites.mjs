@@ -281,11 +281,15 @@ const FILLABLE = {
 export const hasFillableFields = (change, site) => Object.keys(change.fields).some((field) => FILLABLE[site].includes(field));
 
 /**
- * Save LinkedIn's open position form (only after the user's `y`)
+ * Save LinkedIn's open position form (only after the user's `y`), then wait for the dialog to close
  * @param {Object} page
  */
 export async function saveLinkedInPosition(page) {
-  await page.locator('[role="dialog"] button:has-text("Save"), [role="dialog"] button:has-text("Сохранить")').first().click();
+  const saveBtn = page.locator('[role="dialog"] button:has-text("Save"), [role="dialog"] button:has-text("Сохранить")').first();
+  await saveBtn.waitFor({ state: 'visible', timeout: 10000 });
+  await saveBtn.click();
+  // Wait for the dialog to close after a successful save
+  await page.locator('[role="dialog"]').waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
 }
 
 const HH = {
@@ -426,11 +430,15 @@ async function chooseHhMonth(page, index, date, notes) {
 }
 
 /**
- * Save hh.ru's open experience form (only after the user's `y`)
+ * Save hh.ru's open experience form (only after the user's `y`), then wait for it to close
  * @param {Object} page
  */
 export async function saveHhExperience(page) {
-  await page.locator(HH.save).first().click();
+  const saveBtn = page.locator(HH.save).first();
+  await saveBtn.waitFor({ state: 'visible', timeout: 10000 });
+  await saveBtn.click();
+  // Wait for the form to close: the position input disappears after a successful save
+  await page.waitForSelector(HH.position, { state: 'detached', timeout: 15000 }).catch(() => {});
 }
 
 /**

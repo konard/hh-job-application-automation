@@ -23,7 +23,7 @@ import { fileURLToPath } from 'url';
 import { openSlot, copySession } from './browser-slots.mjs';
 import { enableConfirmations, askUser } from './confirmations.mjs';
 import {
-  detectLanguage, diffExperience, formatChange, formatDiffReport, normalizeHhJobs, normalizeLinkedInJobs, planSync,
+  applySyncDecision, detectLanguage, diffExperience, formatChange, formatDiffReport, normalizeHhJobs, normalizeLinkedInJobs, planSync,
 } from './experience.mjs';
 import {
   discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, prefillHhExperience, prefillLinkedInPosition,
@@ -237,15 +237,16 @@ async function runSync(argv, data, diff, translator) {
     const answer = await askUser(`Prefilled on ${site} (slot window on port ${argv.to === 'linkedin' ? argv.linkedinPort : argv.hhPort}): check it, then save it?`, {
       skip: 'skip it (nothing is saved)',
     });
-    if (answer === 'continue') {
-      await (argv.to === 'linkedin' ? saveLinkedInPosition(page) : saveHhExperience(page));
+    const outcome = await applySyncDecision(
+      answer, change, notes,
+      () => (argv.to === 'linkedin' ? saveLinkedInPosition(page) : saveHhExperience(page)),
+      // Nothing of a skipped/withdrawn change stays in the form
+      () => (argv.to === 'linkedin' ? discardLinkedInPosition(page) : discardHhExperience(page)),
+    );
+    if (outcome.result === 'saved') {
       console.log('💾 Saved');
-      done.push({ change, result: 'saved', notes });
-    } else {
-      // Nothing of a skipped change stays in the form
-      await (argv.to === 'linkedin' ? discardLinkedInPosition(page) : discardHhExperience(page)).catch(() => {});
-      done.push({ change, result: 'skipped', notes });
     }
+    done.push(outcome);
   }
   await session.release();
   return { changes, planText, done };
