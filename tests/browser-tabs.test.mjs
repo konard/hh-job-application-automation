@@ -7,7 +7,7 @@ import fs from 'fs';
 import http from 'http';
 import os from 'os';
 import path from 'path';
-import { chooseTab, keepSingleTab } from '../src/browser-session.mjs';
+import { attachOptions, chooseTab, keepSingleTab, LAUNCH_SETTINGS } from '../src/browser-session.mjs';
 
 const SEARCH = { id: 'A', type: 'page', url: 'https://hh.ru/search/vacancy?resume=1' };
 const FORM = { id: 'B', type: 'page', url: 'https://hh.ru/applicant/vacancy_response?vacancyId=138276367' };
@@ -53,5 +53,37 @@ describe('keepSingleTab', () => {
       server.close();
       fs.rmSync(userDataDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('attachOptions', () => {
+  test('attaches to the kept tab and closes tabs that appeared since', () => {
+    assert.deepEqual(attachOptions({ engine: 'playwright', port: 9397, kept: SEARCH, singleTab: true }), {
+      engine: 'playwright',
+      cdpEndpoint: 'http://127.0.0.1:9397',
+      targetId: 'A',
+      singleTab: true,
+    });
+  });
+
+  test('leaves the pick to browser-commander without --single-tab', () => {
+    assert.deepEqual(attachOptions({ engine: 'puppeteer', port: 9397, kept: null, singleTab: false }), {
+      engine: 'puppeteer',
+      cdpEndpoint: 'http://127.0.0.1:9397',
+    });
+  });
+});
+
+describe('LAUNCH_SETTINGS', () => {
+  test('one --disable-features switch hides the restore infobar and Translate', () => {
+    const switches = LAUNCH_SETTINGS.args.filter((arg) => arg.startsWith('--disable-features='));
+    assert.equal(switches.length, 1);
+    const features = switches[0].split('=')[1].split(',');
+    assert.ok(features.includes('SessionRestoreInfobar'));
+    assert.ok(features.includes('Translate'));
+  });
+
+  test('the profile turns Translate off', () => {
+    assert.equal(LAUNCH_SETTINGS.preferences.translate.enabled, false);
   });
 });

@@ -196,6 +196,12 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 1. `browser-session.mjs` attaches to Chrome on `--browser-port` if it runs, or starts it detached
    with the dedicated profile. Without `--keep-browser-open` it is closed on exit; with it, a
    detached `browser-watchdog.mjs` closes it after `--browser-idle-timeout` unused minutes.
+   The launch switches and profile preferences (no restore infobar, no Translate) come from
+   browser-commander's `resolveRestrictions(['no-crash-restore', 'no-translate'])`, and the engine
+   attaches to the kept tab by `targetId`. browser-commander 0.28's own `connectOrLaunch()` is not
+   used yet: under Bun on macOS it throws `EPERM` on `~/Library/Safari` before launching, it refuses
+   a browser started without its metadata (the kept-open browsers of earlier versions), and a closed
+   remembered tab makes it throw.
 2. `login.mjs` returns at once when the profile is logged in (it stays logged in across restarts). Otherwise it lists browser profiles holding hh.ru or VK/Mail.ru/OK/Google/
    Gosuslugi cookies (names and counts only), starts a temporary snapshot of the best Chromium profile
    (Chrome decrypts its own cookies, so there is no Keychain prompt), signs in through hh.ru's social
@@ -235,11 +241,17 @@ Links Notation next to it in `logs/traces/<time>/`:
 | `network.lino` | `trace-network.mjs` | Document/XHR/fetch exchanges: headers and bodies, redacted and capped |
 | `dom.lino` | `trace-dom.mjs` | `(snapshot: …)` after every load, `(mutations: …)` converted from the bundle after each checkpoint |
 
-The local recorders are workarounds for gaps in browser-commander (#140): it records only failed
-requests, and its Links Notation export only points at the DOM files. Both never block the page: the
-listeners take a timestamp and the reading and writing happen afterwards. Trace options avoid two
-more gaps: `openShadowRoots: false` (copying shadow roots assigns `innerHTML`, which hh.ru's Trusted
-Types policy rejects) and a 1 GB bundle limit (the default 256 MB filled up in a 9-hour run).
+The local recorders stay although browser-commander 0.28 can record requests and responses
+(`network`) and write the DOM into `trace.lino` (`links.dom`): its network capture redacts only
+cookie/authorization headers and a few query parameters (no form/JSON fields by name, response
+bodies stored base64), and its DOM links are unredacted, uncapped and re-read the whole bundle on
+every 500 ms mutation drain. Both local recorders never block the page: the listeners take a
+timestamp and the reading and writing happen afterwards. `dom.lino` converts a mutation file once
+the next one exists (browser-commander appends the current interval every 500 ms), and the rest at
+stop. Open shadow roots are captured again (0.28 copies them without `innerHTML`, which hh.ru's
+Trusted Types policy rejected). The bundle limit stays at 1 GB (the default 256 MB filled up in a
+9-hour run, #148); rotation and gzip are left off (rotation deletes the oldest segments, gzip runs
+before `dom.lino` reads the last mutation file).
 
 ## Logging
 

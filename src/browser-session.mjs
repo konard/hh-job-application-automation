@@ -8,15 +8,18 @@
  * cache stay warm and hh.ru sees no extra logins or page loads. A detached watchdog
  * closes it once it has not been used for the idle timeout.
  *
- * One tab: before attaching, every tab but the automation tab is closed, and tabs opened
- * later are closed too. The engine cannot tell the tab on screen from the others
- * (Playwright's focus emulation makes every attached tab report "visible", so
- * browser-commander's foreground pick takes whichever tab is listed first), so with
- * several tabs a restarted run could drive a background tab.
+ * One tab: before attaching, every tab but the automation tab is closed (raw CDP, so the
+ * kept tab is chosen by URL: the remembered tab, else an hh.ru form, else an hh.ru page),
+ * the engine attaches to exactly that target (browser-commander `targetId`, `singleTab`),
+ * and tabs opened later are closed too.
  *
- * Workaround: browser-commander kills the browser it launched when the controlling
- * process exits and has no idle timeout, so the detached start is done here with its
- * launch helpers.
+ * Kept here although browser-commander 0.28.0 has `connectOrLaunch()` (detached browser,
+ * idle watchdog, remembered target): under Bun on macOS it throws EPERM before launching
+ * (its default-profile check calls `realpathSync` on ~/Library/Safari), it refuses a browser
+ * already running on the port without its own metadata (the kept-open browsers started by
+ * earlier versions of this script), a closed remembered tab makes it throw (and leaks the
+ * connection), and it does not close tabs opened later. The launch switches, profile
+ * preferences and the target selection do come from browser-commander.
  *
  * @module browser-session
  */
@@ -33,12 +36,12 @@ import {
 } from 'browser-commander';
 import { log } from './logging.mjs';
 
-const LAUNCH_RESTRICTIONS = ['no-crash-restore', 'no-translate'];
-// Workarounds for panels browser-commander's restrictions leave visible:
-// the "Continue where you left off" infobar, and the Translate bubble that
-// --disable-features=Translate no longer hides
-const EXTRA_DISABLED_FEATURES = ['SessionRestoreInfobar'];
-const PROFILE_PREFERENCES = { translate: { enabled: false } };
+/**
+ * Launch switches and profile preferences: no "Continue where you left off" infobar or
+ * crash-restore bubble (`SessionRestoreInfobar` merged into one `--disable-features`), no
+ * Translate bubble (`translate.enabled: false` written to the profile)
+ */
+export const LAUNCH_SETTINGS = Object.freeze(resolveRestrictions(['no-crash-restore', 'no-translate']));
 const STARTUP_TIMEOUT_MS = 30000;
 const USAGE_MARK_INTERVAL_MS = 60000;
 const WATCHDOG_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'browser-watchdog.mjs');
@@ -62,18 +65,6 @@ function isWatchdogRunning(userDataDir) {
   } catch {
     return false;
   }
-}
-
-/**
- * Restriction switches with the extra disabled features merged in: Chrome reads only the
- * last --disable-features switch
- * @returns {string[]}
- */
-function launchSwitches() {
-  const isFeatureSwitch = (arg) => arg.startsWith('--disable-features=');
-  const { args } = resolveRestrictions(LAUNCH_RESTRICTIONS);
-  const features = [...args.filter(isFeatureSwitch).flatMap((arg) => arg.split('=')[1].split(',')), ...EXTRA_DISABLED_FEATURES];
-  return [...args.filter((arg) => !isFeatureSwitch(arg)), `--disable-features=${features.join(',')}`];
 }
 
 /**
@@ -192,6 +183,24 @@ function closeNewTabs({ browser, page }, engine) {
 }
 
 /**
+ * connectBrowser options: attach to the kept tab itself, not to whichever tab the engine lists
+ * first, and close any tab that appeared since it was chosen
+ * @param {Object} options
+ * @param {string} options.engine
+ * @param {number} options.port
+ * @param {{id: string}|null} options.kept - The tab keepSingleTab kept
+ * @param {boolean} options.singleTab
+ * @returns {Object}
+ */
+export function attachOptions({ engine, port, kept, singleTab }) {
+  return {
+    engine,
+    cdpEndpoint: endpoint(port),
+    ...(singleTab && kept ? { targetId: kept.id, singleTab: true } : {}),
+  };
+}
+
+/**
  * Attach to the automation browser, starting it first when it is not running
  *
  * @param {Object} options
@@ -211,9 +220,9 @@ export async function connectOrLaunchBrowser({
   if (reused) {
     console.log(`♻️  Reusing the running browser on port ${port}`);
   } else {
-    await prepareUserDataDir(userDataDir, { preferences: PROFILE_PREFERENCES });
+    await prepareUserDataDir(userDataDir, { preferences: LAUNCH_SETTINGS.preferences });
     const executable = await resolveLaunchExecutable({ engine });
-    const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, ...launchSwitches()];
+    const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, ...LAUNCH_SETTINGS.args];
     spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();
     console.log(`🚀 Started browser on port ${port} (profile: ${userDataDir})`);
   }
@@ -232,10 +241,8 @@ export async function connectOrLaunchBrowser({
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   for (;;) {
     try {
-      if (singleTab) {
-        await keepSingleTab({ port, userDataDir });
-      }
-      const session = await connectBrowser({ engine, cdpEndpoint: endpoint(port) });
+      const kept = singleTab ? await keepSingleTab({ port, userDataDir }) : null;
+      const session = await connectBrowser(attachOptions({ engine, port, kept, singleTab }));
       if (singleTab) {
         closeNewTabs(session, engine);
       }

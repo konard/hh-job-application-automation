@@ -230,6 +230,18 @@ async function readFormForFilters(commander) {
 }
 
 /**
+ * Whether a failed wait only means the form is gone: the page is no longer the form, and the wait
+ * timed out (browser-commander up to 0.27) or was interrupted by the navigation (0.28)
+ * @param {Error} error
+ * @param {string} url - The page URL now
+ * @returns {boolean}
+ */
+export function isFormLeftDuringWait(error, url) {
+  return (isTimeoutError(error) || error?.name === 'NavigationInterruptedError') &&
+    !URL_PATTERNS.vacancyResponse.test(url);
+}
+
+/**
  * Handle the vacancy_response page
  *
  * Note: This function is called exclusively from the pageTrigger system
@@ -492,20 +504,22 @@ export async function handleVacancyResponsePage({
     if (error instanceof PromptWithdrawnError) {
       return;
     }
+    // A wait for an element of the form fails once the form was sent or left in the
+    // browser; the vacancy page watch counts a sent application. browser-commander 0.28
+    // reports such a wait as NavigationInterruptedError, earlier versions as a timeout
+    if (isFormLeftDuringWait(error, commander.getUrl())) {
+      log.debug(() => `Form left during a wait (${error.message.split('\n')[0]}), now on ${commander.getUrl()}`);
+      return;
+    }
     if (isNavigationError(error)) {
       console.log('⚠️  Page navigation detected during form handling, continuing with next vacancy');
       return;
     }
     // After a sent application the page trigger and this handler both return to the list: the
-    // second navigation aborts the first, which is no error
+    // second navigation aborts the first, which is no error (browser-commander 0.28 still
+    // throws a replaced goto as net::ERR_ABORTED, not as a navigation error)
     if (/net::ERR_ABORTED/.test(error.message)) {
       log.debug(() => `Navigation replaced by another one: ${error.message.split('\n')[0]}`);
-      return;
-    }
-    // A wait for an element of the form fails once the form was sent or left in the
-    // browser; the vacancy page watch counts a sent application
-    if (isTimeoutError(error) && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
-      log.debug(() => `Form left during a wait (${error.message.split('\n')[0]}), now on ${commander.getUrl()}`);
       return;
     }
     if (isTimeoutError(error)) {
