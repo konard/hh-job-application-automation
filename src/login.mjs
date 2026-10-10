@@ -18,6 +18,7 @@ import {
   listCookieSources,
   makeBrowserCommander,
   saveStorageState,
+  setCookies,
 } from 'browser-commander';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { dismissOverlays } from './helpers/page-helpers.mjs';
@@ -144,15 +145,12 @@ async function hhCookiesFromProfile({ browser, profile, providers }) {
 }
 
 /**
- * Add cookies to the running browser.
- * Workaround: browser-commander has no API to add cookies after launch/connect.
+ * Add cookies to the running browser (browser-commander's setCookies keeps session cookies alive)
+ * @param {Object} page - Raw engine page
+ * @param {Object[]} cookies
  */
-async function addCookies(page, cookies) {
-  if (typeof page.context === 'function') {
-    return page.context().addCookies(cookies);
-  }
-  // Puppeteer treats a non-positive expiry as already expired; omit it for session cookies
-  return page.browser().setCookie(...cookies.map(({ expires, ...cookie }) => (expires > 0 ? { ...cookie, expires } : cookie)));
+function addCookies(page, cookies) {
+  return setCookies({ page, engine: typeof page.context === 'function' ? 'playwright' : 'puppeteer', cookies });
 }
 
 /**
