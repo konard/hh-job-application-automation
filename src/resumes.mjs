@@ -247,7 +247,8 @@ export function describeChoice({ resume, reason }, count) {
  */
 export async function findSuggestedVacanciesUrl(commander) {
   if (await commander.count({ selector: SELECTORS.resume }) === 0) {
-    await commander.goto({ url: PROFILE_URL, waitForStableUrlBefore: false });
+    // hh.ru's beacons keep the network busy: waiting for it to go idle took the 4-minute timeout
+    await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
   }
   const resumes = await readResumes(commander);
   const choice = pickResume(resumes);

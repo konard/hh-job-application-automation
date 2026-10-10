@@ -165,7 +165,7 @@ function addCookies(page, cookies) {
 export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
   // Reuse whatever hh.ru page the persistent browser already shows
   if (!/(^|\.)hh\.ru$/.test(new URL(commander.getUrl()).hostname)) {
-    await commander.goto({ url: PROFILE_URL, waitForStableUrlBefore: false });
+    await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
   }
   await dismissOverlays(commander);
   if (await isLoggedIn(commander)) {
@@ -188,7 +188,7 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
           continue;
         }
         await addCookies(page, cookies);
-        await commander.goto({ url: PROFILE_URL, waitForStableUrlBefore: false });
+        await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
         if (await isLoggedIn(commander)) {
           console.log(`🔓 Logged in to hh.ru using ${candidate.browser} (${candidate.profile})`);
           return;
@@ -200,7 +200,7 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
   }
 
   console.log('🙋 Please log in to hh.ru in the browser window; the automation continues automatically.');
-  await commander.goto({ url: PROFILE_URL, waitForStableUrlBefore: false });
+  await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
   while (!isPageClosed() && !await isLoggedIn(commander).catch(() => false)) {
     await commander.wait({ ms: 2000, reason: 'waiting for manual login' });
   }
