@@ -138,11 +138,16 @@ The application now supports both Playwright and Puppeteer through a single unif
 
 ### Auto-Submit Behavior
 
-By default, the script will:
+By default, the script will, on the short popup and on the full form alike:
 - **Auto-submit** if the form has ONLY a cover letter (no test questions)
-- **Wait for manual review** if the form has test questions, even if all answers are auto-filled from the QA database
+- **Auto-submit** a form with questions only when autofill answered every question with the saved
+  answer of the very same question (`--auto-send-exact-answers`, see below)
+- **Wait for you** with any other form with questions: it is autofilled from `data/qa.lino` by
+  similarity and waits for your `y` on stdin, or, in an unattended run (`--confirm none`), for you to
+  send or close it in the browser. Answers you type are saved to `data/qa.lino`; an autofilled answer
+  of a similar question is saved under the form's wording only when the form is sent
 
-To enable auto-submission for forms with test questions (when all answers are auto-filled), use the `--auto-submit-vacancy-response-form` flag:
+To send forms with non-exact answers unattended anyway, use the `--auto-submit-vacancy-response-form` flag:
 
 ```bash
 bun run apply -- --auto-submit-vacancy-response-form --verbose
@@ -152,6 +157,10 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 
 Questions that the QA database cannot answer are never skipped by default: the form waits for
 you (`--on-missing-answers wait`). Use `--on-missing-answers skip` for fully unattended runs.
+
+An application hh.ru does not confirm as sent (no «Вы откликнулись»), on the popup or the full
+form, stops an unattended run and makes a supervised one wait for you; the run never moves on to the
+next vacancy then.
 
 ### Test Mode and Confirmations
 
@@ -227,25 +236,82 @@ have applied to is removed from the file.
 
 ### Filter Out Vacancies Automatically
 
-Vacancies that are not programming jobs (electrical installation, circuit design) are skipped
-without asking, by the rules in `data/vacancy-filters.lino`. A part of the text is enough; case and
-ё/е do not matter:
+Vacancies that are not programming jobs (electrical installation, circuit design), and manual or
+field work that needs physical presence, are skipped without asking, by the rules in
+`data/vacancy-filters.lino`. A part of the text is enough; case and ё/е do not matter:
 
 ```
 vacancy
   схемотехник
 question
   дифавтомат
+on-site
+  выезды на объект
+  работа на складе
+programming
+  разработчик
+remote
+  можно удаленно
 ```
 
 - `vacancy`: the vacancy card in the search list (title, company, labels), checked before the
   vacancy is opened, so it costs no request; and the vacancy name on its response form
 - `question`: a question of the response form (full form or popup)
 - `page`: any text of the response form
+- `on-site`: physical presence (installation, field trips, warehouse, production line, shifts),
+  looked for in the card, the vacancy description, the questions and the form. It filters only a
+  vacancy that is clearly not programming: when its card, name or description has a `programming`
+  or `remote` fragment, on-site rules do not apply. So a Moscow office Go developer is never filtered,
+  even when its description mentions the warehouses it automates
+- `programming`, `remote`: those guards
+
+The vacancy description is read only when it is needed: the card has no programming or remote sign
+and no rule matched it already (a «Сервисный инженер» card, not a «Go-разработчик» one). Then the run
+requests the vacancy page once, from the vacancy list (a same-origin request for the HTML only, no
+navigation and no images or scripts), reads its title, work format and description, and keeps the
+usual pause between vacancies after it. The search card and the response forms do not show the
+description, so this is the cheapest way to it.
 
 Every filtered vacancy is logged with the rule (`🚫 Vacancy … filtered out by vacancy-filters.lino
-(question "кв.мм": …)`) and kept in `data/filtered-vacancies.lino`, so it is not opened again. Add a
-line to the rules when you see a vacancy that should have been skipped.
+(question "кв.мм": …)`) and kept in `data/filtered-vacancies.lino` with its title and the time, so
+it is not opened again. Add a line to the rules when you see a vacancy that should have been skipped.
+
+### Skipped Vacancies
+
+No vacancy is skipped silently. Every other skip is logged and kept in
+`data/skipped-vacancies.lino` with the reason, the vacancy title, the employer's link when there is
+one, the time and the number of attempts:
+
+```
+138295841
+  "reason: external_site"
+  "title: Go-разработчик | Ромашка"
+  "url: https://career.example.com/jobs/1"
+  "time: 2026-10-10T12:00:00.000Z"
+  "attempts: 1"
+```
+
+Whether a skipped vacancy is opened again on the next run depends on the reason:
+
+| Reason | Opened again |
+|--------|--------------|
+| `external_site` (applied on the employer's site), `resume_not_visible`, `skipped_by_user` (`s`, or a popup you closed) | No, until you clear it |
+| `questionnaire_ignored` | No, while `--ignore-vacancies-with-questionnaire` is on |
+| `questions_deferred` | Once its questions are answered (`data/deferred-questions.lino`) |
+| `modal_timeout`, `apply_button_disabled`, `apply_click_failed`, `button_not_found`, `button_disabled`, `click_failed`, `timeout`, `unanswered_questions` | Once more on a later run; skipped a second time, no |
+
+A vacancy you apply to is removed from the file. List the skipped vacancies, with the
+`bun run prefill-form -- <url>` command for each one applied on the employer's site, or clear a
+reason or a vacancy so it is opened again:
+
+```bash
+bun run skipped
+bun run skipped -- --clear resume_not_visible
+bun run skipped -- --clear 138295841
+```
+
+The file holds only public vacancy data (IDs, titles from the vacancy card, the employer's link) and
+can be committed like `data/deferred-questions.lino`.
 
 hh.ru's notice «поменяйте видимость резюме на «Видно всем работодателям…»» is not a filter: it
 depends on the resume, so once it shows, every such vacancy shows it. Only a rendered notice counts:
@@ -425,7 +491,7 @@ If you want to skip vacancies that require any additional questionnaire fields b
 bun run apply -- --ignore-vacancies-with-questionnaire --verbose
 ```
 
-This works for both modal response forms and full `vacancy_response` pages. The vacancy will be skipped as soon as the script detects extra questionnaire fields.
+This works for both modal response forms and full `vacancy_response` pages. The vacancy will be skipped as soon as the script detects extra questionnaire fields, and kept in `data/skipped-vacancies.lino` (reason `questionnaire_ignored`; the former `data/ignored-vacancy-ids.txt` is moved there on the next run).
 
 ### Using Playwright (default)
 

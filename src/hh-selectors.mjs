@@ -40,6 +40,15 @@ export const SELECTORS = {
   directApplicationCancelButton: '[data-qa="vacancy-response-link-advertising-cancel"]',
   directApplicationAlert: '[data-qa="magritte-alert"]',
 
+  // Vacancy card in the search list: title and employer
+  vacancyCardTitle: '[data-qa="serp-item__title"]',
+  vacancyCardEmployer: '[data-qa="vacancy-serp__vacancy-employer"]',
+  // Vacancy page parts the vacancy filters read: title, work format and employment, description
+  vacancyDescriptionParts: '[data-qa="vacancy-title"], [data-qa*="work-format"], ' +
+    '[data-qa="vacancy-view-employment-mode"], [data-qa="vacancy-description"]',
+  // Vacancy name (and employer) on the full response form
+  vacancyCredentials: '[data-qa="vacancy-credentials"]',
+
   // Question blocks
   questionBlock: '[data-qa="task-body"]',
   radioOption: 'input[type="radio"]',

@@ -18,10 +18,11 @@ import {
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
+import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
-import { askUser, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
+import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import {
@@ -30,7 +31,6 @@ import {
   findCoverLetterToggle,
   isButtonEnabled,
   isResponseSubmitted,
-  rememberIgnoredVacancy,
 } from './helpers/page-helpers.mjs';
 
 const COVER_LETTER_SELECTORS = [SELECTORS.coverLetterTextareaPopup, SELECTORS.coverLetterTextareaForm];
@@ -109,11 +109,20 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
     }
 
     await setupAutoSaveListeners({ evaluate: commander.evaluate, questionToAnswer });
-    return savePairs(await collectMarkedQAPairs({ evaluate: commander.evaluate }), addOrUpdateQA);
+    return saveMarkedQAPairs({ commander, addOrUpdateQA });
   } catch (error) {
     console.error('Error setting up Q&A handling:', error.message);
     return 0;
   }
+}
+
+/**
+ * Save the answers the user typed or changed in text questions (marked when the field loses
+ * focus, see setupAutoSaveListeners), not the autofilled ones
+ * @returns {Promise<number>} Number of saved pairs
+ */
+export async function saveMarkedQAPairs({ commander, addOrUpdateQA }) {
+  return savePairs(await collectMarkedQAPairs({ evaluate: commander.evaluate }), addOrUpdateQA);
 }
 
 /**
@@ -207,10 +216,11 @@ function countEmptyTestTextareas({ commander }) {
  */
 async function readFormForFilters(commander) {
   const { value } = await commander.safeEvaluate({
-    fn: () => ({
-      vacancy: document.querySelector('[data-qa="vacancy-credentials"]')?.innerText ?? '',
+    fn: (credentialsSelector) => ({
+      vacancy: document.querySelector(credentialsSelector)?.innerText ?? '',
       page: (document.querySelector('main') ?? document.body).innerText,
     }),
+    args: [SELECTORS.vacancyCredentials],
     defaultValue: { vacancy: '', page: '' },
     operationName: 'response form text for the vacancy filters',
     silent: true,
@@ -225,36 +235,49 @@ async function readFormForFilters(commander) {
  * Note: This function is called exclusively from the pageTrigger system
  * in page-triggers.mjs, which ensures it's only called once per page with
  * proper lifecycle management.
+ *
+ * Every skip is logged and kept in data/skipped-vacancies.lino (or deferred-questions.lino /
+ * filtered-vacancies.lino). A form with questions is sent by the rules of decideSend, the same as
+ * the popup; an application hh.ru does not confirm goes to onApplicationNotConfirmed, which stops
+ * the run or waits for the user (the same as the popup, see orchestrator.mjs)
  */
 export async function handleVacancyResponsePage({
   commander,
   MESSAGE,
   readQADatabase,
   addOrUpdateQA,
-  addIgnoredVacancyId,
-  autoSubmitEnabled,
+  autoSubmitEnabled = false,
   ignoreVacanciesWithQuestionnaire,
   returnUrl = DEFAULT_RETURN_URL,
   onApplicationSent = async () => {},
+  onApplicationNotConfirmed = async () => {},
   onMissingAnswers = 'wait',
   deferredQuestions = null,
   autoSendExact = true,
   vacancyFilters = null,
+  skippedVacancies = null,
   verbose,
 }) {
-  const skipQuestionnaireVacancy = async () => {
-    console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
-    await rememberIgnoredVacancy(addIgnoredVacancyId, extractVacancyIdFromResponseUrl(commander.getUrl()));
+  // hh.ru changes the URL after a response, so the vacancy ID is taken first
+  const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
+  let title = '';
+  const returnToList = async () => {
     console.log(`Returning to: ${returnUrl}`);
     await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
   };
+  // Never silently: logged and kept in data/skipped-vacancies.lino
+  const skipVacancy = (reason, { url } = {}) => noteSkip(skippedVacancies, vacancyId, { reason, title, url });
+  const skipQuestionnaireVacancy = async () => {
+    console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
+    await skipVacancy('questionnaire_ignored');
+    await returnToList();
+  };
   // Answered later: the vacancy is kept under its questions in deferred-questions.lino
   const deferVacancy = async (questions) => {
-    const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
     await deferredQuestions?.defer(questions, vacancyId);
     console.log(`⏭️  Vacancy ${vacancyId} skipped for now, kept in deferred-questions.lino under:\n${formatQuestions(questions)}`);
-    console.log(`Returning to: ${returnUrl}`);
-    await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+    await skipVacancy(deferredQuestions ? 'questions_deferred' : 'unanswered_questions');
+    await returnToList();
   };
 
   try {
@@ -269,28 +292,32 @@ export async function handleVacancyResponsePage({
       return;
     }
 
+    const form = await readFormForFilters(commander);
+    title = form.vacancy;
+
     // Direct application vacancies are applied on the employer's site - skip them
-    if ((await checkAndCloseDirectApplicationModal({ commander })).isDirectApplication) {
+    const direct = await checkAndCloseDirectApplicationModal({ commander });
+    if (direct.isDirectApplication) {
+      await skipVacancy('external_site', { url: direct.url ?? `https://hh.ru/vacancy/${vacancyId}` });
       return;
     }
 
-    const filterMatch = await vacancyFilters?.match(await readFormForFilters(commander));
+    // With the description when it was read on the vacancy list (vacancies.mjs)
+    const filterMatch = await vacancyFilters?.match({ ...form, description: vacancyFilters.description?.(vacancyId) ?? '' });
     if (filterMatch) {
-      const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
       console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
-      await vacancyFilters.remember(vacancyId, filterMatch);
-      console.log(`Returning to: ${returnUrl}`);
-      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+      await vacancyFilters.remember(vacancyId, filterMatch, { title });
+      await returnToList();
       return;
     }
 
-    const visibility = await waitForVisibleResume(commander, { vacancyId: extractVacancyIdFromResponseUrl(commander.getUrl()) });
+    const visibility = await waitForVisibleResume(commander, { vacancyId });
     if (visibility === 'withdrawn') {
       return;
     }
     if (visibility === 'skip') {
-      console.log(`⏭️  Skipped: the resume is not visible to all employers. Returning to: ${returnUrl}`);
-      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+      await skipVacancy('resume_not_visible');
+      await returnToList();
       return;
     }
 
@@ -334,13 +361,17 @@ export async function handleVacancyResponsePage({
     const textareaCount = await commander.count({ selector: 'textarea' });
     console.log(`Found ${textareaCount} textarea(s) on the page`);
 
+    // The saved answers as they were before this form: the periodic auto-save (page-triggers.mjs)
+    // writes the autofilled answers of similar questions under this form's wording, which must
+    // not make them count as exact
+    const savedBefore = await readQADatabase();
     // Auto-fill answers from database, then give user time to review them
     await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
     // Sent without asking only when autofill alone answered everything with saved answers of the
     // very same questions; checked again before sending, in case an answer was changed meanwhile
     const answersExact = async () => allAnswersExact(
       await extractPageQuestions({ evaluate: commander.evaluate }),
-      await readQADatabase(),
+      savedBefore,
     );
     let exactAfterAutofill = autoSendExact && (await listOpenQuestions({ evaluate: commander.evaluate })).length === 0 &&
       await answersExact();
@@ -405,11 +436,25 @@ export async function handleVacancyResponsePage({
       console.log('No test questions found, only cover letter - will auto-submit');
     } else if (autoSend) {
       console.log(`Every answer is the saved answer of the very same question (${describeQuestionCounts(totalCount, textareaCount)}) - sending without asking`);
-    } else if (autoSubmitEnabled) {
-      console.log(`All test questions answered (${describeQuestionCounts(totalCount, textareaCount)}) - will auto-submit`);
     } else {
-      console.log(`All test questions answered (${describeQuestionCounts(totalCount, textareaCount)}), but --auto-submit-vacancy-response-form is disabled`);
+      console.log(`All test questions answered (${describeQuestionCounts(totalCount, textareaCount)}), not all with the saved answer of the very same question`);
+    }
+    const decision = await decideSend({
+      hasQuestions: hasTestQuestions,
+      autoSend,
+      autoSubmit: autoSubmitEnabled,
+      skip: 'skip this vacancy (kept in skipped-vacancies.lino)',
+    });
+    if (decision === 'wait') {
       console.log('Please review the answers and submit the form manually when ready');
+      return;
+    }
+    if (decision === 'skip') {
+      await skipVacancy('skipped_by_user');
+      await returnToList();
+      return;
+    }
+    if (decision === 'withdrawn') {
       return;
     }
 
@@ -429,15 +474,15 @@ export async function handleVacancyResponsePage({
       return;
     }
 
-    // hh.ru changes the URL after a response, so take the vacancy ID first
-    const vacancyId = extractVacancyIdFromResponseUrl(commander.getUrl());
     await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true, autoSend });
     console.log('Clicked submit button');
     for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !await isResponseSubmitted(commander); waited += 1000) {
       await commander.wait({ ms: 1000, reason: 'submission to complete' });
     }
     if (!await isResponseSubmitted(commander)) {
-      console.log('⚠️  Submission was not confirmed by hh.ru, manual check required');
+      console.log(`⚠️  hh.ru did not confirm the application to vacancy ${vacancyId}, manual check required`);
+      // Never move on to the next vacancy: the run stops (unattended) or waits for the user
+      await onApplicationNotConfirmed(vacancyId);
       return;
     }
     console.log(`✅ Application sent for vacancy ${vacancyId}`);
@@ -465,7 +510,7 @@ export async function handleVacancyResponsePage({
     }
     if (isTimeoutError(error)) {
       console.log(`⚠️  Timeout error while handling vacancy response page: ${error.message}`);
-      console.log('   Skipping this vacancy and continuing with next one');
+      await skipVacancy('timeout');
       return;
     }
     console.error('Unexpected error in handleVacancyResponsePage:', error.message);

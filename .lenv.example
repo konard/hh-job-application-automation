@@ -105,7 +105,8 @@
 # Default: false
 # VERBOSE: true
 
-# Auto-submit vacancy response forms when all questions are answered
+# Send forms with questions (popup or full form) unattended even when not every answer is the
+# saved answer of the very same question (otherwise such a form waits for you)
 # Default: false (manual review recommended for safety)
 # AUTO_SUBMIT_VACANCY_RESPONSE_FORM: true
 

@@ -51,9 +51,12 @@ export async function closeModalIfPresent({
  * - Title: "Вакансия с прямым откликом"
  * - Cancel button: data-qa="vacancy-response-link-advertising-cancel"
  *
+ * The link to the employer's site, when the modal has one, is returned as `url`, so the
+ * vacancy can be listed for `bun run prefill-form -- <url>` (skipped-vacancies.mjs).
+ *
  * @param {Object} options - Options
  * @param {Object} options.commander - Browser commander instance
- * @returns {Promise<{isDirectApplication: boolean, closed: boolean}>}
+ * @returns {Promise<{isDirectApplication: boolean, closed: boolean, url?: string}>}
  */
 export async function checkAndCloseDirectApplicationModal({ commander } = {}) {
   const notDirect = { isDirectApplication: false, closed: false };
@@ -72,19 +75,24 @@ export async function checkAndCloseDirectApplicationModal({ commander } = {}) {
 
         const markers = ['прямым откликом', 'сайте работодателя'];
         const hasMarker = (el) => markers.some((marker) => (el?.textContent || '').includes(marker));
+        // The button that leads to the employer's site is a link next to the cancel button
+        const employerLink = (scope) => [...(scope?.querySelectorAll('a[href]') ?? [])]
+          .find((link) => link !== cancelButton && /^https?:/.test(link.href))?.href;
 
         // The modal uses "magritte-alert" data-qa attribute, not "modal-overlay"
-        if (hasMarker(document.querySelector(alertSelector))) {
-          return { found: true, reason: 'magritte-alert with direct application text' };
+        const alert = document.querySelector(alertSelector);
+        if (hasMarker(alert)) {
+          return { found: true, reason: 'magritte-alert with direct application text', url: employerLink(alert) };
         }
         let container = cancelButton.parentElement;
         for (let i = 0; i < 5 && container; i++, container = container.parentElement) {
           if (hasMarker(container)) {
-            return { found: true, reason: 'parent container with direct application text' };
+            return { found: true, reason: 'parent container with direct application text', url: employerLink(container) };
           }
         }
-        if (hasMarker(document.querySelector(overlaySelector))) {
-          return { found: true, reason: 'modal-overlay with direct application text' };
+        const overlay = document.querySelector(overlaySelector);
+        if (hasMarker(overlay)) {
+          return { found: true, reason: 'modal-overlay with direct application text', url: employerLink(overlay) };
         }
         return { found: false, reason: 'cancel button found but no direct application text nearby' };
       },
@@ -108,7 +116,7 @@ export async function checkAndCloseDirectApplicationModal({ commander } = {}) {
     await commander.wait({ ms: 1000, reason: 'direct application modal to close' });
 
     console.log('✅ Direct application skipped, continuing with next vacancy...');
-    return { isDirectApplication: true, closed: true };
+    return { isDirectApplication: true, closed: true, ...(detection.value.url ? { url: detection.value.url } : {}) };
   } catch (error) {
     log.debug(() => `🔍 checkAndCloseDirectApplicationModal: error - ${error.message}`);
     return notDirect;

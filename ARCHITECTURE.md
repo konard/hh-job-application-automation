@@ -28,7 +28,9 @@ src/
 ├── qa.mjs                    # Q&A matching logic
 ├── qa-database.mjs           # Q&A database operations (Links Notation format)
 ├── deferred-questions.mjs    # Questions answered later and the vacancies waiting for them
-├── vacancy-filters.mjs       # Vacancies filtered out automatically by data/vacancy-filters.lino
+├── vacancy-filters.mjs       # Vacancies filtered out automatically by data/vacancy-filters.lino (incl. on-site, not programming)
+├── skipped-vacancies.mjs     # Every other skip with reason, title, link and time (data/skipped-vacancies.lino)
+├── skipped.mjs               # `bun run skipped`: list skipped vacancies (prefill commands), clear them
 ├── form-prefill.mjs          # Prefill of external forms: contacts, saved answers, drafts
 ├── prefill-form.mjs          # `bun run prefill-form`: forms in separate browser slots
 ├── form-slots.mjs            # Prefilled forms in browser slots (used by prefill-form and answer-chats)
@@ -47,7 +49,6 @@ src/
 ├── config.mjs                # Configuration using lino-arguments
 ├── logging.mjs               # Logging using log-lazy
 ├── hh-selectors.mjs          # Centralized CSS selectors and URL patterns
-├── ignored-vacancies-db.mjs  # Persisted IDs of vacancies with questionnaires
 ├── migrate-qa.mjs            # Rewrites qa.lino in canonical format
 └── helpers/
     ├── modal-helpers.mjs     # Modal detection and closing helpers
@@ -183,7 +184,7 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
 | `--message` / `--message-file` | Cover letter (one of them is required) | - |
 | `--verbose` | Enable debug logging | false |
 | `--job-application-interval` | Seconds between opened vacancies (plus random up to a quarter; see `pacing.mjs`) | 240 |
-| `--auto-submit-vacancy-response-form` | Auto-submit forms whose questions are all answered | false |
+| `--auto-submit-vacancy-response-form` | Send forms with non-exact answers unattended too (popup and full form) | false |
 
 ## Startup Flow
 
@@ -198,12 +199,20 @@ The application uses [lino-arguments](https://github.com/link-foundation/lino-ar
    recently updated one. hh.ru shows no update date now, so its list order is used.
 4. Vacancies in `data/deferred-questions.lino` whose question has no answer in `qa.lino` yet (or
    matches `--skip-question`) are marked as processed, so they are not opened; so are the vacancies in
-   `data/filtered-vacancies.lino`. A vacancy card, popup or response form that matches a rule in
-   `data/vacancy-filters.lino` is skipped without asking (cards before they are opened).
+   `data/filtered-vacancies.lino` and the final skips in `data/skipped-vacancies.lino` (external-site,
+   hidden-resume and user skips; transient ones such as a popup timeout after their second skip).
+   A vacancy card, popup or response form that matches a rule in `data/vacancy-filters.lino` is
+   skipped without asking (cards before they are opened). On-site rules (physical presence) apply only
+   to vacancies with no programming or remote sign; when the card does not settle it, the vacancy
+   description is read with one same-origin request for the vacancy page's HTML (`readVacancyDescription`),
+   paced like an opened vacancy. Every other skip is logged and recorded by `noteSkip`.
 5. The orchestrator opens vacancies an even pause apart (`pacing.mjs`), pauses while a captcha is shown (Haiku's
    reading is sent once, then the answer is only prefilled for the user) and stops when hh.ru does not confirm
-   an application. Forms with questions are sent without asking only when autofill answered every question
-   with the saved answer of the very same question.
+   an application, on the popup or the full form (`applicationNotConfirmed`). Popup and full form share the
+   autofill and answer saving (`setupQAHandling`, `saveQAPairs`) and the send rule (`decideSend` in
+   `confirmations.mjs`): forms with questions are sent without asking only when autofill answered every question
+   with the saved answer of the very same question (saved before the form was opened); any other form waits for
+   the user's `y`, or for the user in the browser in an unattended run.
 
 ## Logging
 

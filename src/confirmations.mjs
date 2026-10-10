@@ -144,6 +144,46 @@ export async function waitForUser(description) {
 }
 
 /**
+ * Turn interactive confirmations off again (an unattended run; used by tests)
+ */
+export function disableConfirmations() {
+  interactive = false;
+  steps = new Set();
+  stop = () => {};
+  lines = null;
+  pendingLine = null;
+}
+
+/**
+ * Whether a form may be sent now, the same rule for the popup and the full form: a form
+ * without questions, or one whose every answer is the saved answer of the very same question
+ * (`autoSend`), is sent; any other form is sent only after the user's `y`. With `--confirm send`
+ * the send click itself asks (withConfirmations); otherwise it is asked here. Nobody answers in
+ * an unattended run, so such a form waits for the user in the browser, unless
+ * --auto-submit-vacancy-response-form was given explicitly
+ * @param {Object} form
+ * @param {boolean} form.hasQuestions
+ * @param {boolean} form.autoSend - Every answer is exact (allAnswersExact)
+ * @param {boolean} [form.autoSubmit=false] - --auto-submit-vacancy-response-form
+ * @param {string} [form.skip] - What `s` does; without it `s` is not offered
+ * @returns {Promise<'send'|'wait'|'skip'|'withdrawn'>}
+ */
+export async function decideSend({ hasQuestions, autoSend, autoSubmit = false, skip }) {
+  if (!hasQuestions || autoSend) {
+    return 'send';
+  }
+  if (!interactive) {
+    return autoSubmit ? 'send' : 'wait';
+  }
+  if (steps.has('send')) {
+    return 'send';
+  }
+  const choice = await askUser('Send the application? Not every answer is the saved answer of the very same question; ' +
+    'check them in the browser', { skip });
+  return choice === 'continue' ? 'send' : choice;
+}
+
+/**
  * Wait for confirmation of a step when that step is configured
  * @param {string} step - One of CONFIRM_STEPS
  * @param {string} description

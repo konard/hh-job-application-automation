@@ -34,14 +34,15 @@ const PAGE_READY_TIMEOUT = 120000;
  * @param {Object} options.commander - Browser commander instance
  * @param {Object} options.page - Raw engine page
  * @param {Object} options.argv - Parsed configuration
- * @param {Object} options.qaDB - { readQADatabase, addOrUpdateQA, addIgnoredVacancyId }
+ * @param {Object} options.qaDB - { readQADatabase, addOrUpdateQA }
  * @param {Object} [options.deferredQuestions] - Questions answered later (deferred-questions.mjs)
  * @param {Object} [options.vacancyFilters] - Vacancies filtered out automatically (vacancy-filters.mjs)
+ * @param {Object} [options.skippedVacancies] - Every other skip, kept (skipped-vacancies.mjs)
  * @param {Function} options.onPageClosed - Called when the user closes the tab
  * @returns {Object} Orchestrator with start method
  */
 export function createOrchestrator({
-  commander, page, argv, qaDB, deferredQuestions = null, vacancyFilters = null, onPageClosed,
+  commander, page, argv, qaDB, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, onPageClosed,
   onApplicationSent = async () => {},
 }) {
   let START_URL = argv.url;
@@ -102,14 +103,36 @@ export function createOrchestrator({
         return false;
       }
       sentVacancyIds.add(vacancyId);
-      // It no longer waits for an answer
+      // It no longer waits for an answer, and is no longer a skipped vacancy
       await deferredQuestions?.forget(vacancyId)
         .catch((error) => console.error('Error updating deferred-questions.lino:', error.message));
+      await skippedVacancies?.forget(vacancyId)
+        .catch((error) => console.error('Error updating skipped-vacancies.lino:', error.message));
     }
     await checkpoint('application-sent');
     scheduleNextApplication('Application sent');
     await onApplicationSent();
     return true;
+  }
+
+  // Set when an application was not confirmed in an unattended run: the main loop stops on it
+  let stopError = null;
+
+  /**
+   * An application hh.ru did not confirm as sent (popup or full form): never move on to the
+   * next vacancy while hh.ru shows something unexpected. Unattended, the run stops (the main
+   * loop throws stopError); otherwise it waits for the user
+   * @param {string|null} vacancyId
+   */
+  async function applicationNotConfirmed(vacancyId) {
+    const message = `hh.ru did not confirm the application to vacancy ${vacancyId}. ` +
+      'Check the browser (an error, a captcha, a message)';
+    if (!isInteractive()) {
+      console.error(`❌ ${message}; stopping so that nothing else is sent`);
+      stopError ??= new Error(`${message}; stopping so that nothing else is sent`);
+      return;
+    }
+    await waitForUser(`${message}, then`);
   }
 
   /**
@@ -127,16 +150,17 @@ export function createOrchestrator({
     MESSAGE: argv.message,
     readQADatabase: qaDB.readQADatabase,
     addOrUpdateQA: qaDB.addOrUpdateQA,
-    addIgnoredVacancyId: qaDB.addIgnoredVacancyId,
-    // In interactive runs the user answers on stdin, so the form is submitted after that
-    autoSubmitEnabled: argv.autoSubmitVacancyResponseForm || isInteractive(),
+    // A form with a non-exact answer is sent after the user's `y` (decideSend); unattended only with this flag
+    autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
     onMissingAnswers: argv.onMissingAnswers,
     ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
     returnUrl: lastSearchPageUrl,
     onApplicationSent: afterApplicationSent,
+    onApplicationNotConfirmed: applicationNotConfirmed,
     deferredQuestions,
     autoSendExact: argv.autoSendExactAnswers,
     vacancyFilters,
+    skippedVacancies,
     verbose: argv.verbose,
   });
 
@@ -173,13 +197,7 @@ export function createOrchestrator({
       return true;
     case 'modal_processing_failed':
       if (result.reason === 'not_confirmed') {
-        // Never move on to the next vacancy while hh.ru shows something unexpected
-        const message = `hh.ru did not confirm the application to vacancy ${result.vacancyId}. ` +
-          'Check the browser (an error, a captcha, a message)';
-        if (!isInteractive()) {
-          throw new Error(`${message}; stopping so that nothing else is sent`);
-        }
-        await waitForUser(`${message}, then`);
+        await applicationNotConfirmed(result.vacancyId);
       }
       return true;
     default:
@@ -189,6 +207,8 @@ export function createOrchestrator({
 
   /** Statuses after which no vacancy was opened, so no pause is needed */
   const NO_VACANCY_OPENED = new Set(['not_on_target_page', 'no_buttons_found', 'filtered_out']);
+  // A vacancy filtered out after its description was requested cost a request, so it is paced too
+  const openedVacancy = (result) => result.descriptionRead || !NO_VACANCY_OPENED.has(result.status);
 
   return {
     /**
@@ -248,6 +268,9 @@ export function createOrchestrator({
      */
     async runMainLoop() {
       while (!pageClosedByUser) {
+        if (stopError) {
+          throw stopError;
+        }
         // Ensure page is fully loaded
         if (commander.navigationManager?.isNavigating() || commander.shouldAbort()) {
           log.debug(() => 'Page is loading, waiting for it to be fully ready...');
@@ -280,17 +303,21 @@ export function createOrchestrator({
           commander,
           MESSAGE: argv.message,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
-          addIgnoredVacancyId: qaDB.addIgnoredVacancyId,
           deferredQuestions,
           readQADatabase: qaDB.readQADatabase,
+          addOrUpdateQA: qaDB.addOrUpdateQA,
           autoSendExact: argv.autoSendExactAnswers,
+          autoSubmit: argv.autoSubmitVacancyResponseForm,
+          onMissingAnswers: argv.onMissingAnswers,
           vacancyFilters,
+          skippedVacancies,
+          verbose: argv.verbose,
           waitForUrlCondition,
           START_URL,
           pageClosedByUser: getPageClosedByUser,
         });
 
-        if (!NO_VACANCY_OPENED.has(result.status) && result.status !== 'success') {
+        if (openedVacancy(result) && result.status !== 'success') {
           scheduleNextApplication(`Vacancy ${result.vacancyId ?? ''} opened (${result.status}${result.reason ? `: ${result.reason}` : ''})`);
         }
         if (!await handleResult(result)) {
