@@ -351,7 +351,7 @@ of them, so none is lost.
 | «What happenned? Why no browser?» | Root cause in the agent's own run setup (a pipe holder that expired after 24 h), not in the code; the idle watchdog then closed Chrome as designed (BRW2) |
 | «[Image] why it stuck now?» | Fixed in 36f8af7 (FLT6) |
 | «Everything that is blocked by my actions - do at the end.» | Scheduling instruction: items waiting on the user (LinkedIn login, live checks) deferred to the end of the session; independent work done first (led to the ordering of the 2026-10-10 subagents) |
-| «linkedin must be unblocked - search the ways, i have logged in by other browsers.» | Reinforcement of LOGIN7; user signals an active LinkedIn session exists in their other browsers; LOGIN7 remains ⬜ until a path to import that session is safe to implement |
+| «linkedin must be unblocked - search the ways, i have logged in by other browsers.» | LOGIN7: `bun run linkedin-login` (7c1289b) copies the LinkedIn session of an installed browser into the LinkedIn slot. Running it was blocked by Claude Code's auto-mode classifier (credential exploration) even after the user's permission; it runs once the user leaves auto mode and approves the prompt |
 | «[Image] that may be used as default template for rejection.» | The shown rejection message pattern is the default template for asking about rejection reasons (C9); covered by chat-templates.lino |
 | «what is going on here?» | Question about a stuck run state; answered inline; no lasting requirement |
 
@@ -374,8 +374,8 @@ of them, so none is lost.
 | CHAT (C) | 15 | 8 | 7 | | | |
 | EXP | 7 | 3 | 4 | | | |
 | SEC | 10 | 9 | 1 | | | |
-| PROC | 14 | 14 | | | | |
-| **Total** | **149** | **110** | **35** | **1** | **0** | **3** |
+| PROC | 15 | 15 | | | | |
+| **Total** | **150** | **111** | **35** | **1** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
