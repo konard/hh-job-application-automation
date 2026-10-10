@@ -21,7 +21,8 @@
     "puppeteer": "bun src/apply.mjs --engine puppeteer",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "check": "bun run lint && bun test && bun src/apply.mjs --help > /dev/null"
+    "check": "bun run lint && bun test && bun src/apply.mjs --help > /dev/null",
+    "linkedin-login": "bun src/linkedin-login.mjs"
   },
   "keywords": [],
   "author": "",
