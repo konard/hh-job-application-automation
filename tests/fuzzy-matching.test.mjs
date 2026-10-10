@@ -320,3 +320,11 @@ describe('Informal address', () => {
     assert.equal(findBestMatch('От какой минимальной суммы рассматриваешь предложения?', db)?.answer, 'От 450000 рублей');
   });
 });
+
+describe('«разработки» alone does not make two questions the same', () => {
+  test('real-time systems is not pure C', () => {
+    const db = new Map([['Есть ли у вас опыт разработки на чистом Си?', 'Да']]);
+    assert.equal(findBestMatch('Есть ли у Вас опыт разработки для систем реального времени?', db), null);
+    assert.equal(findBestMatch('Есть ли у вас опыт разработки на чистом Си?', db)?.answer, 'Да');
+  });
+});
