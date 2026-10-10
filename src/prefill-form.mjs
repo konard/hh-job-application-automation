@@ -13,9 +13,10 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import { connectOrLaunchBrowser } from './browser-session.mjs';
+import { loadContacts, withContacts } from './contacts.mjs';
 import { createQADatabase } from './qa-database.mjs';
 import {
-  askClaude, draftPrompt, loadProfile, planAnswers, readFormFields, relatedAnswers, TO_CHECK,
+  askClaude, draftPrompt, loadProfile, pickOptions, planAnswers, readFormFields, relatedAnswers, TO_CHECK,
 } from './form-prefill.mjs';
 
 const USAGE = `Usage: bun run prefill-form -- <url> [<url> ...] [options]
@@ -80,8 +81,8 @@ async function waitForCaptcha(page, log) {
   return !CAPTCHA_URL.test(page.url());
 }
 
-async function fill(page, field) {
-  const locator = (id) => page.locator(`[data-prefill-id="${id}"]`).first();
+async function fill(field) {
+  const locator = (id) => field.frame.locator(`[data-prefill-id="${id}"]`).first();
   if (field.file) {
     await locator(field.id).setInputFiles(field.file);
     return;
@@ -132,8 +133,21 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }) {
   }
   await sleep(2000);
 
-  const form = await page.evaluate(readFormFields);
-  log(`📝 "${form.title}": ${form.fields.length} question(s)`);
+  // The form may be in a frame (Yandex Forms on practicum.yandex.ru): every frame is read
+  const frames = [];
+  for (const frame of page.frames()) {
+    const read = await frame.evaluate(readFormFields).catch(() => null);
+    if (read?.fields.length) {
+      frames.push({ frame, read });
+    }
+  }
+  const form = {
+    title: frames.find(({ frame }) => frame === page.mainFrame())?.read.title ?? frames[0]?.read.title ?? await page.title(),
+    description: '',
+    fields: frames.flatMap(({ frame, read }) => read.fields.map((field) => ({ ...field, frame }))),
+    hasNextPage: frames.some(({ read }) => read.hasNextPage),
+  };
+  log(`📝 "${form.title}": ${form.fields.length} question(s)${frames.some(({ frame }) => frame !== page.mainFrame()) ? ' (in a frame)' : ''}`);
   const planned = planAnswers(form.fields, { profile, qaMap });
 
   if (argv.draft) {
@@ -147,7 +161,8 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }) {
         return;
       }
       if (field.options?.length) {
-        const choices = draft.split('\n').map((line) => line.replace(/^[-•]\s*/, '').trim()).filter((line) => field.options.includes(line));
+        // The draft names options; matched like saved answers, so a small difference still fits
+        const choices = pickOptions(field.options, draft.split('\n').map((line) => line.replace(/^[-•]\s*/, '').trim()).filter(Boolean));
         if (choices.length > 0) {
           Object.assign(field, { open: false, choices, source: 'draft' });
         }
@@ -159,7 +174,7 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }) {
 
   for (const field of planned.filter((item) => !item.open)) {
     try {
-      await fill(page, field);
+      await fill(field);
     } catch (error) {
       field.note = `not filled: ${error.message.split('\n')[0]}`;
     }
@@ -188,12 +203,14 @@ function report({ url, slot, title, fields }) {
   return lines.join('\n');
 }
 
-const qaMap = await createQADatabase(path.join(DATA, 'qa.lino')).readQADatabase();
+const contacts = await loadContacts(path.join(DATA, 'contacts.lino'));
+const qaMap = await withContacts(createQADatabase(path.join(DATA, 'qa.lino')), contacts).readQADatabase();
 const { profile, resume } = await loadProfile({
   resumeMarkdown: path.join(DATA, 'resume', 'resume.md'),
   resumeJson: path.join(DATA, 'resume', 'resume.json'),
   resumeFile: path.join(DATA, 'resume', 'resume.pdf'),
   coverLetter: path.join(DATA, 'cover-letter.txt'),
+  contacts,
   profileOverrides: await readProfileOverrides(),
 });
 if (!resume) {

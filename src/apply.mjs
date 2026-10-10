@@ -25,8 +25,9 @@ import { withCaptchaGuard } from './captcha.mjs';
 import { createCaptchaPrefill } from './captcha-solver.mjs';
 import { createDeferredQuestions, formatQuestions } from './deferred-questions.mjs';
 import { createVacancyFilters } from './vacancy-filters.mjs';
+import { expandContacts, loadContacts, withContacts } from './contacts.mjs';
 
-const { readQADatabase, addOrUpdateQA } = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
+const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
   path.join(process.cwd(), 'data', 'ignored-vacancy-ids.txt'),
 );
@@ -72,6 +73,10 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   if (argv.skipQuestions.length > 0) {
     console.log(`⏭️  Skipping vacancies that ask:\n${formatQuestions(argv.skipQuestions)}`);
   }
+  // Answers and the cover letter use {{telegram}}-style placeholders for data/contacts.lino
+  const contacts = await loadContacts(path.join(process.cwd(), 'data', 'contacts.lino'));
+  const { readQADatabase, addOrUpdateQA } = withContacts(qaDatabase, contacts);
+  argv.message = expandContacts(argv.message, contacts);
   const deferredVacancyIds = await deferredQuestions.pendingVacancyIds(await readQADatabase());
   deferredVacancyIds.forEach(markVacancyAsProcessed);
   if (deferredVacancyIds.size > 0) {

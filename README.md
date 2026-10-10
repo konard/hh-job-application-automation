@@ -269,6 +269,10 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   forms; the rest are drafted by local Claude Code from the resume and saved answers, with
   «[уточнить: …]» where only you know the fact (`--no-draft` turns drafts off).
 - A site captcha is left to you; the slot fills the form after it. Nothing is ever submitted.
+- Contacts that are public anyway (Telegram, phone, LinkedIn, GitHub) are kept in
+  `data/contacts.lino`. Saved answers and the cover letter can use them as placeholders
+  (`{{telegram}}`, `{{phone}}`, `{{linkedin}}`, `{{github}}`), so a changed contact is changed in
+  one place; contact values in answers you save are stored as placeholders.
 - The report (every question, its source and answer) is printed and saved to `logs/forms/`.
 
 See [the requirements](docs/requirements/forms-and-chats.md) for what is done and what is planned.

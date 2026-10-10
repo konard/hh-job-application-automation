@@ -355,7 +355,7 @@ export function readFormFields() {
  * @param {Object} paths
  * @returns {Promise<{profile: Object, resume: string}>}
  */
-export async function loadProfile({ resumeMarkdown, resumeJson, resumeFile, coverLetter, profileOverrides }) {
+export async function loadProfile({ resumeMarkdown, resumeJson, resumeFile, coverLetter, contacts = {}, profileOverrides }) {
   const resume = await fs.readFile(resumeMarkdown, 'utf8').catch(() => '');
   const json = JSON.parse(await fs.readFile(resumeJson, 'utf8').catch(() => '{}'));
   const letter = coverLetter ? await fs.readFile(coverLetter, 'utf8').catch(() => '') : '';
@@ -363,10 +363,16 @@ export async function loadProfile({ resumeMarkdown, resumeJson, resumeFile, cove
   // The hh.ru resume, then the GitHub profiles of the resume and the cover letter
   const github = [profile.github, ...(letter.match(/(?:https:\/\/)?github\.com\/[\w-]+/g) ?? [])]
     .filter(Boolean).map((link) => (link.startsWith('http') ? link : `https://${link}`));
-  const links = [...new Set([json.url, ...github].filter(Boolean))];
+  const fromContacts = [contacts.linkedin, ...[contacts.github ?? []].flat()].filter(Boolean)
+    .map((link) => (link.startsWith('http') ? link : `https://${link}`));
+  const links = [...new Set([json.url, ...github, ...fromContacts].filter(Boolean))];
+  // data/contacts.lino wins over the resume: it is the one place contacts are changed
+  const known = Object.fromEntries(Object.entries({
+    telegram: contacts.telegram, phone: contacts.phone, email: contacts.email, fullName: contacts.full_name,
+  }).filter(([, value]) => typeof value === 'string' && value));
   const hasResumeFile = await fs.access(resumeFile).then(() => true, () => false);
   return {
     resume,
-    profile: { ...profile, links, resumeFile: hasResumeFile ? resumeFile : null, ...profileOverrides },
+    profile: { ...profile, ...known, links, resumeFile: hasResumeFile ? resumeFile : null, ...profileOverrides },
   };
 }

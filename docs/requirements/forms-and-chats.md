@@ -29,6 +29,8 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
    chat like these.» (Ирина: «Рассмотрим ваше резюме. Если навыки и опыт подойдут для позиции, мы
    свяжемся с вами.» → «Здравствуйте, благодарю, ожидаю.»)
 8. «Draft exactly all requirements and we will test them as soon as I'm ready.»
+9. «we have linked in at `https://www.linkedin.com/in/konard` save it is as contact so we can paste
+   a templated insert if contacts changes.»
 
 ## A. hh.ru application forms
 
@@ -51,12 +53,13 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 | B2 | Each form opens in its own browser slot: separate Chrome, own profile `~/.hh-automation/form-slot-<n>`, port 9330+n, apart from the hh.ru automation browser; it stays open for review (closes after 24 unused hours) | Three windows, the hh.ru run goes on undisturbed | ✅ |
 | B3 | Nothing is ever submitted: no click on «Отправить» / submit; the user reviews, changes and sends | Form responses stay empty until the user sends | ✅ |
 | B4 | Contacts come from the exported resume (`data/resume/resume.md`, `bun run resume`), never committed: name (ФИО / имя / фамилия), phone, Telegram, email, birth date, location, resume link, GitHub links; `data/profile.lino` (not committed) overrides or adds values | «Укажите имя, номер телефона и Telegram» → «Константин Дьяченко, +7 958 200-05-67, Telegram: @drakonard» | ✅ |
+| B4a | Contacts are kept in one place, `data/contacts.lino` (LinkedIn https://www.linkedin.com/in/konard, Telegram, phone, GitHub); answers and the cover letter use placeholders (`{{telegram}}`, `{{linkedin}}`…) filled in when used, so a changed contact is changed once; contact values in newly saved answers become placeholders | «Ссылка на твой Linkedin» → https://www.linkedin.com/in/konard; `tests/contacts.test.mjs` | 🧪 |
 | B5 | A link question gets the links it asks for: «ссылка на резюме» → the hh.ru resume, LinkedIn → only LinkedIn (left open when there is none), GitHub → GitHub links, «резюме, портфолио или профиль» → all; a link question never takes a yes/no saved answer | Slot 3: resume link only, LinkedIn open | ✅ |
 | B6 | Other questions take saved answers from qa.lino by the same similarity rules as hh.ru forms (A1, A4); choice questions use the same option matching as hh.ru forms | «Укажи свои зарплатные ожидания» → «От 450000 рублей в месяц на руки.» | ✅ |
-| B7 | Questions still open are drafted by local Claude Code from the resume and the closest saved answers only; anything only the user knows is marked «[уточнить: …]»; a choice question gets exactly one of its options | Slot 1 drafts with [уточнить] marks; slot 3 «живу постоянно вне РФ/РБ» | ✅ (one choice question in slot 1 stayed open: the draft named no exact option) |
+| B7 | Questions still open are drafted by local Claude Code from the resume and the closest saved answers only; anything only the user knows is marked «[уточнить: …]»; a choice question gets exactly one of its options | Slot 1 drafts with [уточнить] marks; slot 3 «живу постоянно вне РФ/РБ» | ✅ (drafted choices are now matched to the options like saved answers; slot 1's choice question stayed open in the first run) |
 | B8 | A file field asking for the resume gets `data/resume/resume.pdf` | Form with a resume upload | 🧪 |
 | B9 | A captcha on the site (Yandex SmartCaptcha, as on practicum.yandex.ru) is left to the user; the slot waits up to 30 minutes and fills after it | Slot 2: «solve it in this slot's browser» | 🧪 |
-| B10 | Forms inside an iframe (Yandex Forms on practicum.yandex.ru) are read and filled | Slot 2 finds the questions of forms.yandex.ru | 🚧 (found 0 questions: the form is an iframe) |
+| B10 | Forms inside an iframe (Yandex Forms on practicum.yandex.ru) are read and filled | Slot 2 finds the questions of forms.yandex.ru | 🧪 (every frame is read now; to verify on the next run of slot 2) |
 | B11 | A multi-page form: the current page is filled, the report says to open the next page and run again | Report line «The form has a next page» | 🧪 |
 | B12 | A report lists every question with its source (profile / qa.lino score and saved question / draft / open) and is saved to `logs/forms/<time>.md` | Report file after a run | ✅ |
 | B13 | One implementation for every form: the same matching (`findBestMatch`), option matching (`findMatchingOption`), answer text (`answerText`) as hh.ru forms; the question reader is generic (aria-labelledby, label, legend, placeholder, nearest heading) | No form-specific code for Google Forms or Yandex Forms | ✅ |
