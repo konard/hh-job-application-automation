@@ -7,6 +7,7 @@
  */
 
 import { formatMonthYear } from './experience.mjs';
+import { waitForCaptcha } from './form-slots.mjs';
 
 export const LINKEDIN_PROFILE = 'https://www.linkedin.com/in/konard';
 const LOGIN_URL = /linkedin\.com\/(authwall|login|uas\/login|checkpoint|signup|start\/join)/i;
@@ -328,6 +329,10 @@ export function clickHhExperienceEdit({ company, title, editButton, card }) {
 export async function prefillHhExperience(page, change, { resumeHash }) {
   const notes = [];
   await page.goto(`https://hh.ru/resume/${resumeHash}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  // While hh.ru shows a captcha nothing is touched: the user solves it in the slot
+  if (!await waitForCaptcha(page, console.log)) {
+    return ['hh.ru: the captcha was not solved, nothing prefilled'];
+  }
   await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
   // The list shows the latest jobs until it is expanded
   await page.evaluate(() => [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button')]
