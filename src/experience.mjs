@@ -114,7 +114,7 @@ const DATE_LINE = /^(?:[a-zа-яё]+\.?\s+)?\d{4}(?:\s*г\.)?\s*[—–-]\s*(?:(
 const DURATION_LINE = /^(?:(?:full-time|part-time|полная занятость|частичная занятость|self-employed|freelance|contract)\s*·\s*)?\d+\s*(?:yrs?|mos?|years?|months?|лет|года?|мес)/i;
 const EMPLOYMENT = /\s*·\s*(full-time|part-time|self-employed|freelance|contract|internship|apprenticeship|seasonal|полная занятость|частичная занятость|самозанятость|фриланс|стажировка)$/i;
 const SKILLS_LINE = /^(?:skills|навыки)\s*:\s*/i;
-const LOCATION_HINT = /,|remote|on-site|hybrid|удал[её]нн|офис|гибрид|^[A-ZА-ЯЁ][\p{L}\s-]+$/u;
+const LOCATION_HINT = /,|[Rr]emote|[Oo]n-site|[Hh]ybrid|[Уу]дал[её]нн|[Оо]фис|[Гг]ибрид|^[A-ZА-ЯЁ][\p{L}\s-]+$/u;
 
 /**
  * One LinkedIn position from the text lines of its list item (the visible spans, in order):
@@ -184,6 +184,60 @@ export function normalizeLinkedInJobs(items) {
     }
   }
   return jobs;
+}
+
+/** Where the experience list of LinkedIn's page text ends: its footer */
+const LINKEDIN_FOOTER = /^(profile language|язык профиля|about|о сервисе|linkedin corporation ©.*)$/i;
+/** LinkedIn's shortened skills line of a position: «C#, Java and +13 skills» */
+const SKILLS_SUMMARY = /^.+\s(?:and|и)\s\+\d+\s(?:skills?|навык\p{L}*)$/iu;
+
+/**
+ * LinkedIn positions from the experience page's text, for markup the item reader does not know:
+ * each position is its title and «Company · Full-time» lines before the dates (a role of a
+ * company with several roles has only its title there: the company is the line before the
+ * group's total duration), up to the next position or the page footer
+ * @param {string} text - innerText of the page's main element
+ * @returns {Array<{lines: string[], editUrl: null, roles: []}>} Items for normalizeLinkedInJobs
+ */
+export function linkedInItemsFromText(text) {
+  let lines = String(text ?? '').split('\n').map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const firstDate = lines.findIndex((line) => DATE_LINE.test(line));
+  if (firstDate < 0) {
+    return [];
+  }
+  const footer = lines.findIndex((line, index) => index > firstDate && LINKEDIN_FOOTER.test(line));
+  lines = lines.slice(0, footer < 0 ? lines.length : footer);
+  const starts = [];
+  // The company of the group the roles below belong to
+  let group = null;
+  lines.forEach((line, index) => {
+    if (!DATE_LINE.test(line) || index === 0) {
+      return;
+    }
+    const withCompany = index >= 2 && / · /.test(lines[index - 1]) && !DURATION_LINE.test(lines[index - 1]);
+    const start = index - (withCompany ? 2 : 1);
+    // The group's header lines end the position before it
+    let cut = start;
+    if (withCompany) {
+      group = null;
+    } else {
+      // The first role of a group: «Company», «Full-time · 5 yrs», [location], then the roles
+      for (let back = index - 2; back >= 1 && back >= index - 4; back--) {
+        if (DURATION_LINE.test(lines[back]) && !DATE_LINE.test(lines[back])) {
+          group = lines[back - 1];
+          cut = back - 1;
+          break;
+        }
+      }
+    }
+    starts.push({ start, cut, date: index, company: withCompany ? null : group });
+  });
+  return starts.map(({ start, date, company }, index) => {
+    const end = starts[index + 1]?.cut ?? lines.length;
+    const head = lines.slice(start, date);
+    const body = lines.slice(date, end).filter((line) => !SKILLS_SUMMARY.test(line));
+    return { lines: [...head, ...(company ? [company] : []), ...body], editUrl: null, roles: [] };
+  });
 }
 
 const CYRILLIC_TO_LATIN = {

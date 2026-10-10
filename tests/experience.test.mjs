@@ -5,7 +5,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   applySyncDecision, companyKey, companySimilarity, detectLanguage, diffExperience, formatChange, formatDiffReport,
-  matchJobs, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
+  linkedInItemsFromText, matchJobs, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
   textSimilarity,
 } from '../src/experience.mjs';
 import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl } from '../src/experience-sites.mjs';
@@ -256,5 +256,41 @@ describe('sync plan', () => {
     const kaiten = changes.find((change) => change.kind === 'update' && change.target.company === 'Kaiten');
     assert.ok(kaiten.notes.some((note) => note.includes('Навыки')));
     assert.equal(kaiten.fields.location, 'Moscow, Russia');
+  });
+});
+
+describe('LinkedIn positions from the page text', () => {
+  const text = `Experience
+Senior Software Engineer
+Acme · Full-time
+Jul 2024 - Present · 2 yrs 4 mos
+Tel-Aviv · On-site
+Built the add-ons subsystem.
+C#, Java and +13 skills
+Example Group
+Full-time · 5 yrs
+Moscow City, Russia · Remote
+Team Lead
+Jan 2018 - Jun 2020 · 2 yrs 6 mos
+Led the team.
+Developer
+Jan 2015 - Dec 2017 · 3 yrs
+Wrote code.
+Skills used: Rust, C#.
+Profile language
+Русский
+About
+LinkedIn Corporation © 2026`;
+
+  test('each position with its company, dates and location; the footer and skill summaries left out', () => {
+    const jobs = normalizeLinkedInJobs(linkedInItemsFromText(text));
+    assert.deepEqual(jobs.map((job) => [job.company, job.title, job.start, job.end]), [
+      ['Acme', 'Senior Software Engineer', '2024-07', null],
+      ['Example Group', 'Team Lead', '2018-01', '2020-06'],
+      ['Example Group', 'Developer', '2015-01', '2017-12'],
+    ]);
+    assert.equal(jobs[0].location, 'Tel-Aviv');
+    assert.equal(jobs[0].description, 'Built the add-ons subsystem.');
+    assert.ok(!jobs[2].description.includes('Profile language'));
   });
 });
