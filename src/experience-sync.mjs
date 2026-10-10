@@ -21,14 +21,14 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { openSlot, copySession } from './browser-slots.mjs';
-import { enableConfirmations, askUser } from './confirmations.mjs';
+import { enableConfirmations, askUser, withdrawPrompt } from './confirmations.mjs';
 import {
   applySyncDecision, detectLanguage, diffExperience, formatChange, formatDiffReport, linkedInItemsFromText, normalizeHhJobs, normalizeLinkedInJobs,
   planSync, withEditLinks,
 } from './experience.mjs';
 import {
-  discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, prefillHhExperience, prefillLinkedInPosition,
-  readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
+  closeLinkedInFollowUp, discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, linkedInFormOutcome,
+  prefillHhExperience, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
 } from './experience-sites.mjs';
 import { createTranslator, reportFormalAiFailures, TRANSLATORS, FORMAL_AI_REPO } from './translation.mjs';
 
@@ -125,11 +125,11 @@ async function exportLinkedIn(argv) {
   const session = await openSlot({ name: 'linkedin-slot', port: argv.linkedinPort, keepOpenHours: argv.keepOpenHours });
   try {
     console.log(`🌐 LinkedIn slot on port ${argv.linkedinPort}: ${argv.profile}`);
-    const { items, text, edits, url } = await readLinkedInExperience(session.page, { profileUrl: argv.profile, port: argv.linkedinPort });
+    const { items, text, edits, marks, url } = await readLinkedInExperience(session.page, { profileUrl: argv.profile, port: argv.linkedinPort });
     let jobs = normalizeLinkedInJobs(items);
     // LinkedIn's markup changes; its text keeps the same order of lines
     if (jobs.length === 0) {
-      jobs = withEditLinks(normalizeLinkedInJobs(linkedInItemsFromText(text)), edits);
+      jobs = withEditLinks(normalizeLinkedInJobs(linkedInItemsFromText(text, marks)), edits);
       if (jobs.length > 0) {
         console.log(`ℹ️  The page's items were not recognized: ${jobs.length} position(s) read from its text`);
       }
@@ -242,9 +242,33 @@ async function runSync(argv, data, diff, translator) {
       ? await prefillLinkedInPosition(page, change, { profileUrl: argv.profile, port: argv.linkedinPort }).catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`])
       : await prefillHhExperience(page, change, { resumeHash: data.hh.hash }).catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`]);
     notes.forEach((note) => console.log(`   ℹ️  ${note}`));
+    if (change.unchanged) {
+      // Nothing could be filled (e.g. skills the profile does not have): no question, the form is closed
+      await discardLinkedInPosition(page).catch(() => {});
+      console.log('   ↪️  Nothing changed in the form: closed, left to you');
+      done.push({ change, result: 'left to you (nothing could be filled)', notes });
+      continue;
+    }
+    // Saved or closed in the browser instead of answering: the prompt is withdrawn and that is taken
+    let inBrowser = null;
+    const watch = argv.to === 'linkedin' ? setInterval(async () => {
+      inBrowser ??= await linkedInFormOutcome(page);
+      if (inBrowser) {
+        clearInterval(watch);
+        withdrawPrompt();
+      }
+    }, 2000) : null;
     const answer = await askUser(`Prefilled on ${site} (slot window on port ${argv.to === 'linkedin' ? argv.linkedinPort : argv.hhPort}): check it, then save it?`, {
       skip: 'skip it (nothing is saved)',
-    });
+    }).finally(() => clearInterval(watch));
+    if (answer === 'withdrawn' && inBrowser) {
+      console.log(inBrowser === 'saved' ? '💾 Saved by you in the browser' : '↪️  Closed by you in the browser: not saved');
+      if (inBrowser === 'saved') {
+        await closeLinkedInFollowUp(page);
+      }
+      done.push({ change, result: inBrowser === 'saved' ? 'saved (in the browser)' : 'skipped (closed in the browser)', notes });
+      continue;
+    }
     const outcome = await applySyncDecision(
       answer, change, notes,
       () => (argv.to === 'linkedin' ? saveLinkedInPosition(page) : saveHhExperience(page)),

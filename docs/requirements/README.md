@@ -277,6 +277,7 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | EXP6 | Translation by Haiku 5.5 or later, Luna 6 or later, and the latest Formal AI (link-assistant/formal-ai) | The three translations are produced for each text | ✅ Haiku 5.5, gpt-6-luna and Formal AI 0.352.1 on 19 real texts |
 | EXP7 | Any Formal AI translation failure is reported as an issue in link-assistant/formal-ai | An issue per failure | ✅ link-assistant/formal-ai #1192, #1193, comment on #1174; deduplicated on rerun; #1194 (short phrases, 2026-10-10: Formal AI translated 1 of 27 texts, Haiku 26, Luna 27) |
 | EXP8 | LinkedIn prefill picks the position's skills from the profile's skills and adds the company website as a media link; nothing is saved without y | Kaiten: iOS, Android; https://kaiten.ru/ «Kaiten.ru» | 🧪 |
+| EXP9 | A LinkedIn form saved or closed by the user in the browser is detected (the prompt is withdrawn, «people you may know» skipped); a form where nothing could be filled is closed without a question; skills and media lines are not read as the description | Kaiten saved by you: detected on re-read, only ClickUp left | 🧪 |
 
 ## SEC: safety constraints
 
@@ -379,10 +380,10 @@ of them, so none is lost.
 | RES | 3 | 3 | | | | |
 | FORM (B) | 28 | 14 | 14 | | | |
 | CHAT (C) | 15 | 8 | 7 | | | |
-| EXP | 8 | 4 | 4 | | | |
+| EXP | 9 | 4 | 5 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **157** | **113** | **41** | **0** | **0** | **3** |
+| **Total** | **158** | **113** | **42** | **0** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

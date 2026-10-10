@@ -93,7 +93,16 @@ export function readLinkedInExperienceItems() {
   const edits = [...new Map([...main.querySelectorAll('a[href*="/edit/forms/"][aria-label]')]
     .map((link) => [link.getAttribute('aria-label'), new URL(link.getAttribute('href'), window.location.href).href])).entries()]
     .map(([label, url]) => ({ label, url }));
-  return { items, text: main.innerText, edits };
+  // Lines of the text that are not the description: a position's skills line («iOS and Android»,
+  // a link to its skills) and its media (links out of LinkedIn with a thumbnail)
+  const textOf = (link) => link.innerText.trim();
+  const marks = {
+    skills: [...new Set([...main.querySelectorAll('a[href*="skill-associations-details"]')].map(textOf).filter(Boolean))],
+    media: [...new Set([...main.querySelectorAll('a[href]')]
+      .filter((link) => !/linkedin\.com/.test(link.href) && link.querySelector('svg, img'))
+      .flatMap((link) => textOf(link).split('\n')).map((line) => line.trim()).filter(Boolean))],
+  };
+  return { items, text: main.innerText, edits, marks };
 }
 
 /**
@@ -125,8 +134,8 @@ export async function readLinkedInExperience(page, { profileUrl = LINKEDIN_PROFI
       break;
     }
   }
-  const { items, text, edits } = await page.evaluate(readLinkedInExperienceItems);
-  return { items, text, edits, url: page.url() };
+  const { items, text, edits, marks } = await page.evaluate(readLinkedInExperienceItems);
+  return { items, text, edits, marks, url: page.url() };
 }
 
 /**
@@ -342,12 +351,12 @@ export async function addLinkedInSkills(page, skills) {
  * already has a media item with this title
  * @param {Object} page
  * @param {{url: string, title: string}} link
- * @returns {Promise<string>} '' when added or already there, else what went wrong
+ * @returns {Promise<{added: boolean, problem: string}>} problem: '' when added or already there
  */
 export async function addLinkedInMedia(page, { url, title }) {
   const existing = page.locator('dialog[open], [role="dialog"]').getByText(title, { exact: true });
   if (await existing.count().catch(() => 0) > 0) {
-    return '';
+    return { added: false, problem: '' };
   }
   const linkItem = page.getByRole('menuitem', { name: /^(Add a link|Добавить ссылку)$/ });
   for (let attempt = 0; attempt < 5 && !await linkItem.isVisible().catch(() => false); attempt++) {
@@ -355,7 +364,7 @@ export async function addLinkedInMedia(page, { url, title }) {
     await sleep(1500);
   }
   if (!await linkItem.isVisible().catch(() => false)) {
-    return 'no «Add media» → «Add a link» in the form';
+    return { added: false, problem: 'no «Add media» → «Add a link» in the form' };
   }
   await linkItem.click();
   const input = page.locator('input[aria-label^="Paste or type a link"], input[aria-label*="ссылк"]').first();
@@ -364,7 +373,7 @@ export async function addLinkedInMedia(page, { url, title }) {
   const titleInput = page.getByLabel(/^(Title|Название)\*?$/).first();
   if (!await titleInput.waitFor({ timeout: 20000 }).then(() => true, () => false)) {
     await page.getByRole('button', { name: /^(Back|Назад)$/ }).first().click().catch(() => {});
-    return `LinkedIn could not preview ${url}`;
+    return { added: false, problem: `LinkedIn could not preview ${url}` };
   }
   await sleep(1000);
   await titleInput.click();
@@ -373,7 +382,8 @@ export async function addLinkedInMedia(page, { url, title }) {
   await sleep(500);
   await page.getByRole('button', { name: /^(Save|Сохранить)$/ }).last().click();
   await sleep(3000);
-  return await existing.count().catch(() => 0) > 0 ? '' : `the link ${url} did not show in Media`;
+  const added = await existing.count().catch(() => 0) > 0;
+  return { added, problem: added ? '' : `the link ${url} did not show in Media` };
 }
 
 /**
@@ -409,7 +419,7 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
   const url = change.target?.editUrl ?? `${profileUrl.replace(/\/+$/, '')}/add-edit/POSITION/`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await waitForLinkedInLogin(page, { url, port });
-  await page.waitForSelector('[role="dialog"] input, form input, input[placeholder="Role title"]', { timeout: 30000 }).catch(() => {});
+  await page.waitForSelector('dialog[open] input, [role="dialog"] input, form input, input[placeholder="Role title"]', { timeout: 30000 }).catch(() => {});
   await sleep(1500);
   const notes = [];
   // Saving a change is not news for the network: «Notify network» is switched off
@@ -443,8 +453,11 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
     }
   }
   await closeSuggestions(page);
+  // Whether anything in the form changed: a change of only skills the profile lacks changes nothing
+  let changed = fieldsOfLinkedIn(change.fields).length > 0;
   if (change.fields.skills?.length) {
     const { added, missing } = await addLinkedInSkills(page, change.fields.skills);
+    changed ||= added.length > 0;
     if (added.length) {
       notes.push(`LinkedIn: skills added: ${added.join(', ')}`);
     }
@@ -454,9 +467,13 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
   }
   if (change.fields.website) {
     const title = change.target?.company ?? change.fields.company ?? change.source?.company ?? '';
-    const problem = await addLinkedInMedia(page, { url: change.fields.website, title });
-    notes.push(problem ? `LinkedIn: ${problem}` : `LinkedIn: media link ${change.fields.website} («${title}»)`);
+    const { added, problem } = await addLinkedInMedia(page, { url: change.fields.website, title });
+    changed ||= added;
+    if (problem || added) {
+      notes.push(problem ? `LinkedIn: ${problem}` : `LinkedIn: media link ${change.fields.website} («${title}»)`);
+    }
   }
+  change.unchanged = !changed;
   return notes;
 }
 
@@ -479,11 +496,41 @@ export const hasFillableFields = (change, site) => Object.keys(change.fields).so
  * @param {Object} page
  */
 export async function saveLinkedInPosition(page) {
-  const saveBtn = page.locator('[role="dialog"] button:has-text("Save"), [role="dialog"] button:has-text("Сохранить")').first();
+  const form = page.locator('dialog[open], [role="dialog"]').filter({ has: page.locator('input[placeholder="Role title"], input') }).first();
+  const saveBtn = form.getByRole('button', { name: /^(Save|Сохранить)$/ }).last();
   await saveBtn.waitFor({ state: 'visible', timeout: 10000 });
   await saveBtn.click();
-  // Wait for the dialog to close after a successful save
-  await page.locator('[role="dialog"]').waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
+  // A saved position shows «Your experience is saved» (then people to connect with)
+  await page.waitForFunction(() => /\/edit\/forms\/next-action\//.test(window.location.href) || /Your experience is saved|Опыт работы сохран/i.test(document.body.innerText), null, { timeout: 15000 }).catch(() => {});
+  await closeLinkedInFollowUp(page);
+}
+
+/** What the user did with the position form in the browser: 'saved', 'closed' or null (still open) */
+export async function linkedInFormOutcome(page) {
+  const state = await page.evaluate(() => ({
+    saved: /\/edit\/forms\/next-action\//.test(window.location.href) || /Your experience is saved|Опыт работы сохран/i.test(document.body?.innerText ?? ''),
+    open: /\/edit\/forms\//.test(window.location.href) || /\/add-edit\//.test(window.location.href),
+  })).catch(() => null);
+  if (!state) {
+    return null;
+  }
+  return state.saved ? 'saved' : state.open ? null : 'closed';
+}
+
+/**
+ * Close LinkedIn's «Your experience is saved / connect with people you may know» window with
+ * Skip: nobody is invited
+ */
+export async function closeLinkedInFollowUp(page) {
+  const skip = page.getByRole('button', { name: /^(Skip|Пропустить)$/ }).first();
+  if (await skip.isVisible().catch(() => false)) {
+    await skip.click().catch(() => {});
+    await sleep(1500);
+  }
+  const dismiss = page.locator('button[aria-label="Dismiss"], button[aria-label="Закрыть"]').first();
+  if (/\/edit\/forms\/next-action\//.test(page.url()) && await dismiss.isVisible().catch(() => false)) {
+    await dismiss.click().catch(() => {});
+  }
 }
 
 const HH = {

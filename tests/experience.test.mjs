@@ -8,7 +8,7 @@ import {
   companyWebsite, linkedInItemsFromText, matchJobs, withEditLinks, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
   textSimilarity,
 } from '../src/experience.mjs';
-import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl } from '../src/experience-sites.mjs';
+import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl, linkedInFormOutcome } from '../src/experience-sites.mjs';
 
 describe('LinkedIn pages', () => {
   test('login and sign-up walls are recognized', () => {
@@ -319,5 +319,45 @@ describe('company website as a LinkedIn media link', () => {
     assert.equal(change.fields.website, 'https://kaiten.ru/');
     assert.deepEqual(change.notes, []);
     assert.equal(hasFillableFields({ fields: { skills: ['iOS'] } }, 'linkedin'), true);
+  });
+});
+
+describe('LinkedIn skills line and media in the page text', () => {
+  test('they are not read as the description', () => {
+    const text = `Experience
+Development Team Lead
+Kaiten.ru · Full-time
+Jul 2024 - Nov 2025 · 1 yr 5 mos
+Goa, India · Remote
+Website: kaiten.ru
+Development of Kaiten.
+Kaiten.ru
+iOS and Android
+Profile language`;
+    const [job] = normalizeLinkedInJobs(linkedInItemsFromText(text, { skills: ['iOS and Android'], media: ['Kaiten.ru'] }));
+    assert.equal(job.description, 'Website: kaiten.ru\nDevelopment of Kaiten.');
+    assert.deepEqual(job.skills, ['iOS', 'Android']);
+  });
+});
+
+describe('a LinkedIn form saved or closed in the browser', () => {
+  // The page function runs against a stand-in location and document
+  const pageAt = (href, text = '') => ({
+    evaluate: (fn) => {
+      Object.assign(globalThis, { window: { location: { href } }, document: { body: { innerText: text } } });
+      try {
+        return Promise.resolve(fn());
+      } finally {
+        delete globalThis.window;
+        delete globalThis.document;
+      }
+    },
+  });
+
+  test('saved, closed or still open', async () => {
+    assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/edit/forms/next-action/people-you-may-know/91066218/')), 'saved');
+    assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/', 'Your experience is saved')), 'saved');
+    assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/edit/forms/2505851835/')), null);
+    assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/')), 'closed');
   });
 });

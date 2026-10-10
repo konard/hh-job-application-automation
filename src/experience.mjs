@@ -197,9 +197,15 @@ const SKILLS_SUMMARY = /^.+\s(?:and|и)\s\+\d+\s(?:skills?|навык\p{L}*)$/iu
  * company with several roles has only its title there: the company is the line before the
  * group's total duration), up to the next position or the page footer
  * @param {string} text - innerText of the page's main element
+ * @param {{skills?: string[], media?: string[]}} [marks] - Lines that are a position's skills
+ *   («iOS and Android») or its media titles, not its description
  * @returns {Array<{lines: string[], editUrl: null, roles: []}>} Items for normalizeLinkedInJobs
  */
-export function linkedInItemsFromText(text) {
+export function linkedInItemsFromText(text, { skills = [], media = [] } = {}) {
+  const skillLines = new Set(skills.map((line) => line.replace(/\s+/g, ' ').trim()));
+  const mediaLines = new Set(media.map((line) => line.replace(/\s+/g, ' ').trim()));
+  // «C#, Java and +13 skills» keeps only the named ones: the others are in LinkedIn's skills window
+  const asSkills = (line) => `Skills: ${line.split(/\s*,\s*|\s+(?:and|и)\s+/u).filter((part) => part && !/^\+\d+/.test(part)).join(', ')}`;
   let lines = String(text ?? '').split('\n').map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const firstDate = lines.findIndex((line) => DATE_LINE.test(line));
   if (firstDate < 0) {
@@ -235,7 +241,8 @@ export function linkedInItemsFromText(text) {
   return starts.map(({ start, date, company }, index) => {
     const end = starts[index + 1]?.cut ?? lines.length;
     const head = lines.slice(start, date);
-    const body = lines.slice(date, end).filter((line) => !SKILLS_SUMMARY.test(line));
+    const body = lines.slice(date, end).filter((line) => !mediaLines.has(line))
+      .map((line) => (skillLines.has(line) ? asSkills(line) : line)).filter((line) => !SKILLS_SUMMARY.test(line));
     return { lines: [...head, ...(company ? [company] : []), ...body], editUrl: null, roles: [] };
   });
 }
