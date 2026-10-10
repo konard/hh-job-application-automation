@@ -253,6 +253,26 @@ hidden resume. The run asks you to make the
 resume visible (on hh.ru in your own browser or the app; the automation browser keeps to one tab)
 and then goes on, or `s` skips the vacancy. Unattended runs skip it.
 
+### Prefill External Forms
+
+Questionnaires that employers send outside hh.ru (Google Forms, Yandex Forms, a company's own job
+form) are prefilled for review, each in its own browser slot:
+
+```bash
+bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/vacancy-364
+```
+
+- Slot `n` is a separate Chrome (profile `~/.hh-automation/form-slot-<n>`, port 9330+n), apart from
+  the hh.ru automation browser; it stays open for review. `--first-slot <n>` picks the first slot.
+- Contacts come from the exported resume (`bun run resume`); `data/profile.lino` (not committed)
+  overrides or adds values. Other answers come from `data/qa.lino` by the same matching as hh.ru
+  forms; the rest are drafted by local Claude Code from the resume and saved answers, with
+  «[уточнить: …]» where only you know the fact (`--no-draft` turns drafts off).
+- A site captcha is left to you; the slot fills the form after it. Nothing is ever submitted.
+- The report (every question, its source and answer) is printed and saved to `logs/forms/`.
+
+See [the requirements](docs/requirements/forms-and-chats.md) for what is done and what is planned.
+
 ### Export the Resume and Collect the Stack
 
 ```bash

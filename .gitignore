@@ -155,3 +155,5 @@ message.txt
 ignored-vacancy-ids.txt
 # Resume exports (personal data) written by `bun run resume`
 data/resume/
+# Contact overrides for prefilled forms (personal data)
+data/profile.lino

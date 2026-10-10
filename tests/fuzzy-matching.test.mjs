@@ -249,6 +249,11 @@ describe('Subject terms (technology and role names)', () => {
     assert.equal(findBestMatch('Подскажите, пожалуйста, на каком стеке вы разрабатываете?', cities), null);
   });
 
+  test('"@username" is not a name', () => {
+    const telegram = new Map([['Ваш @username telegram для связи?', '@drakonard']]);
+    assert.equal(findBestMatch('Оставьте, пожалуйста, ваш telegram для оперативной связи', telegram)?.answer, '@drakonard');
+  });
+
   test('a qualifier such as fulltime is not a name', () => {
     assert.equal(findBestMatch('Ваши зарплатные ожидания на fulltime?', db)?.answer, 'От 450000 рублей в месяц на руки.');
   });

@@ -305,11 +305,18 @@ export async function countUnansweredQuestions(options = {}) {
  * @param {Object} options.questionData - Question data with selector and answer
  * @returns {Promise<boolean>} - True if filled
  */
+/**
+ * A saved answer as text: one saved on several lines (a list of links) is read back as a list
+ * @param {string|string[]} answer
+ * @returns {string}
+ */
+export const answerText = (answer) => [answer].flat().join('\n');
+
 export async function fillTextareaQuestion({ commander, questionData }) {
   // checkEmpty makes fillTextArea skip textareas that already have content
   const result = await commander.fillTextArea({
     selector: questionData.selector,
-    text: questionData.answer,
+    text: answerText(questionData.answer),
     checkEmpty: true,
     scrollIntoView: true,
     simulateTyping: true,
@@ -330,7 +337,7 @@ export async function fillTextareaQuestion({ commander, questionData }) {
  * @param {string} answer - Answer text
  * @returns {Object|undefined}
  */
-function findMatchingOption(options, answer) {
+export function findMatchingOption(options, answer) {
   if (!answer) return undefined;
   const ans = answer.toLowerCase();
   return options.find(({ optionText }) => {

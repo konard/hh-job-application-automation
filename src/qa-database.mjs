@@ -546,7 +546,10 @@ export function sharesSubjectWord(a, b) {
  * @returns {number} The mean of both coverages
  */
 export function subjectCoverage(a, b) {
-  const stems = (question) => new Set(subjectWords(question).map((word) => (word.length > 6 ? word.substring(0, 5) : word)));
+  const isQualifier = (word) => QUALIFIER_TERMS.has(word) ||
+    (word.length === 5 && [...QUALIFIER_TERMS].some((term) => term.length > 6 && term.startsWith(word)));
+  const stems = (question) => new Set(subjectWords(question).filter((word) => !isQualifier(word))
+    .map((word) => (word.length > 6 ? word.substring(0, 5) : word)));
   const stemsA = stems(a);
   const stemsB = stems(b);
   if (stemsA.size === 0 || stemsB.size === 0) {
@@ -565,7 +568,9 @@ export function subjectCoverage(a, b) {
 
 // Latin words that only qualify a question, not name its subject: "ожидания на fulltime" asks
 // what "ожидания" asks
-const QUALIFIER_TERMS = new Set(['fulltime', 'full-time', 'parttime', 'part-time', 'remote', 'hybrid', 'office']);
+const QUALIFIER_TERMS = new Set([
+  'fulltime', 'full-time', 'parttime', 'part-time', 'remote', 'hybrid', 'office', '@username', 'username', 'nickname',
+]);
 
 /**
  * Whether two questions are about different names ("опыт на C#" and "опыт на Go", "в $" and

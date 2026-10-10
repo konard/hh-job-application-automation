@@ -29,6 +29,8 @@ src/
 ├── qa-database.mjs           # Q&A database operations (Links Notation format)
 ├── deferred-questions.mjs    # Questions answered later and the vacancies waiting for them
 ├── vacancy-filters.mjs       # Vacancies filtered out automatically by data/vacancy-filters.lino
+├── form-prefill.mjs          # Prefill of external forms: contacts, saved answers, drafts
+├── prefill-form.mjs          # `bun run prefill-form`: forms in separate browser slots
 ├── captcha.mjs               # Captcha detection; page actions wait while one is shown
 ├── captcha-solver.mjs        # Captcha answer prefill by local Claude Code (Haiku) and Codex (Luna)
 ├── config.mjs                # Configuration using lino-arguments
