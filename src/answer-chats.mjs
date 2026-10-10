@@ -28,14 +28,15 @@ import {
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
   --watch                Go through the chats waiting for an answer, one at a time, and keep watching
+  --auto                 Unread-only watch mode for use alongside apply: process unread chats without
+                         interactive prompts; stop on a chat that needs a human reply and leave it open
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
   --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
-  --poll <seconds>       How often the chat list is checked in --watch (default 300: hh.ru is not polled often
-                         while the automation browser applies)`;
+  --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, auto: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -43,6 +44,9 @@ function parseArgs(args) {
       process.exit(0);
     } else if (flag === '--watch') {
       parsed.watch = true;
+    } else if (flag === '--auto') {
+      parsed.auto = true;
+      parsed.watch = true; // --auto implies watch mode
     } else if (flag === '--no-draft') {
       parsed.draft = false;
     } else if (flag === '--no-forms') {
@@ -166,16 +170,16 @@ async function prefillChat(id) {
   }
   if (!reply) {
     console.log('❓ No saved or drafted reply: answer it yourself');
-    return last.id;
+    return { id: last.id, replied: false, title: chat.vacancy };
   }
   const input = page.locator(MESSAGE_INPUT).first();
   if ((await input.inputValue().catch(() => '')).trim()) {
     console.log('✋ The message field already has text: left as it is');
-    return last.id;
+    return { id: last.id, replied: true, title: chat.vacancy };
   }
   await input.fill(reply.answer);
   console.log(`✍️  Typed the reply (${reply.source}${reply.matched ? `: ${reply.matched.slice(0, 80)}` : ''}): check it and send it yourself\n   ${reply.answer.replace(/\n/g, '\n   ')}`);
-  return last.id;
+  return { id: last.id, replied: true, title: chat.vacancy };
 }
 
 /** Wait until the user has sent a message after the one answered, or chose to skip (s) */
@@ -201,8 +205,8 @@ async function waitForSend(answeredId) {
 
 for (const id of argv.chats) {
   const answered = await prefillChat(id);
-  if (answered && (argv.watch || argv.chats.length > 1)) {
-    await waitForSend(answered);
+  if (answered && !argv.auto && (argv.watch || argv.chats.length > 1)) {
+    await waitForSend(answered.id);
   }
 }
 
@@ -210,7 +214,11 @@ if (argv.watch) {
   // A chat is seen again when its last message changes (the employer wrote again)
   const seen = new Set();
   const seenKey = (chat) => `${chat.id}\n${chat.subtitle}`;
-  console.log(`👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
+  // In auto mode: track the chat that needs a human reply, pause until it is resolved
+  let stuckChat = null; // { id: string, title: string }
+  console.log(argv.auto
+    ? `💬 Auto-processing unread chats every ${argv.poll} s`
+    : `👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
   for (;;) {
     await page.goto('https://hh.ru/chat', { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
     await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
@@ -219,13 +227,41 @@ if (argv.watch) {
       continue;
     }
     const chats = await page.evaluate(readChatList);
-    const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) && !argv.chats.includes(chat.id));
-    argv.chats.length = 0;
+
+    // In auto mode: check whether the stuck chat has been resolved before processing more
+    if (stuckChat) {
+      const found = chats.find((c) => c.id === stuckChat.id);
+      if (!found || !found.unread || found.lastIsMine) {
+        console.log(`💬 Chat was handled, resuming auto-processing: ${stuckChat.title}`);
+        stuckChat = null;
+      } else {
+        // Still waiting for the user's reply: skip this cycle
+        await sleep(argv.poll * 1000);
+        continue;
+      }
+    }
+
+    const waiting = argv.auto
+      ? chats.filter((chat) => chat.unread && !chat.lastIsMine && !seen.has(seenKey(chat)))
+      : chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) && !argv.chats.includes(chat.id));
+    if (!argv.auto) {
+      argv.chats.length = 0;
+    }
     for (const chat of waiting) {
       seen.add(seenKey(chat));
       const answered = await prefillChat(chat.id);
-      if (answered) {
-        await waitForSend(answered);
+      if (!answered) {
+        continue;
+      }
+      if (!answered.replied && argv.auto) {
+        // Chat needs a human reply: stop processing, leave it open, alert the user
+        const url = chatUrl(chat.id);
+        console.log(`💬 Chat needs your reply: ${chat.title} ${url}`);
+        stuckChat = { id: chat.id, title: chat.title };
+        break;
+      }
+      if (!argv.auto) {
+        await waitForSend(answered.id);
       }
     }
     await sleep(argv.poll * 1000);

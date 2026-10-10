@@ -17,8 +17,8 @@ A `?` after a status means the evidence is incomplete; the note says what is mis
 
 Detailed lists that this index includes:
 
-- [forms-and-chats.md](forms-and-chats.md): hh.ru application forms (A1–A8), external forms (B1–B14)
-  and hh.ru chats (C1–C8). Every row there is listed below under [FORM](#form-external-forms) and
+- [forms-and-chats.md](forms-and-chats.md): hh.ru application forms (A1–A8), external forms (B1–B20)
+  and hh.ru chats (C1–C15). Every row there is listed below under [FORM](#form-external-forms) and
   [CHAT](#chat-hhru-chats), with the same status.
 - [experience-sync.md](experience-sync.md): LinkedIn and hh.ru work experience export, diff, sync and
   translation. Being written separately; its requirements are summarised below under
@@ -245,6 +245,8 @@ Details and checks: [forms-and-chats.md, section C](forms-and-chats.md#c-hhru-ch
 | C11 | hh.ru's employer rating poll from a chat opens prefilled (company) in a form slot; ratings stay the user's | 🧪 |
 | C12 | Template messages answered the same way are generalized into learned patterns (`…` gaps, `*` endings) | 🧪 |
 | C13 | Messages that need no reply (a bot's summary of answers, `[без ответа]` templates) are only read; summaries are learned | ✅ |
+| C14 | `apply.mjs --process-chats` starts `answer-chats.mjs --auto` as a child process alongside the application loop; stopped when apply exits; `--chats-interval-minutes` (default 120) sets the poll interval | 🧪 |
+| C15 | `--auto` mode processes only unread chats non-interactively; stops and alerts on a chat with no predefined reply; pauses until the user reacts; safety rules unchanged | 🧪 |
 
 ## EXP: work experience export, sync and translation
 

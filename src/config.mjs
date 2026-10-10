@@ -168,6 +168,16 @@ export function createConfig() {
           description: 'Skip vacancies that require additional questionnaire fields beyond the cover letter (kept in data/skipped-vacancies.lino)',
           default: getenv('IGNORE_VACANCIES_WITH_QUESTIONNAIRE', false),
         })
+        .option('process-chats', {
+          type: 'boolean',
+          description: 'Start the unread message processor alongside the application loop in the chat browser slot (port 9340)',
+          default: getenv('PROCESS_CHATS', false),
+        })
+        .option('chats-interval-minutes', {
+          type: 'number',
+          description: 'With --process-chats: how often unread chats are checked (minutes)',
+          default: getenv('CHATS_INTERVAL_MINUTES', 120),
+        })
         .help(),
   });
 
