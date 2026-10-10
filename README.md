@@ -278,6 +278,21 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
 See [the requirements](docs/requirements/forms-and-chats.md) for what is done and what is planned,
 and [the full list of requirements](docs/requirements/README.md) for everything else.
 
+### Test Assignments
+
+```bash
+bun run test-assignment -- ai-business-management-system --dry-run   # show the issue only
+bun run test-assignment -- ai-business-management-system             # create the repository and issue
+```
+
+When a form contains a test assignment, it gets its own GitHub repository before the questions are
+answered. The tool takes the assignment from the form open in a form slot (or `--from <file>`, `-` for
+stdin), has local Claude Code restate it in English in its own words, and checks the result before
+publishing: no employer name (the form title and «quoted» names, in any case ending), English only,
+no six words in a row from the original. Then `gh` creates the repository (public unless `--private`;
+the owner is the gh user unless `--owner`) and the issue. The next prefill of that form puts the
+repository link into the question asking for the completed assignment.
+
 ### Answer Chats
 
 ```bash

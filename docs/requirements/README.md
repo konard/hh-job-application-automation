@@ -209,6 +209,9 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B12 | Report of every question and its source in `logs/forms/` | ✅ |
 | B13 | One implementation for every form, shared with hh.ru forms | ✅ |
 | B14 | Answers the user finally sends in an external form are saved to qa.lino | ⬜ |
+| B15 | Drafts in forms are plain text, without Markdown | ✅ |
+| B16 | A form's test assignment becomes a repository (given name) with an issue restated in English, without the employer, via gh | 🧪 |
+| B17 | The completed-assignment link question gets the repository link | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -342,12 +345,12 @@ of them, so none is lost.
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 3 | 1 | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 15 | 9 | 5 | | 1 | |
+| FORM (B) | 18 | 10 | 7 | | 1 | |
 | CHAT (C) | 13 | 7 | 6 | | | |
 | EXP | 7 | 3 | 2 | 2 | | |
 | SEC | 9 | 9 | | | | |
 | PROC | 13 | 13 | | | | |
-| **Total** | **137** | **106** | **19** | **7** | **2** | **3** |
+| **Total** | **140** | **107** | **21** | **7** | **2** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

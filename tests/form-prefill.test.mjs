@@ -3,6 +3,7 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import {
+  plainText,
   contactAnswer, draftPrompt, formatPhone, linksFor, parseResumeProfile, pickOptions, planAnswers,
 } from '../src/form-prefill.mjs';
 
@@ -108,5 +109,12 @@ describe('draftPrompt', () => {
     assert.ok(prompt.includes('Ничего не выдумывай'));
     assert.ok(prompt.includes('[уточнить'));
     assert.ok(prompt.includes('- Нет опыта'));
+  });
+});
+
+describe('plain text drafts', () => {
+  test('Markdown marks are taken out, lists become dashes', () => {
+    const draft = '**Проект:** ИИ-роутер — единая точка доступа.\n\n## Итог\n- первый пункт\n* второй, с `кодом`\n[GitHub](https://github.com/konard)';
+    assert.equal(plainText(draft), 'Проект: ИИ-роутер — единая точка доступа.\n\nИтог\n— первый пункт\n— второй, с кодом\nGitHub (https://github.com/konard)');
   });
 });

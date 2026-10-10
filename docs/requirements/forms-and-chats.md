@@ -44,6 +44,10 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
     needs to be synced …» — see [experience-sync.md](experience-sync.md)
 14. «we can also can have a feature of `learning` messages and answers, and if the answer is the same or similar we can
     learn updated regex/peg like templates from multiple of them.» (Технократия's «Ваше резюме принято в работу…»)
+15. «here in forms markdown does not work. And also this form contains test assignment, before answering any questions
+    we should first create repository with an issue containing test assignment without any mentions of this specific
+    employer.» · «We must create a tool to use gh tool to create test assignment as repository + issue with provided name
+    and task description converted into English, it should be not the same text as in the actual form.»
 
 ## A. hh.ru application forms
 
@@ -77,6 +81,9 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 | B12 | A report lists every question with its source (profile / qa.lino score and saved question / draft / open) and is saved to `logs/forms/<time>.md` | Report file after a run | ✅ |
 | B13 | One implementation for every form: the same matching (`findBestMatch`), option matching (`findMatchingOption`), answer text (`answerText`) as hh.ru forms; the question reader is generic (aria-labelledby, label, legend, placeholder, nearest heading) | No form-specific code for Google Forms or Yandex Forms | ✅ |
 | B14 | Answers the user finally sends in an external form are saved to qa.lino | After sending, the pairs appear in qa.lino | ⬜ |
+| B15 | Drafts are plain text: forms show Markdown as typed, so drafts are asked for without it and its marks (`**`, `#`, backticks, links, list markers) are taken out | Натур Пласт form: «**Проект:**» → «Проект:»; `tests/form-prefill.test.mjs` | ✅ |
+| B16 | A test assignment in a form comes first: `bun run test-assignment -- <name>` restates it as a GitHub issue in English in other words (not a translation of the form's text), without any mention of the employer, checks that (employer names in any case ending, English, no six words in a row from the original) and creates the repository with the given name and the issue with gh | Натур Пласт's «Тестовое задание — система управления бизнесом с ИИ», dry run; `tests/assignments.test.mjs` | 🧪 |
+| B17 | The form question asking for the completed assignment («Ссылка на выполненное тестовое задание») is prefilled with the assignment's repository link; until the repository exists, the prefill says to create it first | `[slot N] 🧪 Test assignment …: create its repository first` | 🧪 |
 
 ## C. hh.ru chats
 

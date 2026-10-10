@@ -36,6 +36,8 @@ src/
 ├── contacts.mjs              # data/contacts.lino and {{placeholders}} in answers
 ├── chat-answers.mjs          # Chat replies: templates, rejections, saved answers, learning
 ├── answer-chats.mjs          # `bun run answer-chats`: chats in their own browser slot
+├── assignments.mjs           # Test assignments: employer names, the English issue and its checks, gh
+├── test-assignment.mjs       # `bun run test-assignment`: a form's test assignment as a repository with an issue
 ├── experience-sync.mjs       # `bun run experience`: export, diff and sync of hh.ru and LinkedIn work experience
 ├── experience.mjs            # Work experience of both sides in one shape: matching, diff, sync plan, report
 ├── experience-sites.mjs      # LinkedIn experience reader, prefill of the LinkedIn and hh.ru experience forms

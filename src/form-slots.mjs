@@ -9,12 +9,13 @@
 
 import path from 'path';
 import fs from 'fs/promises';
+import { isAssignmentLinkQuestion, readAssignment, readAssignments } from './assignments.mjs';
 import { copySession, openSlot } from './browser-slots.mjs';
 import { isBrowserRunning } from './browser-session.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { createQADatabase } from './qa-database.mjs';
 import {
-  askClaude, draftPrompt, loadProfile, pickOptions, planAnswers, readFormFields, relatedAnswers, TO_CHECK,
+  askClaude, draftPrompt, loadProfile, pickOptions, plainText, planAnswers, readFormFields, relatedAnswers, TO_CHECK,
 } from './form-prefill.mjs';
 
 const DATA = path.join(process.cwd(), 'data');
@@ -115,6 +116,20 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
   log(`📝 "${form.title}": ${form.fields.length} question(s)${frames.some(({ frame }) => frame !== page.mainFrame()) ? ' (in a frame)' : ''}`);
   const planned = planAnswers(form.fields, { profile, qaMap, company });
 
+  // A test assignment comes first: its repository is where the form's result link points
+  const assignment = (await Promise.all(frames.map(({ frame }) => frame.evaluate(readAssignment).catch(() => null)))).find(Boolean);
+  if (assignment) {
+    const assignments = await readAssignments();
+    const record = assignments[url] ?? assignments[page.url()];
+    if (record) {
+      log(`🧪 Test assignment «${assignment.title}»: repository ${record.repoUrl}`);
+      planned.filter((field) => isAssignmentLinkQuestion(field.title) && field.kind !== 'file')
+        .forEach((field) => Object.assign(field, { open: false, answer: record.repoUrl, source: 'test assignment repository' }));
+    } else {
+      log(`🧪 Test assignment «${assignment.title}»: create its repository first: bun run test-assignment -- <repository name> --from ${url}`);
+    }
+  }
+
   if (draft) {
     const open = planned.filter((field) => field.open && field.kind !== 'file');
     if (open.length > 0) {
@@ -132,7 +147,7 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
           Object.assign(field, { open: false, choices, source: 'draft' });
         }
       } else {
-        Object.assign(field, { open: false, answer: drafted, source: 'draft' });
+        Object.assign(field, { open: false, answer: plainText(drafted), source: 'draft' });
       }
     }));
   }
