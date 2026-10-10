@@ -323,7 +323,10 @@ export function readFormFields() {
       continue;
     }
     const id = `pf-${next++}`;
-    element.setAttribute('data-prefill-id', id);
+    // Read again by the watcher of sent answers: the page sees no change when the mark is the same
+    if (element.getAttribute('data-prefill-id') !== id) {
+      element.setAttribute('data-prefill-id', id);
+    }
     if (kind === 'radio' || kind === 'checkbox') {
       const groupElement = element.closest('[role="radiogroup"], [role="group"], [role="list"], fieldset') ?? element.parentElement;
       const key = element.name || groupElement;

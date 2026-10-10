@@ -6,7 +6,8 @@
  * apart from the hh.ru automation browser), so they can be reviewed side by side. The answers
  * come from the exported resume (contacts, resume file), data/qa.lino (similar questions), and
  * for the rest drafts by local Claude Code from the resume and saved answers, with «[уточнить: …]»
- * where only the user knows the fact. Nothing is submitted; the browsers stay open.
+ * where only the user knows the fact. Nothing is submitted; the browsers stay open. What the user
+ * sends is saved to data/qa.lino by a detached watcher per slot (src/form-watch.mjs).
  */
 
 import { prefillForms } from './form-slots.mjs';
@@ -15,11 +16,12 @@ const USAGE = `Usage: bun run prefill-form -- <url> [<url> ...] [options]
 
   --first-slot <n>       Slot of the first form: port 9330+n, profile ~/.hh-automation/form-slot-<n> (default: the first free one)
   --no-draft             Do not draft unknown answers with local Claude Code
+  --no-learn             Do not save the answers you send to data/qa.lino
   --keep-open-hours <n>  Close an unused slot browser after this many hours (default 24)`;
 
 /** Plain flags: the URLs, and the options above */
 function parseArgs(args) {
-  const parsed = { _: [], firstSlot: undefined, draft: true, keepOpenHours: 24 };
+  const parsed = { _: [], firstSlot: undefined, draft: true, learn: true, keepOpenHours: 24 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     const value = () => Number(inline ?? args[++i]);
@@ -30,6 +32,8 @@ function parseArgs(args) {
       parsed.firstSlot = value();
     } else if (flag === '--no-draft') {
       parsed.draft = false;
+    } else if (flag === '--no-learn') {
+      parsed.learn = false;
     } else if (flag === '--keep-open-hours') {
       parsed.keepOpenHours = value();
     } else {

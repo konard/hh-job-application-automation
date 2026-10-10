@@ -22,6 +22,13 @@ describe('contacts', () => {
     assert.equal(contractContacts('Пишите в @petr_dev или +79001234567', contacts), 'Пишите в {{telegram}} или {{phone}}');
   });
 
+  test('the phone as people write it (and as prefilled forms type it) becomes a placeholder too', () => {
+    assert.equal(contractContacts('Петр, +7 900 123-45-67, Telegram: @petr_dev', contacts), 'Петр, {{phone}}, Telegram: {{telegram}}');
+    assert.equal(contractContacts('+7 (900) 123 45 67', contacts), '{{phone}}');
+    // Not a part of a longer number
+    assert.equal(contractContacts('ИНН 179001234567', contacts), 'ИНН 179001234567');
+  });
+
   test('the database reads filled in and keeps templates on writing', async () => {
     const stored = new Map([['Ваш телеграм?', 'Telegram: {{telegram}}']]);
     const writes = [];
