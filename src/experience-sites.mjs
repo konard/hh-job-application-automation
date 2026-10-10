@@ -276,8 +276,10 @@ const fieldsOfLinkedIn = (fields) => {
  * @returns {Promise<string|null>} Why it was not toggled, or null
  */
 async function toggleMarked(page) {
-  const box = page.locator('[data-hh-automation-toggle]').first();
-  const id = await box.getAttribute('id').catch(() => null);
+  const marked = page.locator('[data-hh-automation-toggle]').first();
+  const id = await marked.getAttribute('id').catch(() => null);
+  // Found by its id: the marker is removed below, and the box is checked again after that
+  const box = id ? page.locator(`[id="${id}"]`).first() : marked;
   const label = id ? page.locator(`label[for="${id}"]`).first() : null;
   const before = await box.isChecked().catch(() => null);
   if (label && await label.isVisible().catch(() => false)) {
@@ -285,8 +287,10 @@ async function toggleMarked(page) {
   } else {
     await box.click({ force: true }).catch(() => {});
   }
+  await sleep(300);
+  const after = await box.isChecked().catch(() => before);
   await box.evaluate((element) => element.removeAttribute('data-hh-automation-toggle')).catch(() => {});
-  return await box.isChecked().catch(() => before) === before ? 'the checkbox did not change' : null;
+  return after === before ? 'the checkbox did not change' : null;
 }
 
 /**
