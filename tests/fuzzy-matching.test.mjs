@@ -248,6 +248,37 @@ describe('Subject terms (technology and role names)', () => {
     const cities = new Map([['Подскажите, в каком городе Вы проживаете?', 'В Гоа, в Индии.']]);
     assert.equal(findBestMatch('Подскажите, пожалуйста, на каком стеке вы разрабатываете?', cities), null);
   });
+
+  test('a qualifier such as fulltime is not a name', () => {
+    assert.equal(findBestMatch('Ваши зарплатные ожидания на fulltime?', db)?.answer, 'От 450000 рублей в месяц на руки.');
+  });
+
+  test('employment forms named by abbreviations do not take each other\'s answer', () => {
+    const forms = new Map([['Готовы ли к оформлению по ИП?', 'да']]);
+    assert.equal(findBestMatch('Готовы ли Вы к оформлению в штат по ТК РФ? С ИП и самозанятыми не сотрудничаем', forms), null);
+    assert.equal(findBestMatch('Готовы ли вы рассмотреть оформление исключительно по ТК РФ?', forms), null);
+  });
+});
+
+describe('Long questions around a saved short one', () => {
+  const db = new Map([
+    ['Пожалуйста, укажите Ваши зарплатные ожидания?', 'От 450000 рублей в месяц на руки.'],
+    ['Какой для вас минимальный и комфортный уровень заработной платы?', 'От 450000 рублей в месяц на руки.'],
+    ['Работали ли Вы с многопоточными приложениями?', 'Да'],
+    ['Есть ли у Вас опыт проектирования интеграционных решений?', 'Да'],
+  ]);
+
+  test('the saved question is found inside a longer wording', () => {
+    assert.equal(findBestMatch('Если в вашем резюме не указано, пожалуйста, поделитесь вашими зарплатными ожиданиями.', db)?.question,
+      'Пожалуйста, укажите Ваши зарплатные ожидания?');
+    assert.equal(findBestMatch('Какой уровень заработной платы сейчас рассматриваете (на руки)? Можно указать диапазон - например, в формате минимальная и комфортная планка.', db)?.question,
+      'Какой для вас минимальный и комфортный уровень заработной платы?');
+  });
+
+  test('a few shared words in a longer question are not a match', () => {
+    assert.equal(findBestMatch('Работали ли Вы в Enterprise-сегменте?', db), null);
+    assert.equal(findBestMatch('Есть ли у вас опыт технического лидерства, менторинга, проектирования архитектуры решений? Опишите кратко.', db), null);
+  });
 });
 
 describe('Informal address', () => {

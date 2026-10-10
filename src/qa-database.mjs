@@ -461,7 +461,7 @@ const GENERIC_QUESTION_WORDS = new Set([
   'подскажите', 'укажите', 'напишите', 'расскажите', 'опишите', 'поделитесь',
   'какой', 'какая', 'какое', 'какие', 'каком', 'какую', 'каких', 'какого', 'каким',
   'ваш', 'ваша', 'ваше', 'ваши', 'вашей', 'вашего', 'вам', 'вас', 'вами', 'твой', 'тебя', 'тебе',
-  'есть', 'ли', 'был', 'была', 'было', 'были', 'у',
+  'есть', 'ли', 'был', 'была', 'было', 'были', 'у', 'работали', 'работал', 'работала', 'приходилось',
   'опыт', 'опыта', 'опытом', 'себя', 'рассматриваете', 'работы', 'работа', 'работе', 'работу', 'работать', 'предложения', 'сейчас',
 ]);
 
@@ -506,31 +506,75 @@ export function keywordSimilarity(a, b, options) {
 // Cyrillic letters that look like Latin ones, as in "С#" typed with a Cyrillic С
 const LATIN_LOOKALIKES = { а: 'a', в: 'b', е: 'e', к: 'k', м: 'm', н: 'h', о: 'o', р: 'p', с: 'c', т: 't', у: 'y', х: 'x' };
 
+// Cyrillic abbreviations that name what is asked about as much as Latin names do: "оформление по
+// ТК РФ" is not "оформление по ИП", "разработка ЭЦП" is not "разработка на Си". Others such as БД,
+// ЗП or ЯП are just short words
+const NAME_ABBREVIATIONS = new Set(['ИП', 'ТК', 'ГПХ', 'ООО', 'СЗ', 'ЭДО', 'ЭЦП', 'СКЗИ', 'КЭП', 'НЭП']);
+
 /**
- * Names a question is about: words with Latin letters, # or + (C#, Go, MongoDB, AWS, Lead, net, $).
+ * Names a question is about: words with Latin letters, # or + (C#, Go, MongoDB, AWS, Lead, net, $),
+ * and Cyrillic abbreviations such as ИП, ТК or ЭЦП.
  * Two questions about different names need different answers, however similar the wording.
  * @param {string} question
  * @returns {string} Sorted, comma-joined names
  */
 export function extractSubjectTerms(question) {
-  return [...new Set(question.toLowerCase().split(/[\s,.;:!?()«»"'/]+/)
-    .filter((word) => /[a-z#+$]/.test(word))
-    .map((word) => word.replace(/[а-яё]/g, (letter) => LATIN_LOOKALIKES[letter] ?? letter)))]
+  return [...new Set(question.split(/[\s,.;:!?()«»"'/]+/)
+    .filter((word) => /[a-z#+$]/i.test(word) || NAME_ABBREVIATIONS.has(word.toUpperCase()))
+    .map((word) => word.toLowerCase().replace(/[а-яё]/g, (letter) => LATIN_LOOKALIKES[letter] ?? letter)))]
     .sort()
     .join(',');
 }
+
+// Keywords include 5-letter stems of long words, so stems of generic words are generic too
+const isGenericWord = (word) => GENERIC_QUESTION_WORDS.has(word) ||
+  (word.length === 5 && [...GENERIC_QUESTION_WORDS].some((generic) => generic.length > 6 && generic.startsWith(word)));
+const subjectWords = (question) => [...extractKeywords(question)].filter((word) => !isGenericWord(word));
 
 /**
  * Whether two questions share a keyword other than the generic question words
  * @returns {boolean}
  */
 export function sharesSubjectWord(a, b) {
-  // Keywords include 5-letter stems of long words, so stems of generic words are generic too
-  const isGeneric = (word) => GENERIC_QUESTION_WORDS.has(word) ||
-    (word.length === 5 && [...GENERIC_QUESTION_WORDS].some((generic) => generic.length > 6 && generic.startsWith(word)));
-  const subjectWords = (question) => [...extractKeywords(question)].filter((word) => !isGeneric(word));
   const wordsB = new Set(subjectWords(b));
   return subjectWords(a).some((word) => wordsB.has(word));
+}
+
+/**
+ * How much of each question's subject the other one covers (0-1), on word stems, so that
+ * "Ваши зарплатные ожидания?" covers "...поделитесь вашими зарплатными ожиданиями" however long it is
+ * @returns {number} The mean of both coverages
+ */
+export function subjectCoverage(a, b) {
+  const stems = (question) => new Set(subjectWords(question).map((word) => (word.length > 6 ? word.substring(0, 5) : word)));
+  const stemsA = stems(a);
+  const stemsB = stems(b);
+  if (stemsA.size === 0 || stemsB.size === 0) {
+    return 0;
+  }
+  const shared = [...stemsA].filter((stem) => stemsB.has(stem)).length;
+  const coverageA = shared / stemsA.size;
+  const coverageB = shared / stemsB.size;
+  // Counts only when one question is (almost) all inside the other, by at least two words:
+  // "проектирования решений" inside "лидерства, менторинга, проектирования архитектуры решений" is not
+  if (shared < 2 || Math.max(coverageA, coverageB) < 0.8) {
+    return 0;
+  }
+  return (coverageA + coverageB) / 2;
+}
+
+// Latin words that only qualify a question, not name its subject: "ожидания на fulltime" asks
+// what "ожидания" asks
+const QUALIFIER_TERMS = new Set(['fulltime', 'full-time', 'parttime', 'part-time', 'remote', 'hybrid', 'office']);
+
+/**
+ * Whether two questions are about different names ("опыт на C#" and "опыт на Go", "в $" and
+ * "в рублях"), so the answer of one does not fit the other. Qualifiers such as fulltime are left out.
+ * @returns {boolean}
+ */
+export function subjectTermsConflict(a, b) {
+  const terms = (question) => extractSubjectTerms(question).split(',').filter((term) => term && !QUALIFIER_TERMS.has(term)).join(',');
+  return terms(a) !== terms(b);
 }
 
 export const extractKeywordsCaseSensitive = (question) => extractKeywords(question, { caseSensitive: true });
@@ -562,11 +606,10 @@ export function findBestMatch(question, qaDatabase, options = {}) {
   }
 
   const matches = [];
-  const subjectTerms = extractSubjectTerms(question);
 
   for (const [dbQuestion, answer] of qaDatabase.entries()) {
     // "опыт на C#" must not take the answer of "опыт на Go" (threshold 0 still lists everything)
-    if (threshold > 0 && extractSubjectTerms(dbQuestion) !== subjectTerms) {
+    if (threshold > 0 && subjectTermsConflict(question, dbQuestion)) {
       continue;
     }
 
@@ -575,7 +618,11 @@ export function findBestMatch(question, qaDatabase, options = {}) {
       normalize(dbQuestion),
     );
 
-    const kwSimilarity = keywordSimilarity(question, dbQuestion, { caseSensitive });
+    // A long question around a short saved one shares few words overall, but all of its subject
+    const kwSimilarity = Math.max(
+      keywordSimilarity(question, dbQuestion, { caseSensitive }),
+      subjectCoverage(question, dbQuestion),
+    );
     // Similar wording alone ("на каком стеке" vs "в каком городе") is not a match
     if (threshold > 0 && !sharesSubjectWord(question, dbQuestion)) {
       continue;
