@@ -80,6 +80,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   const contacts = await loadContacts(path.join(process.cwd(), 'data', 'contacts.lino'));
   const { readQADatabase, addOrUpdateQA } = withContacts(qaDatabase, contacts);
   argv.message = expandContacts(argv.message, contacts);
+  argv.messageEn = expandContacts(argv.messageEn ?? '', contacts);
   const deferredVacancyIds = await deferredQuestions.pendingVacancyIds(await readQADatabase());
   deferredVacancyIds.forEach(markVacancyAsProcessed);
   if (deferredVacancyIds.size > 0) {

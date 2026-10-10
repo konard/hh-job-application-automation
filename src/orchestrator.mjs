@@ -147,7 +147,7 @@ export function createOrchestrator({
 
   const vacancyResponseHandler = () => handleVacancyResponsePage({
     commander,
-    MESSAGE: argv.message,
+    MESSAGE: argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message,
     readQADatabase: qaDB.readQADatabase,
     addOrUpdateQA: qaDB.addOrUpdateQA,
     // A form with a non-exact answer is sent after the user's `y` (decideSend); unattended only with this flag
@@ -302,7 +302,7 @@ export function createOrchestrator({
 
         const result = await findAndProcessVacancyButton({
           commander,
-          MESSAGE: argv.message,
+          MESSAGE: argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
           deferredQuestions,
           readQADatabase: qaDB.readQADatabase,

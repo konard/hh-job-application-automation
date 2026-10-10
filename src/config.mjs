@@ -12,6 +12,7 @@ import os from 'os';
 import fs from 'fs';
 import { makeConfig } from 'lino-arguments';
 import { CONFIRM_STEPS } from './confirmations.mjs';
+import { englishLetterFile } from './cover-letter.mjs';
 
 function loadMessageFromFile(filePath) {
   if (!filePath) {
@@ -153,6 +154,11 @@ export function createConfig() {
           description: 'Path to a UTF-8 text file with the cover letter, e.g. data/cover-letter.txt',
           default: getenv('MESSAGE_FILE', ''),
         })
+        .option('message-file-en', {
+          type: 'string',
+          description: 'The English cover letter, used when the vacancy\'s questions are in English (default: <message-file>.en.txt when it exists)',
+          default: getenv('MESSAGE_FILE_EN', ''),
+        })
         .option('verbose', {
           type: 'boolean',
           description: 'Enable verbose logging for debugging',
@@ -182,6 +188,8 @@ export function createConfig() {
   });
 
   config.message ||= loadMessageFromFile(config.messageFile);
+  const englishFile = config.messageFileEn || englishLetterFile(config.messageFile);
+  config.messageEn = englishFile && fs.existsSync(path.resolve(englishFile)) ? loadMessageFromFile(englishFile) : '';
   // The cover letter is the user's choice; nothing is sent without one
   if (!config.message.trim() && !config.help) {
     throw new Error('Choose a cover letter: --message-file <file> (e.g. data/cover-letter.txt) or --message "<text>"');

@@ -1,0 +1,17 @@
+Hello,
+
+I like your company, and I believe my experience will be useful to you and that I can bring value to your work.
+
+What legal arrangement do you offer for remote work?
+
+You can see my code on GitHub:
+
+github.com/konard
+github.com/link-assistant
+github.com/linksplatform
+github.com/link-foundation
+
+For a quick reply, please use my Telegram: {{telegram}} ({{phone}}).
+
+Best regards,
+Konstantin Diachenko

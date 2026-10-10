@@ -22,6 +22,7 @@ import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
+import { coverLetterFor } from './cover-letter.mjs';
 import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
@@ -349,10 +350,12 @@ export async function handleVacancyResponsePage({
     // The questions are handled even when there is no cover letter field
     const textareaSelector = await prepareCoverLetterTextarea({ commander });
 
-    if (MESSAGE && textareaSelector) {
+    // The English letter when the vacancy's questions are in English
+    const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question));
+    if (letter && textareaSelector) {
       const { filled } = await commander.fillTextArea({
         selector: textareaSelector,
-        text: MESSAGE,
+        text: letter,
         checkEmpty: true,
         scrollIntoView: true,
         simulateTyping: true,

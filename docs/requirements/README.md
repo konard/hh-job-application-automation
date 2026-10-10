@@ -129,6 +129,7 @@ Sections:
 | CONF9 | «We only auto-submit on exact symbol by symbol match, but prefill should use similarity search.» | Prefill uses similarity (fuzzy) matching, without mixing subjects (= [A1, A4](forms-and-chats.md#a-hhru-application-forms)) | Live: Project Manager form prefilled by similarity (0.69 / 0.55); `tests/fuzzy-matching.test.mjs` | ✅ | baade6b, efe3a38, f5b1de8 |
 | CONF10 | Derived from «Forms with questions only with my confirmation» (a stale «y» nearly confirmed an unseen form) | A form the user sends in the browser counts as sent; the waiting prompt is withdrawn, and a `y` typed before a prompt was shown is ignored | `tests/confirmations.test.mjs` («answers typed for a withdrawn prompt … do not confirm the next prompt») | 🧪 | 6ec31d8, 5c77637, 70e0acd |
 | CONF11 | «All errors and warnings must be fixed.» (run 19 ended with a TimeoutError) | When hh.ru switches from the popup to the full form, the popup steps stop and the full-form handler takes over | Live: vacancy 138276367; `tests/popup-full-form-switch.test.mjs` | ✅ | 965531d |
+| CONF12 | English cover letter (`data/cover-letter.en.txt`) when the vacancy's questions are clearly English | 🧪 |
 
 ## QA: answers
 
@@ -369,7 +370,7 @@ of them, so none is lost.
 | PACE | 6 | 5 | | | | 1 |
 | BRW | 7 | 7 | | | | |
 | TRACE | 4 | 1 | 3 | | | |
-| CONF | 11 | 7 | 3 | | | 1 |
+| CONF | 12 | 7 | 4 | | | 1 |
 | QA | 12 | 12 | | | | |
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
@@ -379,7 +380,7 @@ of them, so none is lost.
 | EXP | 7 | 4 | 3 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **154** | **113** | **38** | **0** | **0** | **3** |
+| **Total** | **155** | **113** | **39** | **0** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

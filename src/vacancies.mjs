@@ -14,6 +14,7 @@ import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './help
 import { closeChatPanel, findCoverLetterToggle, isButtonEnabled } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
+import { coverLetterFor } from './cover-letter.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 
 /**
@@ -178,10 +179,12 @@ export async function processModalApplication({
   if (isFullFormOpened(commander)) {
     return FULL_FORM_OPENED;
   }
-  if (MESSAGE) {
+  // The English letter when the vacancy's questions are in English
+  const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question));
+  if (letter) {
     const { filled, verified, actualValue } = await commander.fillTextArea({
       selector: textareaSelector,
-      text: MESSAGE,
+      text: letter,
       checkEmpty: true,
       scrollIntoView: false,
       simulateTyping: true,
@@ -192,7 +195,7 @@ export async function processModalApplication({
       console.log(`✅ ${commander.engine}: typed message successfully`);
     } else {
       console.error(`❌ ${commander.engine}: textarea value does not match expected message`);
-      console.error('Expected:', MESSAGE);
+      console.error('Expected:', letter);
       console.error('Actual:', actualValue);
     }
   }
