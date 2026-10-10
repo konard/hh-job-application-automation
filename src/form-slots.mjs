@@ -15,9 +15,9 @@ import { isBrowserRunning } from './browser-session.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { startFormWatch } from './form-answers.mjs';
 import { createQADatabase } from './qa-database.mjs';
-import { fetchVacancy, isPayQuestion, payGuidance } from './vacancy-context.mjs';
+import { fetchVacancy, isPayQuestion, payGuidance, statesPay } from './vacancy-context.mjs';
 import {
-  askClaude, draftPrompt, loadProfile, pickOptions, plainText, planAnswers, readFormFields, relatedAnswers, TO_CHECK,
+  askClaude, draftPrompt, loadProfile, pickOptions, plainText, planAnswers, readFormFields, readFormIntro, relatedAnswers, TO_CHECK,
 } from './form-prefill.mjs';
 
 const DATA = path.join(process.cwd(), 'data');
@@ -115,11 +115,13 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
     fields: frames.flatMap(({ frame, read }) => read.fields.map((field) => ({ ...field, frame }))),
     hasNextPage: frames.some(({ read }) => read.hasNextPage),
   };
+  // The text above the first question: a pay it states is the form's own offer
+  form.description = form.fields.length ? await form.fields[0].frame.evaluate(readFormIntro, form.fields[0].title).catch(() => '') : '';
   log(`📝 "${form.title}": ${form.fields.length} question(s)${frames.some(({ frame }) => frame !== page.mainFrame()) ? ' (in a frame)' : ''}`);
   const planned = planAnswers(form.fields, { profile, qaMap, company });
   // The vacancy of the form: a pay question is answered against its pay, not with a saved sum
   const vacancy = await fetchVacancy(vacancyUrl ?? await formVacancy(url));
-  if (vacancy?.salary) {
+  if (vacancy?.salary || statesPay(form.description)) {
     planned.filter((field) => isPayQuestion(field.title) && field.kind !== 'file' && field.source !== 'company from the chat')
       .forEach((field) => Object.assign(field, { open: true, answer: undefined, choices: undefined, source: undefined }));
   }
@@ -147,7 +149,7 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
       log(`🤖 Drafting ${open.length} answer(s) with local Claude Code from the resume and qa.lino...`);
     }
     await Promise.all(open.map(async (field) => {
-      const pay = isPayQuestion(field.title) ? payGuidance({ vacancy, profile }) : '';
+      const pay = isPayQuestion(field.title) ? payGuidance({ vacancy, profile, intro: form.description }) : '';
       const drafted = await askClaude(draftPrompt({ form, field, resume, related: relatedAnswers(field.title, qaMap), vacancy, pay }));
       if (!drafted) {
         return;

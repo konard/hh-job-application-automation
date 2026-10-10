@@ -1,7 +1,8 @@
 /**
- * The vacancy a form belongs to, as context for its answers: when the vacancy pays less than the
- * user's target, a pay question is answered with the top of the vacancy's range as the minimum,
- * plus the user's comfortable rate, so a lower-paid application still goes through every stage.
+ * The vacancy a form belongs to, as context for its answers: when the pay the form or the vacancy
+ * states is less than the user's target, a pay question is answered with that pay as the minimum
+ * (the top of a range), plus the user's comfortable rate, so a lower-paid application still goes
+ * through every stage. The answer is short: the two sums, no calculation.
  *
  * The vacancy is read once from its public page (a plain request, no browser).
  *
@@ -49,18 +50,24 @@ export async function fetchVacancy(url) {
   }
 }
 
+/** A sum of money in a text: «3000р.», «80 000 ₽», «2 000 руб» */
+const SUM = /\d[\d\s]*\s?(?:₽|руб|р\.|rub)/i;
+export const statesPay = (text) => SUM.test(String(text ?? ''));
+
 /**
  * What the draft is told about pay: the user's target and comfortable rate (data/profile.lino
- * «salary» and «rate») against the vacancy's pay
+ * «salary» and «rate») against the pay the form's own description or the vacancy states
  * @param {Object} options
  * @param {{salary?: string}|null} options.vacancy
  * @param {{salary?: string, rate?: string}} options.profile
+ * @param {string} [options.intro] - The form's own description
  * @returns {string}
  */
-export function payGuidance({ vacancy, profile }) {
+export function payGuidance({ vacancy, profile, intro = '' }) {
   return `Это вопрос об оплате. Моя целевая оплата: ${profile.salary || '[нет в профиле]'}; моя комфортная ставка в час: ${profile.rate || '[нет в профиле]'}.
-Оплата в вакансии: ${vacancy?.salary || 'не указана'}.
-Если оплата в вакансии ниже моей целевой: как минимум, на который я согласен, назови верхнюю границу вилки вакансии (если указано только «от» — эту сумму), в тех единицах, о которых спрашивают; если спрашивают за час, а вакансия указывает сумму в месяц, пересчитай, считая 168 рабочих часов в месяц, и так и напиши. Отдельной фразой добавь мою комфортную ставку.
-Если оплата в вакансии не ниже моей целевой или не указана: назови мою целевую оплату (в тех единицах, о которых спрашивают) и комфортную ставку.
+Оплата в вакансии: ${vacancy?.salary || 'не указана'}.${statesPay(intro) ? '\nОписание анкеты (выше) называет свою оплату: она точнее вакансии, бери её.' : ''}
+Если названная оплата ниже моей целевой: она и есть минимум, на который я согласен (у вилки — верхняя граница, у «от» — эта сумма), в тех единицах, о которых спрашивают: за занятие 1,5 часа → раздели на 1,5; за месяц, а спрашивают за час → раздели на 168 часов. Отдельно добавь мою комфортную ставку.
+Если названная оплата не ниже моей целевой или не указана: назови мою целевую оплату (в тех единицах, о которых спрашивают) и комфортную ставку.
+Ответ короткий, одна-две фразы, как: «Минимум — 2 000 ₽ в час на руки (3 000 ₽ за занятие 1,5 часа, как в описании). Комфортная ставка — 2 700 ₽ в час.» Ход расчёта не объясняй.
 Без пометок [уточнить] для сумм: все суммы есть выше.`;
 }

@@ -491,6 +491,19 @@ export function diffExperience(hhJobs, linkedinJobs, { translationsOf = () => []
   };
 }
 
+/** «Website: kaiten.ru» / «Сайт: kaiten.ru» line of a position's description */
+const WEBSITE_LINE = /^(?:website|site|сайт)\s*:\s*(?:https?:\/\/)?(\S+?)\/?\s*$/imu;
+
+/**
+ * The company website a position's description names, as a link LinkedIn can preview
+ * @param {...Object} jobs - The positions to look in, first match wins
+ * @returns {string} https://<site>/ or ''
+ */
+export function companyWebsite(...jobs) {
+  const site = jobs.map((job) => String(job?.description ?? '').match(WEBSITE_LINE)?.[1]).find(Boolean);
+  return site ? `https://${site}/` : '';
+}
+
 /**
  * The changes that bring the target side in line with the source side: update each matched job
  * that differs, add each job only the source has. Jobs only the target has are kept (never
@@ -525,12 +538,16 @@ export function planSync(diff, to, translate = (text) => text) {
         const missing = to === 'linkedin' ? difference.onlyHh : difference.onlyLinkedin;
         if (missing.length > 0) {
           fields.skills = missing;
-          notes.push(to === 'hh' ? 'hh.ru keeps skills for the whole resume, not per job: add them to «Навыки» if they are missing there' : 'LinkedIn skills are picked in the position form from the profile skills');
+          if (to === 'hh') {
+            notes.push('hh.ru keeps skills for the whole resume, not per job: add them to «Навыки» if they are missing there');
+          }
         }
       }
     }
     if (Object.keys(fields).length > 0) {
-      changes.push({ kind: 'update', target: pair[to], source, fields, notes });
+      // The company website goes along as a LinkedIn media link (prefill skips one already there)
+      const website = to === 'linkedin' ? companyWebsite(pair[to], source) : '';
+      changes.push({ kind: 'update', target: pair[to], source, fields: website ? { ...fields, website } : fields, notes });
     }
   }
   for (const source of to === 'linkedin' ? diff.onlyHh : diff.onlyLinkedin) {
@@ -547,6 +564,7 @@ export function planSync(diff, to, translate = (text) => text) {
         description: inLanguage(source.description),
         ...(source.location ? { location: source.location } : {}),
         ...(source.skills.length > 0 ? { skills: source.skills } : {}),
+        ...(to === 'linkedin' && companyWebsite(source) ? { website: companyWebsite(source) } : {}),
       },
       notes: [],
     });

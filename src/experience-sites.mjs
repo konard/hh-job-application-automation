@@ -333,6 +333,46 @@ export async function addLinkedInSkills(page, skills) {
 }
 
 /**
+ * Add a link to the open position form's Media (e.g. the company website), titled as given.
+ * Typed like a person: LinkedIn's form breaks on a pasted link or title. Skipped when the form
+ * already has a media item with this title
+ * @param {Object} page
+ * @param {{url: string, title: string}} link
+ * @returns {Promise<string>} '' when added or already there, else what went wrong
+ */
+export async function addLinkedInMedia(page, { url, title }) {
+  const existing = page.locator('dialog[open], [role="dialog"]').getByText(title, { exact: true });
+  if (await existing.count().catch(() => 0) > 0) {
+    return '';
+  }
+  const linkItem = page.getByRole('menuitem', { name: /^(Add a link|Добавить ссылку)$/ });
+  for (let attempt = 0; attempt < 5 && !await linkItem.isVisible().catch(() => false); attempt++) {
+    await page.getByRole('button', { name: /^(Add media|Добавить медиа\p{L}*)$/u }).first().click().catch(() => {});
+    await sleep(1500);
+  }
+  if (!await linkItem.isVisible().catch(() => false)) {
+    return 'no «Add media» → «Add a link» in the form';
+  }
+  await linkItem.click();
+  const input = page.locator('input[aria-label^="Paste or type a link"], input[aria-label*="ссылк"]').first();
+  await input.pressSequentially(url, { delay: 30 });
+  await page.getByRole('button', { name: /^(Add|Добавить)$/ }).first().click();
+  const titleInput = page.getByLabel(/^(Title|Название)\*?$/).first();
+  if (!await titleInput.waitFor({ timeout: 20000 }).then(() => true, () => false)) {
+    await page.getByRole('button', { name: /^(Back|Назад)$/ }).first().click().catch(() => {});
+    return `LinkedIn could not preview ${url}`;
+  }
+  await sleep(1000);
+  await titleInput.click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await page.keyboard.type(title, { delay: 30 });
+  await sleep(500);
+  await page.getByRole('button', { name: /^(Save|Сохранить)$/ }).last().click();
+  await sleep(3000);
+  return await existing.count().catch(() => 0) > 0 ? '' : `the link ${url} did not show in Media`;
+}
+
+/**
  * Close the suggestion list a typed field opened, the way a person does: the suggestion that is
  * exactly the typed value is chosen, else the form's heading is clicked; no field is left focused
  * @param {Object} page
@@ -354,7 +394,7 @@ export async function closeSuggestions(page, value) {
 
 /**
  * Open LinkedIn's position form (the position's edit form, or a new one) and prefill it.
- * Skills are typed one by one in LinkedIn's skill picker, so they are listed for the user
+ * Skills are picked from the profile's skills, and the company website is added as a media link
  * @param {Object} page
  * @param {Object} change - Of planSync
  * @param {Object} [options]
@@ -408,12 +448,17 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
       notes.push(`LinkedIn: not among the profile's skills (LinkedIn allows 100), add them yourself if needed: ${missing.join(', ')}`);
     }
   }
+  if (change.fields.website) {
+    const title = change.target?.company ?? change.fields.company ?? change.source?.company ?? '';
+    const problem = await addLinkedInMedia(page, { url: change.fields.website, title });
+    notes.push(problem ? `LinkedIn: ${problem}` : `LinkedIn: media link ${change.fields.website} («${title}»)`);
+  }
   return notes;
 }
 
 /** Fields each site's form takes from a change; the rest (e.g. hh.ru per-job skills) are notes */
 const FILLABLE = {
-  linkedin: ['title', 'company', 'location', 'description', 'start', 'end', 'current'],
+  linkedin: ['title', 'company', 'location', 'description', 'start', 'end', 'current', 'skills'],
   hh: ['title', 'company', 'description', 'start', 'end', 'current'],
 };
 

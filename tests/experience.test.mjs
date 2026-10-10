@@ -5,7 +5,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   applySyncDecision, companyKey, companySimilarity, detectLanguage, diffExperience, formatChange, formatDiffReport,
-  linkedInItemsFromText, matchJobs, withEditLinks, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
+  companyWebsite, linkedInItemsFromText, matchJobs, withEditLinks, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
   textSimilarity,
 } from '../src/experience.mjs';
 import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl } from '../src/experience-sites.mjs';
@@ -302,5 +302,22 @@ describe('withEditLinks', () => {
       { label: 'Edit profile language', url: 'https://www.linkedin.com/in/x/edit/secondary-language/' },
     ]);
     assert.deepEqual(jobs.map((job) => job.editUrl), ['https://www.linkedin.com/in/x/details/experience/edit/forms/1/', null]);
+  });
+});
+
+describe('company website as a LinkedIn media link', () => {
+  test('the «Website:» line of a description gives the link', () => {
+    assert.equal(companyWebsite({ description: 'Website: kaiten.ru\n\nDevelopment of Kaiten.' }), 'https://kaiten.ru/');
+    assert.equal(companyWebsite({ description: 'Сайт: https://github.com/deep-foundation/' }), 'https://github.com/deep-foundation/');
+    assert.equal(companyWebsite({ description: 'No site here' }, { description: 'Website: example.com' }), 'https://example.com/');
+    assert.equal(companyWebsite({ description: 'Built the website: fast' }), '');
+  });
+
+  test('a LinkedIn update carries the website, and skills open the LinkedIn form', () => {
+    const diff = { pairs: [{ hh: { company: 'Kaiten', title: 'Dev', description: '', skills: ['iOS'] }, linkedin: { company: 'Kaiten.ru', description: 'Website: kaiten.ru' }, differences: [{ field: 'skills', onlyHh: ['iOS'], onlyLinkedin: [] }] }], onlyHh: [], onlyLinkedin: [] };
+    const [change] = planSync(diff, 'linkedin');
+    assert.equal(change.fields.website, 'https://kaiten.ru/');
+    assert.deepEqual(change.notes, []);
+    assert.equal(hasFillableFields({ fields: { skills: ['iOS'] } }, 'linkedin'), true);
   });
 });

@@ -261,6 +261,18 @@ export function askClaude(prompt, { timeoutMs = 240000 } = {}) {
 }
 
 /**
+ * Runs in the page: the form's own description, the text above its first question (e.g. the
+ * pay a Google Form states in its header)
+ * @param {string} firstQuestion - Title of the first question
+ * @returns {string}
+ */
+export function readFormIntro(firstQuestion) {
+  const text = document.body?.innerText ?? '';
+  const end = firstQuestion ? text.indexOf(firstQuestion) : -1;
+  return (end > 0 ? text.slice(0, end) : '').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim().slice(-3000);
+}
+
+/**
  * Runs in the page: the form's questions, each with its controls marked by data-prefill-id
  * (an attribute, nothing visible). Works with Google Forms (aria-labelledby, role=radio) and
  * plain forms (label, legend, placeholder)

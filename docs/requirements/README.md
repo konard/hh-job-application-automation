@@ -222,6 +222,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B24 | A sent form is recognized in any language: the /formResponse page, Vietnamese confirmation and send button | 🧪 |
 | B25 | A city question asking for the time zone gets «Нячанг, Вьетнам, UTC+7, МСК+4» from the profile | 🧪 |
 | B26 | Pay answers follow the form's vacancy: below the target, the top of its range as the minimum plus the comfortable hourly rate; not learned | 🧪 |
+| B27 | A pay stated in the form's own description comes first as the minimum (converted to the asked unit), plus the comfortable rate; one or two short sentences | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -275,6 +276,7 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | EXP5 | Auto sync with automatic translation (Russian ↔ English) | A Russian hh.ru entry appears translated on LinkedIn and vice versa | 🧪 `experience -- sync --auto` |
 | EXP6 | Translation by Haiku 5.5 or later, Luna 6 or later, and the latest Formal AI (link-assistant/formal-ai) | The three translations are produced for each text | ✅ Haiku 5.5, gpt-6-luna and Formal AI 0.352.1 on 19 real texts |
 | EXP7 | Any Formal AI translation failure is reported as an issue in link-assistant/formal-ai | An issue per failure | ✅ link-assistant/formal-ai #1192, #1193, comment on #1174; deduplicated on rerun; #1194 (short phrases, 2026-10-10: Formal AI translated 1 of 27 texts, Haiku 26, Luna 27) |
+| EXP8 | LinkedIn prefill picks the position's skills from the profile's skills and adds the company website as a media link; nothing is saved without y | Kaiten: iOS, Android; https://kaiten.ru/ «Kaiten.ru» | 🧪 |
 
 ## SEC: safety constraints
 
@@ -375,12 +377,12 @@ of them, so none is lost.
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 27 | 14 | 13 | | | |
+| FORM (B) | 28 | 14 | 14 | | | |
 | CHAT (C) | 15 | 8 | 7 | | | |
-| EXP | 7 | 4 | 3 | | | |
+| EXP | 8 | 4 | 4 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **155** | **113** | **39** | **0** | **0** | **3** |
+| **Total** | **157** | **113** | **41** | **0** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
