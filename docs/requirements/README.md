@@ -65,6 +65,8 @@ Sections:
 | LOGIN4 | «Try login via vk, we have session there in on of the browsers.» | When no profile has an hh.ru session, sign in through a social provider session (VK first) | VK sign-in worked in a Chrome snapshot (one-time «Continue as» approval) | 🧪? | `signInWithProvider` in `src/login.mjs`; proven live by a probe, but the integrated path has not been needed since (Chrome had an hh.ru session) |
 | LOGIN5 | «we also should use the same playwright profile after login to hh.ru to speed up» | After the first login the automation keeps its own profile, so later runs start logged in | Restarted runs reuse `~/.hh-automation/chrome-profile` and stay logged in | ✅ | `getUserDataDir()` in `src/config.mjs`; 101b754 |
 | LOGIN6 | «we need to click on accept cookies when shown» | The cookies banner (and the salary popup) is closed when shown | «🍪 Accepted the cookies policy banner» | ✅ | `dismissOverlays()` in `src/helpers/page-helpers.mjs`; 101b754 |
+| LOGIN7 | «to login to linkedin, we should use already active sessions from other browsers, and if there a login + passpords we do prefill of them.» | The LinkedIn slot is signed in with a LinkedIn session found in the browsers this tool runs or in installed browsers (your Chrome Default profile has one); when there is none, the saved LinkedIn login and password are prefilled in the sign-in form, never printed or stored | The LinkedIn slot opens signed in, without a Keychain prompt | ⬜ waiting for permission to read sessions/passwords from real browsers | — |
+| LOGIN8 | «browser-commander must fully support import of data from all possible real browsers.» | Every data class (cookies, passwords, storage, autofill, …) from every installed browser (Chromium family, Firefox forks, Safari) can be imported | browser-commander #114, #119 (closed), 0.27.0 session discovery | 🚧 upstream done; upgrade from 0.26.3 to 0.27.0 pending | — |
 
 ## RUN: the application run
 
@@ -330,7 +332,7 @@ of them, so none is lost.
 | Section | Requirements | ✅ | 🧪 | 🚧 | ⬜ | ↪ |
 |---|---|---|---|---|---|---|
 | DEP | 5 | 5 | | | | |
-| LOGIN | 6 | 5 | 1 | | | |
+| LOGIN | 8 | 5 | 1 | 1 | 1 | |
 | RUN | 9 | 8 | | 1 | | |
 | PACE | 6 | 5 | | | | 1 |
 | BRW | 7 | 7 | | | | |
@@ -345,7 +347,7 @@ of them, so none is lost.
 | EXP | 7 | | | | 7 | |
 | SEC | 9 | 9 | | | | |
 | PROC | 13 | 13 | | | | |
-| **Total** | **135** | **103** | **17** | **4** | **8** | **3** |
+| **Total** | **137** | **103** | **17** | **5** | **9** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
