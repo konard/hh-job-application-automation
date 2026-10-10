@@ -58,13 +58,13 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 
 | # | Requirement | Check | Status |
 |---|---|---|---|
-| A1 | A form with questions is autofilled from `data/qa.lino` by similarity (fuzzy match), answers are shown for review | A form with reworded saved questions gets them filled; the run asks `y` | ✅ |
+| A1 | A form with questions is autofilled from `data/qa.lino` by similarity (fuzzy match), answers are shown for review; the popup the same way as the full form | A form with reworded saved questions gets them filled; the run asks `y`; popup: `tests/popup-application.test.mjs` (🧪) | ✅ |
 | A2 | It is sent without asking only when every question is a saved question word for word and its field holds exactly the saved answer (`--auto-send-exact-answers`, default on) | A form with only exact saved questions is sent with "sending without asking" in the log; one changed answer makes it ask | ✅ |
-| A3 | Any other form is autofilled as far as possible and waits for the user (`y` / `s` / `q`) | Open questions are listed; nothing is sent until `y` or the user sends it | ✅ |
+| A3 | Any other form is autofilled as far as possible and waits for the user (`y` / `s` / `q`), in every `--confirm` mode, on the popup and the full form; unattended, it waits for the user in the browser | Open questions are listed; nothing is sent until `y` or the user sends it; `decideSend` tests (🧪) | ✅ |
 | A4 | Similarity prefill must not mix up different subjects: C# vs Go, $ vs ₽, ИП vs ТК РФ, LinkedIn vs GitHub links; qualifiers (fulltime, remote, @username) do not count as subjects | `tests/fuzzy-matching.test.mjs`; leave-one-out over qa.lino gains 45 matches and loses only 2 wrong ones | ✅ |
-| A5 | Answers the user types are saved to qa.lino once per change (no rewrite loop) | One "Saved Q&A" per edited question, not thousands | ✅ |
+| A5 | Answers the user types are saved to qa.lino once per change (no rewrite loop), in the popup too; an autofilled answer of a similar question never counts as exact on the same form | One "Saved Q&A" per edited question, not thousands; popup: `tests/popup-application.test.mjs` (🧪) | ✅ |
 | A6 | Captcha: Haiku's reading is typed and sent once per captcha; if hh.ru shows a new picture, the answer is only prefilled (`haiku|luna`) and the run waits for the user | Live: one accepted, two not accepted then prefilled | ✅ |
-| A7 | Vacancies are filtered out automatically by `data/vacancy-filters.lino` (vacancy card before opening it, questions, form text); each is logged and kept in `data/filtered-vacancies.lino` | «Инженер-схемотехник» card is skipped without a click; log line «🚫 … filtered out» | 🧪 |
+| A7 | Vacancies are filtered out automatically by `data/vacancy-filters.lino` (vacancy card before opening it, questions, form text; on-site work that is not programming also by the vacancy description, FLT5); each is logged and kept in `data/filtered-vacancies.lino` with its title and time | «Инженер-схемотехник» card is skipped without a click; log line «🚫 … filtered out» | 🧪 |
 | A8 | hh.ru's «поменяйте видимость резюме» notice counts only when it is rendered (not the collapsed `hidden-resume-warning` block); then the run asks to make the resume visible or `s` skips | Live popup: no prompt; visible notice sample: prompt | ✅ |
 
 ## B. External forms (Google Forms, Yandex Forms, a company's own job form)

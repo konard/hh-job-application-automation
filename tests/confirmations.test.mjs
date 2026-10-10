@@ -3,7 +3,9 @@
  */
 import { PassThrough } from 'stream';
 import { describe, test, assert } from 'test-anywhere';
-import { askUser, enableConfirmations, waitForUser, withConfirmations, withdrawPrompt } from '../src/confirmations.mjs';
+import {
+  askUser, decideSend, disableConfirmations, enableConfirmations, waitForUser, withConfirmations, withdrawPrompt,
+} from '../src/confirmations.mjs';
 import { SELECTORS } from '../src/hh-selectors.mjs';
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
@@ -127,5 +129,32 @@ describe('sending a form with questions', () => {
     const form = fakeForm();
     await withConfirmations(form).clickButton({ selector: SELECTORS.submitButtonLetter, autoSend: true });
     assert.deepEqual(form.clicks, [{ selector: SELECTORS.submitButtonLetter }]);
+  });
+});
+
+describe('decideSend: the exact-answer rule in every --confirm mode', () => {
+  test('unattended (--confirm none): only a form without questions or with exact answers is sent', async () => {
+    disableConfirmations();
+    assert.equal(await decideSend({ hasQuestions: false, autoSend: false }), 'send');
+    assert.equal(await decideSend({ hasQuestions: true, autoSend: true }), 'send');
+    assert.equal(await decideSend({ hasQuestions: true, autoSend: false }), 'wait');
+    // Only the explicit --auto-submit-vacancy-response-form sends it
+    assert.equal(await decideSend({ hasQuestions: true, autoSend: false, autoSubmit: true }), 'send');
+  });
+
+  test('with --confirm send the send click itself asks', async () => {
+    enableConfirmations({ steps: ['send'], onStop: () => {}, input: new PassThrough() });
+    assert.equal(await decideSend({ hasQuestions: true, autoSend: false }), 'send');
+    disableConfirmations();
+  });
+
+  test('without it, a form with a non-exact answer is asked about here', async () => {
+    const input = new PassThrough();
+    enableConfirmations({ steps: ['answers'], onStop: () => {}, input });
+    const decision = decideSend({ hasQuestions: true, autoSend: false, autoSubmit: true, skip: 'skip this vacancy' });
+    await tick();
+    input.write('s\n');
+    assert.equal(await decision, 'skip');
+    disableConfirmations();
   });
 });

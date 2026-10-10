@@ -160,12 +160,12 @@ export function createConfig() {
         })
         .option('auto-submit-vacancy-response-form', {
           type: 'boolean',
-          description: 'Auto-submit vacancy response forms when all questions are answered (default: false for safety)',
+          description: 'Send forms with questions (popup or full form) unattended even when not every answer is the saved answer of the very same question (default: false for safety)',
           default: getenv('AUTO_SUBMIT_VACANCY_RESPONSE_FORM', false),
         })
         .option('ignore-vacancies-with-questionnaire', {
           type: 'boolean',
-          description: 'Skip vacancies that require additional questionnaire fields beyond the cover letter',
+          description: 'Skip vacancies that require additional questionnaire fields beyond the cover letter (kept in data/skipped-vacancies.lino)',
           default: getenv('IGNORE_VACANCIES_WITH_QUESTIONNAIRE', false),
         })
         .help(),

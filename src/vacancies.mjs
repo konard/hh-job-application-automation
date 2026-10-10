@@ -7,12 +7,14 @@ import { isNavigationError, isTimeoutError } from 'browser-commander';
 import { allAnswersExact, countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
+import { noteSkip } from './skipped-vacancies.mjs';
+import { saveMarkedQAPairs, saveQAPairs, setupQAHandling } from './vacancy-response.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
-import { closeChatPanel, findCoverLetterToggle, isButtonEnabled, rememberIgnoredVacancy } from './helpers/page-helpers.mjs';
+import { closeChatPanel, findCoverLetterToggle, isButtonEnabled } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
-import { askUser, isInteractive, waitForUser } from './confirmations.mjs';
+import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 
 /**
  * Handle limit error when detected
@@ -60,28 +62,75 @@ const FULL_FORM_OPENED = { success: false, reason: 'full_form_opened' };
 const isFullFormOpened = (commander) => URL_PATTERNS.vacancyResponse.test(commander.getUrl());
 
 /**
+ * Wait while the user handles the popup in the browser (nobody answers on stdin): until it is
+ * sent or closed, or hh.ru switches to the full form. Answers the user types meanwhile are saved
+ * to qa.lino; the autofilled ones are not, so an answer of a similar question that nobody
+ * confirmed never becomes the exact saved answer of this wording
+ * @returns {Promise<{success: boolean, reason?: string}>}
+ */
+async function waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQA, skippedVacancies }) {
+  console.log('⏸️  Waiting for you in the browser: answer and send the application popup, or close it');
+  for (;;) {
+    if (isFullFormOpened(commander)) {
+      return FULL_FORM_OPENED;
+    }
+    if (addOrUpdateQA) {
+      await saveMarkedQAPairs({ commander, addOrUpdateQA });
+    }
+    if (await commander.count({ selector: SELECTORS.applicationForm }) === 0) {
+      break;
+    }
+    const waited = await commander.wait({ ms: 5000, reason: 'the user to send or close the application popup' });
+    if (waited?.aborted) {
+      return { success: false, reason: 'navigation_detected' };
+    }
+  }
+  if (vacancyId && await isVacancyCardResponded({ commander, vacancyId })) {
+    console.log(`✅ Application sent for vacancy ${vacancyId} in the browser`);
+    return { success: true };
+  }
+  await noteSkip(skippedVacancies, vacancyId, { reason: 'skipped_by_user', title });
+  return { success: false, reason: 'closed_by_user' };
+}
+
+/**
  * Process modal application form
- * Fills cover letter and handles test questions in modal. Stops as soon as hh.ru switches to the
- * full application form, which the vacancy_response page handler takes over
+ * Fills the cover letter, autofills the questions from qa.lino like the full form (saving the
+ * user's own answers), and sends it by the rules of decideSend. Stops as soon as hh.ru switches
+ * to the full application form, which the vacancy_response page handler takes over. Every skip
+ * is logged and kept in data/skipped-vacancies.lino (or deferred-questions.lino /
+ * filtered-vacancies.lino)
  */
 export async function processModalApplication({
   commander,
   MESSAGE,
   ignoreVacanciesWithQuestionnaire = false,
   vacancyId = null,
-  addIgnoredVacancyId = async () => false,
+  vacancy = '',
+  title = '',
   deferredQuestions = null,
   readQADatabase = null,
+  addOrUpdateQA = null,
   autoSendExact = false,
+  autoSubmit = false,
+  onMissingAnswers = 'wait',
   vacancyFilters = null,
+  skippedVacancies = null,
+  verbose = false,
 }) {
   const textareaSelector = SELECTORS.coverLetterTextareaPopup;
   if (isFullFormOpened(commander)) {
     return FULL_FORM_OPENED;
   }
+  const skip = async (reason) => {
+    await noteSkip(skippedVacancies, vacancyId, { reason, title });
+    return skipModal({ commander, reason });
+  };
 
   // Before anything is typed into the popup
   const filterMatch = await vacancyFilters?.match({
+    vacancy,
+    description: vacancyFilters.description?.(vacancyId) ?? '',
     questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
     page: (await commander.safeEvaluate({
       fn: (selector) => document.querySelector(selector)?.innerText ?? '',
@@ -93,11 +142,15 @@ export async function processModalApplication({
   });
   if (filterMatch) {
     console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
-    await vacancyFilters.remember(vacancyId, filterMatch);
+    await vacancyFilters.remember(vacancyId, filterMatch, { title });
     return skipModal({ commander, reason: 'filtered_out' });
   }
-  if (await waitForVisibleResume(commander, { scopeSelector: SELECTORS.applicationForm, vacancyId }) !== 'visible') {
-    return skipModal({ commander, reason: 'resume_not_visible' });
+  const visibility = await waitForVisibleResume(commander, { scopeSelector: SELECTORS.applicationForm, vacancyId });
+  if (visibility === 'withdrawn') {
+    return skipModal({ commander, reason: 'withdrawn' });
+  }
+  if (visibility !== 'visible') {
+    return skip('resume_not_visible');
   }
 
   // Expand the cover letter section unless the textarea is already visible (cover letter might be mandatory)
@@ -144,23 +197,36 @@ export async function processModalApplication({
     }
   }
 
-  const { totalCount, unansweredCount } = await countUnansweredQuestions({
+  const { totalCount } = await countUnansweredQuestions({
     evaluate: commander.evaluate,
     containerSelector: SELECTORS.applicationForm,
   });
   const modalTextareaCount = await commander.count({ selector: `${SELECTORS.applicationForm} textarea` });
+  const hasQuestions = totalCount > 0 || modalTextareaCount > 1;
 
-  if (ignoreVacanciesWithQuestionnaire && (totalCount > 0 || modalTextareaCount > 1)) {
+  if (ignoreVacanciesWithQuestionnaire && hasQuestions) {
     console.log('⚠️  Detected questionnaire fields in modal application form');
-    console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
-    await rememberIgnoredVacancy(addIgnoredVacancyId, vacancyId);
-    return skipModal({ commander, reason: 'questionnaire_ignored' });
+    return skip('questionnaire_ignored');
   }
+
+  // The saved answers before this popup: answers saved while it is open never count as exact
+  const savedBefore = hasQuestions && readQADatabase ? await readQADatabase() : new Map();
+  // The same autofill (similar saved questions) and saving of the user's answers as the full form
+  if (hasQuestions && readQADatabase && addOrUpdateQA) {
+    await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
+  }
+  // The answers the user typed; every answer of the popup only once it is sent
+  const saveTyped = () => (addOrUpdateQA ? saveMarkedQAPairs({ commander, addOrUpdateQA }) : 0);
+  const saveAll = () => (addOrUpdateQA ? saveQAPairs({ commander, addOrUpdateQA }) : 0);
 
   // Answered later: the vacancy is kept under its questions in deferred-questions.lino
   const deferModal = async (questions) => {
-    await deferredQuestions?.defer(questions, vacancyId);
+    if (!deferredQuestions) {
+      return skip('unanswered_questions');
+    }
+    await deferredQuestions.defer(questions, vacancyId);
     console.log(`⏭️  Vacancy ${vacancyId} skipped for now, kept in deferred-questions.lino under:\n${formatQuestions(questions)}`);
+    await noteSkip(skippedVacancies, vacancyId, { reason: 'questions_deferred', title });
     return skipModal({ commander, reason: 'questions_deferred' });
   };
   const listOpen = () => listOpenQuestions({ evaluate: commander.evaluate });
@@ -171,7 +237,7 @@ export async function processModalApplication({
   );
 
   const openQuestions = await listOpen();
-  if (deferredQuestions && (totalCount > 0 || modalTextareaCount > 1)) {
+  if (deferredQuestions && hasQuestions) {
     const questionsToSkip = await deferredQuestions.questionsToSkip({
       questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
       openQuestions,
@@ -181,31 +247,32 @@ export async function processModalApplication({
     }
   }
 
-  // In interactive runs the user answers instead of the vacancy being skipped
-  let open = Math.max(unansweredCount, openQuestions.length);
-  const hasQuestions = totalCount > 0 || modalTextareaCount > 1;
   // Sent without asking only when autofill alone answered every question with its saved answer
-  const autofilledExactly = autoSendExact && hasQuestions && open === 0 && readQADatabase;
+  let open = await countOpen();
+  const exactAfterAutofill = autoSendExact && hasQuestions && open === 0 && Boolean(readQADatabase);
   if (open > 0) {
     console.log(`Open questions (no saved answer):\n${formatQuestions(openQuestions)}`);
+    // --on-missing-answers wait (the default): never skip, wait for the user to answer
+    if (onMissingAnswers === 'skip') {
+      console.log('Skipping this vacancy (--on-missing-answers skip)');
+      return deferModal(await listOpen());
+    }
+    if (!isInteractive()) {
+      return waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQA, skippedVacancies });
+    }
   }
-  while (open > 0 && isInteractive()) {
-    const choice = await askUser(`Answer the ${open} open question(s) in the application popup`, {
+  while (open > 0) {
+    const choice = await askUser(`Answer the ${open} open question(s) in the application popup (the answers are saved to qa.lino)`, {
       skip: deferredQuestions ? DEFER_CHOICE : undefined,
     });
+    await saveTyped();
     if (choice === 'skip') {
       return deferModal(await listOpen());
     }
-    open = await countOpen();
-  }
-
-  if (open > 0) {
-    console.log(`⚠️  Found ${open} UNANSWERED test question(s) in modal`);
-    if (deferredQuestions) {
-      return deferModal(await listOpen());
+    if (choice === 'withdrawn') {
+      return { success: false, reason: 'withdrawn' };
     }
-    console.log('💡 Skipping this vacancy - cannot auto-submit when test questions remain unanswered');
-    return skipModal({ commander, reason: 'unanswered_questions' });
+    open = await countOpen();
   }
 
   const submitButtonSelector = SELECTORS.submitButtonPopup;
@@ -213,7 +280,7 @@ export async function processModalApplication({
     console.error(`❌ Submit button not found in modal! Tried selector: ${submitButtonSelector}`);
     await logModalText({ commander, title: '📋 Modal content:' });
     console.error('💡 Closing modal and skipping this vacancy...');
-    return skipModal({ commander, reason: 'button_not_found' });
+    return skip('button_not_found');
   }
 
   while (isInteractive() && !await isButtonEnabled(commander, submitButtonSelector)) {
@@ -225,17 +292,31 @@ export async function processModalApplication({
     console.error('❌ Application button is still disabled after entering the message!');
     await logModalText({ commander, title: '📋 Reason from modal:' });
     console.error('💡 Closing modal and skipping this vacancy...');
-    return skipModal({ commander, reason: 'button_disabled' });
+    return skip('button_disabled');
   }
 
   if (isFullFormOpened(commander)) {
     return FULL_FORM_OPENED;
   }
-  const autoSend = Boolean(autofilledExactly) &&
-    allAnswersExact(await extractPageQuestions({ evaluate: commander.evaluate }), await readQADatabase());
+  const autoSend = exactAfterAutofill &&
+    allAnswersExact(await extractPageQuestions({ evaluate: commander.evaluate }), savedBefore);
   if (autoSend) {
     console.log('✅ Every answer is the saved answer of the very same question - sending without asking');
   }
+  const decision = await decideSend({ hasQuestions, autoSend, autoSubmit, skip: 'skip this vacancy' });
+  if (decision === 'wait') {
+    console.log('Not every answer is the saved answer of the very same question, so the popup is not sent unattended');
+    return waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQA, skippedVacancies });
+  }
+  if (decision === 'skip') {
+    await saveTyped();
+    return skip('skipped_by_user');
+  }
+  if (decision === 'withdrawn') {
+    return { success: false, reason: 'withdrawn' };
+  }
+  // The answers go with the application, so they are saved, like the full form's
+  await saveAll();
   try {
     await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend });
     console.log(`✅ ${commander.engine}: clicked submit button`);
@@ -246,7 +327,7 @@ export async function processModalApplication({
     }
     console.error(`❌ Failed to click submit button: ${error.message}`);
     console.error('💡 Closing modal and skipping this vacancy...');
-    return skipModal({ commander, reason: 'click_failed' });
+    return skip('click_failed');
   }
 
   await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
@@ -442,28 +523,72 @@ function withButtonAt({ commander, selector, buttonIndex, action, defaultValue }
 }
 
 /**
- * Title and company of the vacancy card holding the button at the given index
- * @returns {Promise<string>}
+ * Text of the vacancy card holding the button at the given index, and its title with the employer
+ * @returns {Promise<{lines: string[], title: string}>}
  */
 async function readVacancyCard({ commander, selector, buttonIndex }) {
   const { value } = await commander.safeEvaluate({
-    fn: (baseSelector, index) => {
+    fn: (baseSelector, index, titleSelector, employerSelector) => {
       let card = document.querySelectorAll(baseSelector)[index];
       while (card && !card.querySelector('a[href*="/vacancy/"]')) {
         card = card.parentElement;
       }
-      return card?.innerText.split('\n').map((line) => line.trim()).filter(Boolean) ?? [];
+      const text = (element) => element?.innerText.replace(/\s+/g, ' ').trim() ?? '';
+      const title = text(card?.querySelector(titleSelector) ?? card?.querySelector('a[href*="/vacancy/"]'));
+      const employer = text(card?.querySelector(employerSelector));
+      return {
+        lines: card?.innerText.split('\n').map((line) => line.trim()).filter(Boolean) ?? [],
+        title: [title, employer].filter(Boolean).join(' | '),
+      };
     },
-    args: [selector, buttonIndex],
-    defaultValue: [],
+    args: [selector, buttonIndex, SELECTORS.vacancyCardTitle, SELECTORS.vacancyCardEmployer],
+    defaultValue: { lines: [], title: '' },
     operationName: 'vacancy card text',
     silent: true,
   });
-  return value;
+  return value ?? { lines: [], title: '' };
 }
 
 function describeVacancyCard(lines) {
   return lines.length > 0 ? `"${lines.slice(0, 4).join(' | ')}"` : 'the next vacancy';
+}
+
+/**
+ * The description of a vacancy (title, work format, employment and description text) for the
+ * on-site vacancy filters, read with ONE request: a same-origin fetch of the vacancy page's HTML
+ * from the list page, parsed without rendering, so there is no navigation and no scripts, images
+ * or further requests. Neither the search card nor the application popup or form shows the
+ * description, and opening the vacancy page in the tab would cost a navigation with all its
+ * assets. It is read only when the card does not settle the filters (vacancy-filters.mjs
+ * needsDescription: no programming or remote sign on the card), right before the vacancy would be
+ * opened anyway, and the orchestrator keeps the pause between vacancies after it
+ * @returns {Promise<string>} '' when it could not be read (then the card alone is used)
+ */
+export async function readVacancyDescription({ commander, vacancyId }) {
+  const { value } = await commander.safeEvaluate({
+    fn: async (id, partsSelector) => {
+      try {
+        const response = await fetch(`/vacancy/${id}`, { credentials: 'include', headers: { Accept: 'text/html' } });
+        if (!response.ok) {
+          return '';
+        }
+        const page = new window.DOMParser().parseFromString(await response.text(), 'text/html');
+        return [...page.querySelectorAll(partsSelector)]
+          .map((element) => element.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+      } catch {
+        return '';
+      }
+    },
+    args: [String(vacancyId), SELECTORS.vacancyDescriptionParts],
+    defaultValue: '',
+    operationName: 'vacancy description for the vacancy filters',
+    silent: true,
+  });
+  const description = value ?? '';
+  console.log(description
+    ? `📄 Read the description of vacancy ${vacancyId} (${description.length} characters) for the on-site filters`
+    : `⚠️  Could not read the description of vacancy ${vacancyId}; the vacancy filters use its card only`);
+  return description;
 }
 
 /**
@@ -500,7 +625,8 @@ async function clickVacancyButton({ commander, selector, buttonIndex }) {
 
 /**
  * Handle post-click navigation and redirects
- * @returns {Promise<{onTargetPage: boolean, status?: string}>}
+ * @returns {Promise<{onTargetPage: boolean, status?: string, url?: string}>} `url` of the separate
+ *   application page the user filled in
  */
 async function handlePostClickNavigation({ commander, waitForUrlCondition, START_URL, pageClosedByUser }) {
   // Wait for modal to appear or (delayed) redirects to complete
@@ -531,7 +657,7 @@ async function handlePostClickNavigation({ commander, waitForUrlCondition, START
 
   console.log('✅ Returned to target page! Continuing with button loop...');
   await commander.wait({ ms: 1000, reason: 'page to fully load after manual navigation' });
-  return { onTargetPage: false, status: 'manual_form_completed' };
+  return { onTargetPage: false, status: 'manual_form_completed', url: currentUrl };
 }
 
 /**
@@ -543,7 +669,7 @@ async function hasLimitError({ commander }) {
 
 /**
  * Wait for application modal to appear and check for limit errors
- * @returns {Promise<{appeared: boolean, limitError?: boolean, directApplication?: boolean, status?: string}>}
+ * @returns {Promise<{appeared: boolean, limitError?: boolean, directApplication?: boolean, url?: string, status?: string}>}
  */
 async function waitForApplicationModal({ commander }) {
   let appeared = true;
@@ -555,8 +681,9 @@ async function waitForApplicationModal({ commander }) {
     appeared = false;
   }
 
-  if ((await checkAndCloseDirectApplicationModal({ commander })).isDirectApplication) {
-    return { appeared, directApplication: true, status: 'direct_application' };
+  const direct = await checkAndCloseDirectApplicationModal({ commander });
+  if (direct.isDirectApplication) {
+    return { appeared, directApplication: true, url: direct.url, status: 'direct_application' };
   }
 
   if (!appeared) {
@@ -572,19 +699,27 @@ async function waitForApplicationModal({ commander }) {
   return { appeared };
 }
 
+/** Statuses of the list button click, as reasons of a skip (skipped-vacancies.mjs) */
+const CLICK_SKIP_REASONS = { button_disabled: 'apply_button_disabled', click_error: 'apply_click_failed' };
+
 /**
  * Find and process vacancy buttons on the search page
- * Returns status about what was found and processed
+ * Returns status about what was found and processed; `descriptionRead` tells that the vacancy
+ * description was requested, which counts as opening the vacancy for the pacing
  */
 export async function findAndProcessVacancyButton({
   commander,
   MESSAGE,
   ignoreVacanciesWithQuestionnaire = false,
-  addIgnoredVacancyId = async () => false,
   deferredQuestions = null,
   readQADatabase = null,
+  addOrUpdateQA = null,
   autoSendExact = false,
+  autoSubmit = false,
+  onMissingAnswers = 'wait',
   vacancyFilters = null,
+  skippedVacancies = null,
+  verbose = false,
   waitForUrlCondition,
   START_URL,
   pageClosedByUser,
@@ -609,13 +744,18 @@ export async function findAndProcessVacancyButton({
     log.debug(() => `🔍 Marked vacancy ID ${vacancyId} as processed (total: ${processedVacancyIds.size})`);
   }
 
-  const cardLines = await readVacancyCard({ commander, selector, buttonIndex });
-  // Checked before the click, so a vacancy filtered out costs no request
-  const filterMatch = await vacancyFilters?.match({ vacancy: cardLines.join('\n') });
+  const { lines: cardLines, title } = await readVacancyCard({ commander, selector, buttonIndex });
+  const card = cardLines.join('\n');
+  // The description only when the card does not settle the filters (one request, see readVacancyDescription)
+  const descriptionRead = Boolean(vacancyFilters && vacancyId && await vacancyFilters.needsDescription?.(card));
+  const description = descriptionRead ? await readVacancyDescription({ commander, vacancyId }) : '';
+  vacancyFilters?.keepDescription?.(vacancyId, description);
+  // Checked before the click, so a vacancy filtered out by its card costs no request
+  const filterMatch = await vacancyFilters?.match({ vacancy: card, description });
   if (filterMatch) {
     console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)}): ${describeVacancyCard(cardLines)}`);
-    await vacancyFilters.remember(vacancyId, filterMatch);
-    return { status: 'filtered_out', vacancyId };
+    await vacancyFilters.remember(vacancyId, filterMatch, { title });
+    return { status: 'filtered_out', vacancyId, descriptionRead };
   }
   if (isInteractive()) {
     console.log(`🧪 Applying to ${describeVacancyCard(cardLines)}`);
@@ -623,18 +763,37 @@ export async function findAndProcessVacancyButton({
 
   const clickResult = await clickVacancyButton({ commander, selector, buttonIndex });
   if (!clickResult.success) {
+    if (CLICK_SKIP_REASONS[clickResult.status]) {
+      await noteSkip(skippedVacancies, vacancyId, { reason: CLICK_SKIP_REASONS[clickResult.status], title });
+    }
     return { status: clickResult.status, vacancyId };
   }
 
   const navigationResult = await handlePostClickNavigation({ commander, waitForUrlCondition, START_URL, pageClosedByUser });
   if (!navigationResult.onTargetPage) {
+    if (navigationResult.status === 'manual_form_completed') {
+      // The application went on on another site; listed so its form can be prefilled again
+      await noteSkip(skippedVacancies, vacancyId, { reason: 'external_site', title, url: navigationResult.url });
+    }
     return { status: navigationResult.status, vacancyId };
   }
 
   const modalResult = await waitForApplicationModal({ commander });
   if (modalResult.directApplication) {
+    await noteSkip(skippedVacancies, vacancyId, {
+      reason: 'external_site',
+      title,
+      url: modalResult.url ?? `https://hh.ru/vacancy/${vacancyId}`,
+    });
     console.log(`✅ Direct application skipped, continuing with next vacancy... (${processedVacancyIds.size} vacancies processed in session)`);
     return { status: 'direct_application_skipped', vacancyId };
+  }
+  if (modalResult.limitError && vacancyId) {
+    // Nothing was sent: the vacancy is opened again after the cooldown
+    processedVacancyIds.delete(vacancyId);
+  }
+  if (!modalResult.appeared) {
+    await noteSkip(skippedVacancies, vacancyId, { reason: 'modal_timeout', title });
   }
   if (!modalResult.appeared || modalResult.limitError) {
     return { status: modalResult.status, vacancyId };
@@ -647,11 +806,17 @@ export async function findAndProcessVacancyButton({
       MESSAGE,
       ignoreVacanciesWithQuestionnaire,
       vacancyId,
-      addIgnoredVacancyId,
+      vacancy: card,
+      title,
       deferredQuestions,
       readQADatabase,
+      addOrUpdateQA,
       autoSendExact,
+      autoSubmit,
+      onMissingAnswers,
       vacancyFilters,
+      skippedVacancies,
+      verbose,
     });
   } catch (error) {
     // A wait for a popup element fails once hh.ru has switched to the full form

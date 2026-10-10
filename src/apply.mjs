@@ -13,7 +13,6 @@
 import path from 'path';
 import { isNavigationError, isTimeoutError, makeBrowserCommander } from 'browser-commander';
 import { createQADatabase } from './qa-database.mjs';
-import { createIgnoredVacanciesDatabase } from './ignored-vacancies-db.mjs';
 import { enableDebugLevel } from './logging.mjs';
 import { createConfig, getUserDataDir } from './config.mjs';
 import { createOrchestrator } from './orchestrator.mjs';
@@ -25,12 +24,10 @@ import { withCaptchaGuard } from './captcha.mjs';
 import { createCaptchaPrefill } from './captcha-solver.mjs';
 import { createDeferredQuestions, formatQuestions } from './deferred-questions.mjs';
 import { createVacancyFilters } from './vacancy-filters.mjs';
+import { createSkippedVacancies } from './skipped-vacancies.mjs';
 import { expandContacts, loadContacts, withContacts } from './contacts.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
-const { readIgnoredVacancyIds, addIgnoredVacancyId } = createIgnoredVacanciesDatabase(
-  path.join(process.cwd(), 'data', 'ignored-vacancy-ids.txt'),
-);
 
 let session = null;
 let commander = null;
@@ -94,12 +91,20 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     console.log(`Loaded ${filteredVacancyIds.size} vacancy ID(s) filtered out before (data/filtered-vacancies.lino)`);
   }
 
-  if (argv.ignoreVacanciesWithQuestionnaire) {
-    const ignoredVacancyIds = await readIgnoredVacancyIds();
-    ignoredVacancyIds.forEach(markVacancyAsProcessed);
-    if (ignoredVacancyIds.size > 0) {
-      console.log(`Loaded ${ignoredVacancyIds.size} ignored questionnaire vacancy ID(s) from disk`);
-    }
+  // Every other skip is kept with its reason; final ones (and transient ones skipped twice) are not opened
+  const skippedVacancies = createSkippedVacancies(path.join(process.cwd(), 'data', 'skipped-vacancies.lino'));
+  const migrated = await skippedVacancies.importIgnoredVacancyIds(path.join(process.cwd(), 'data', 'ignored-vacancy-ids.txt'));
+  if (migrated > 0) {
+    console.log(`Moved ${migrated} questionnaire vacancy ID(s) from data/ignored-vacancy-ids.txt to data/skipped-vacancies.lino`);
+  }
+  const skippedVacancyIds = await skippedVacancies.skippedVacancyIds({
+    ignoreQuestionnaires: argv.ignoreVacanciesWithQuestionnaire,
+  });
+  skippedVacancyIds.forEach(markVacancyAsProcessed);
+  const externalSite = [...(await skippedVacancies.read()).values()].filter(({ reason }) => reason === 'external_site');
+  if (skippedVacancyIds.size > 0) {
+    console.log(`Loaded ${skippedVacancyIds.size} vacancy ID(s) skipped before (data/skipped-vacancies.lino; ` +
+      `${externalSite.length} to apply on the employer's site, see bun run skipped)`);
   }
 
   session = await connectOrLaunchBrowser({
@@ -138,9 +143,10 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     })),
     page: session.page,
     argv,
-    qaDB: { readQADatabase, addOrUpdateQA, addIgnoredVacancyId },
+    qaDB: { readQADatabase, addOrUpdateQA },
     deferredQuestions,
     vacancyFilters,
+    skippedVacancies,
     onPageClosed: () => shutdown('Tab close detected'),
     onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),

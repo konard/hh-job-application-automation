@@ -12,6 +12,7 @@
     "apply": "bun src/apply.mjs",
     "resume": "bun src/resume-export.mjs",
     "prefill-form": "bun src/prefill-form.mjs",
+    "skipped": "bun src/skipped.mjs",
     "answer-chats": "bun src/answer-chats.mjs",
     "experience": "bun src/experience-sync.mjs",
     "test-assignment": "bun src/test-assignment.mjs",

@@ -76,23 +76,6 @@ export function isButtonEnabled(commander, selector) {
   return commander.isEnabled({ selector, disabledClasses: ['disabled'] });
 }
 
-/**
- * Persist a vacancy ID that should be skipped because it has a questionnaire
- * @param {Function} addIgnoredVacancyId - Database method
- * @param {string|null} vacancyId - Vacancy ID
- */
-export async function rememberIgnoredVacancy(addIgnoredVacancyId, vacancyId) {
-  if (!vacancyId) {
-    return;
-  }
-  const wasAdded = await addIgnoredVacancyId(vacancyId);
-  console.log(
-    wasAdded
-      ? `💾 Saved ignored questionnaire vacancy ID: ${vacancyId}`
-      : `💾 Questionnaire vacancy ID already persisted: ${vacancyId}`,
-  );
-}
-
 const OVERLAYS = [
   { selector: SELECTORS.cookiesAccept, message: '🍪 Accepted the cookies policy banner' },
   // Asks for the desired salary to save it into the resume; it blocks the response form
