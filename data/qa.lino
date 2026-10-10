@@ -2605,3 +2605,7 @@ github.com/link-foundation"
   Да
 Ваши зарплатные ожидания на fulltime?
   От 6000 USDT на руки или эквивалент.
+Опишите кратко ваш опыт работы с AI и ваш пайплайн работы с AI?
+  "Решаю при помощи AI почти все задачи по кодингу: активно использую Claude Code CLI и OpenAI Codex CLI, для Frontend - Playwright MCP. Поверх их автономного режима использую свою интеграцию с GitHub, которая превращает AI-агента в команду разработчиков: https://github.com/link-assistant/hive-mind"
+"Приведите примеры решений, которые вы сделали на основе AI (как сервис/продукт)?"
+  "Kaiten, Capico, Evirma и Hive Mind (https://github.com/link-assistant/hive-mind), в последнем случае Hive Mind пишет свой код сам, я только ставлю задачи и провожу ревью."
