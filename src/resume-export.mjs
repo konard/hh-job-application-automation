@@ -14,7 +14,7 @@ import path from 'path';
 import { chromium } from 'playwright';
 import TurndownService from 'turndown';
 import { makeConfig } from 'lino-arguments';
-import { chooseResume, readResumes } from './resumes.mjs';
+import { describeChoice, pickResume, readResumes } from './resumes.mjs';
 import { collectStack, formatStackMarkdown } from './resume-stack.mjs';
 import { SELECTORS } from './hh-selectors.mjs';
 
@@ -134,12 +134,12 @@ async function main() {
       await page.goto(RESUMES_URL, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector(SELECTORS.resume, { timeout: 20000 }).catch(() => {});
       const resumes = await readResumes({ evaluate: (fn, arg) => page.evaluate(fn, arg) });
-      const resume = chooseResume(resumes);
-      if (!resume?.hash) {
+      const choice = pickResume(resumes);
+      if (!choice.resume?.hash) {
         throw new Error(`No resumes found on ${RESUMES_URL}; is the browser on port ${argv.browserPort} logged in to hh.ru?`);
       }
-      hash = resume.hash;
-      console.log(`📄 Resume "${resume.title}"${resume.updatedText ? ` (${resume.updatedText})` : ''} of ${resumes.length}`);
+      hash = choice.resume.hash;
+      console.log(describeChoice(choice, resumes.length));
     }
 
     // Download from inside the page, so the browser's own TLS stack and cookies are used

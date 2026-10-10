@@ -2,42 +2,57 @@
  * Debug recording with browser-commander traces
  *
  * - `trace/` - browser-commander trace bundle in continuous mode: DOM snapshot per
- *   checkpoint plus every DOM mutation, interactions, navigations and console
+ *   checkpoint plus every DOM mutation, interactions, navigations, console messages,
+ *   page errors and failed requests
  * - `trace.lino` - Links Notation export of that trace, written while recording
- * - `network.lino` - Links Notation log of document/XHR/fetch responses.
- *   Workaround: browser-commander traces record only failed requests.
+ *   (timeline, including console and page errors, and checkpoints)
+ * - `network.lino` - document/XHR/fetch requests and responses with headers and bodies
+ *   (`trace-network.mjs`). Workaround: browser-commander records only failed requests.
+ * - `dom.lino` - DOM snapshots after every load and the bundle's DOM mutations as links
+ *   (`trace-dom.mjs`). Workaround: browser-commander's export only points at those files.
  *
  * @module tracing
  */
 
 import fs from 'fs';
 import path from 'path';
-import { Link, formatLinks } from 'links-notation';
 import { log } from './logging.mjs';
-
-const RECORDED_RESOURCE_TYPES = new Set(['document', 'xhr', 'fetch']);
-
-let trace = null;
-
-const field = (name, value) => new Link(name, [new Link(String(value))]);
+import { recordNetwork } from './trace-network.mjs';
+import { recordDom } from './trace-dom.mjs';
 
 /**
- * Append one response to the network log
+ * Trace options passed to browser-commander's startTrace
+ *
+ * - `openShadowRoots: false` - copying open shadow roots assigns `innerHTML`, which hh.ru's
+ *   Trusted Types policy rejects, and the whole checkpoint is dropped (browser-commander #140)
+ * - hidden inputs hold CSRF tokens, so their values are redacted like passwords
+ * - a day-long run writes more than the default 256 MB, after which every checkpoint and
+ *   mutation batch is dropped
  */
-function recordResponse(stream, response) {
-  const request = response.request();
-  if (!RECORDED_RESOURCE_TYPES.has(request.resourceType())) {
-    return;
-  }
-  const link = new Link('response', [
-    field('at', new Date().toISOString()),
-    field('method', request.method()),
-    field('status', response.status()),
-    field('type', request.resourceType()),
-    field('contentType', (response.headers()['content-type'] ?? '').split(';')[0] || '-'),
-    field('url', response.url()),
-  ]);
-  stream.write(`${formatLinks([link])}\n`);
+export const TRACE_OPTIONS = Object.freeze({
+  mode: 'continuous',
+  dom: { openShadowRoots: false },
+  privacy: { redactSelectors: ['input[type=hidden]', 'input[name*=xsrf]', 'input[name*=csrf]', 'input[name*=token]'] },
+  limits: { maxBundleBytes: 1024 * 1024 * 1024 },
+});
+
+const STOP_FLUSH_MS = 15000;
+
+let trace = null;
+let recorders = {};
+let streams = [];
+
+const report = (what) => (error) => log.debug(() => `${what} log error: ${error.message}`);
+
+/**
+ * An append-only Links Notation file; late writes after the end are dropped, not thrown
+ * @param {string} file
+ * @returns {{stream: fs.WriteStream, write: (text: string) => void}}
+ */
+function openLog(file) {
+  const stream = fs.createWriteStream(file, { flags: 'a' });
+  stream.on('error', report(path.basename(file)));
+  return { stream, write: (text) => !stream.writableEnded && stream.write(text) };
 }
 
 /**
@@ -51,21 +66,21 @@ export async function startTracing({ commander, page }) {
   const directory = path.join(process.cwd(), 'logs', 'traces', new Date().toISOString().replace(/[:.]/g, '-'));
   fs.mkdirSync(directory, { recursive: true });
 
+  // The network log starts first, so the requests of the initial checkpoint are in it
+  const network = openLog(path.join(directory, 'network.lino'));
+  const networkRecorder = recordNetwork({ page, write: network.write, onError: report('Network') });
+
   trace = await commander.startTrace({
+    ...TRACE_OPTIONS,
     output: path.join(directory, 'trace'),
-    mode: 'continuous',
     links: { output: path.join(directory, 'trace.lino') },
   });
 
-  const network = fs.createWriteStream(path.join(directory, 'network.lino'), { flags: 'a' });
-  page.on('response', (response) => {
-    try {
-      recordResponse(network, response);
-    } catch (error) {
-      log.debug(() => `Network log error: ${error.message}`);
-    }
-  });
+  const dom = openLog(path.join(directory, 'dom.lino'));
+  const domRecorder = recordDom({ page, bundle: trace.path, write: dom.write, onError: report('DOM') });
 
+  recorders = { network: networkRecorder, dom: domRecorder };
+  streams = [network.stream, dom.stream];
   console.log(`🎥 Recording trace to ${directory}`);
   return directory;
 }
@@ -76,13 +91,24 @@ export async function startTracing({ commander, page }) {
  */
 export async function checkpoint(name) {
   await trace?.checkpoint(name).catch((error) => log.debug(() => `Trace checkpoint failed: ${error.message}`));
+  // The checkpoint wrote the previous interval's mutations; they are converted in the background
+  void recorders.dom?.convertMutations();
 }
 
 /**
- * Finish the trace so the bundle and its Links Notation export are complete
+ * Finish the trace so the bundle and its Links Notation exports are complete
  */
 export async function stopTracing() {
   const current = trace;
+  const { network, dom } = recorders;
+  const open = streams;
   trace = null;
+  recorders = {};
+  streams = [];
+  network?.detach();
+  dom?.detach();
   await current?.stop().catch((error) => log.debug(() => `Trace stop failed: ${error.message}`));
+  dom?.convertMutations();
+  await Promise.all([network?.flush(), dom?.flush(STOP_FLUSH_MS)]);
+  await Promise.all(open.map((stream) => new Promise((resolve) => stream.end(resolve))));
 }

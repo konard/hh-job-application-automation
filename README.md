@@ -77,7 +77,9 @@ resume and applies to the vacancies hh.ru suggests for it:
   its hh.ru login, or a social sign-in through it, is copied into the automation profile. Use
   `--login-from chrome` to pick a browser, or `--manual-login` to log in yourself.
 - **Resume** - the suggested vacancies of the most recently updated resume are opened, unless `--url`
-  is given.
+  is given. The update dates come from hh.ru's own state embedded in the resumes page (the page shows
+  none), so choosing costs no extra request; the log names the resume and why it was chosen. A
+  kept-open browser already on a search page keeps its filters and only switches the resume.
 - **Pace** - `--job-application-interval` seconds (default 240) plus a random extra of up to a
   quarter of it pass between opened vacancies: 4-5 minutes, which still fits hh.ru's 200
   applications a day (261-320 a day of continuous work).
@@ -87,9 +89,14 @@ resume and applies to the vacancies hh.ru suggests for it:
 - **Browser lifecycle** - Chrome is closed when the script exits. With `--keep-browser-open` it keeps
   running, the next run reuses it and its open page, and it closes itself after
   `--browser-idle-timeout` minutes (default 30) without use.
-- **Debug traces** - every run records a browser-commander trace (DOM snapshots, DOM mutations,
-  interactions, console) with a Links Notation export, plus a `network.lino` request log, in
-  `logs/traces/<time>/`. Disable with `--no-trace`.
+- **Debug traces** - every run records, in `logs/traces/<time>/`, a browser-commander trace (DOM
+  snapshots, DOM mutations, interactions, console messages, page errors, failed requests) with its
+  Links Notation export `trace.lino`, plus two Links Notation logs written alongside it:
+  `network.lino` (document/XHR/fetch requests and responses with headers and bodies) and `dom.lino`
+  (the DOM after every page load and every DOM mutation). Cookies, authorization and CSRF headers,
+  password/token form fields and hidden input values are redacted (names kept), long bodies are cut
+  with a truncation marker and binary bodies are skipped with their size. `logs/` is gitignored, but
+  the traces still hold page content: keep them local. Disable with `--no-trace`.
 
 **Quick setup:**
 

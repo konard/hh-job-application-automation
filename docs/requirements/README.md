@@ -73,7 +73,7 @@ Sections:
 | ID | User's words | Requirement | Check | Status | Evidence |
 |---|---|---|---|---|---|
 | RUN1 | «start make applications to suggested vacancies … All logic must be automated» · «So you can do the default logic.» | With no URL given, the run applies to hh.ru's suggested vacancies of the chosen resume, unattended | `bun run apply` with no `--url` opens `/search/vacancy?resume=<hash>` | ✅ | `findSuggestedVacanciesUrl()` in `src/resumes.mjs`; `url` default `''`; 101b754 |
-| RUN2 | «for the most recently updated CV» · «for the most recent resume/cv» | The resume chosen is the one updated last | Two resumes with different update dates: the newer is used | 🚧 | `chooseResume()` uses an «обновлено …» date when the profile page shows one; hh.ru's profile shows none, so it falls back to hh.ru's list order. The update date is known from the resume export («Резюме обновлено …», RES1) but not used for the choice. `tests/resumes.test.mjs` |
+| RUN2 | «for the most recently updated CV» · «for the most recent resume/cv» | The resume chosen is the one updated last | Two resumes with different update dates: the newer is used | 🧪 | The resumes page shows no date, but it embeds hh.ru's state (`<template class="ResumeProfileFront-InitialState">`: `applicantResumes[]._attributes.updated` per hash, and `latestResumeHash`), found in a saved page of `logs/traces`. `pickResume()` takes the latest `updated` (else a visible «Обновлено …» text, then `latestResumeHash`, then hh.ru's order) and logs which resume and why; no extra request on the resumes page. A kept-open browser already on a search page fetches `/applicant/resumes` once from inside the page and switches the `resume` parameter, filters kept (`latestResumeSearchUrl`). Russian dates: сегодня/вчера, «7 октября 2026 в 14:28», 07.10.2026, «5 минут назад». On the saved real page it picks hh.ru's own `latestResumeHash`. Not run live yet. `src/resumes.mjs`, `tests/resumes.test.mjs` |
 | RUN3 | «И проверяй на ошибки и возврат к списку вакансий в поиске после успешного отклика. … сейчас тут застряли.» | After a sent application the run returns to the search list right away (no 36 s wait for the vacancy page) | Log: sent → list within seconds | ✅ | 86e3b0a; browser-commander #143, #144 |
 | RUN4 | «Chat is not closed after we send first message there.» | The employer chat panel that hh.ru opens after an application is closed | «💬 Closed the chat panel» (live, run 13) | ✅ | a389a53 |
 | RUN5 | «we have multiple critical bugs here.» (two popups were sent unconfirmed while a captcha was shown) | An application hh.ru does not confirm as sent stops the run (unattended) or waits for the user; it never moves on to the next vacancy | «hh.ru did not mark vacancy … as responded» → wait | ✅ | a389a53; `isVacancyCardResponded` in `src/vacancies.mjs` |
@@ -109,9 +109,9 @@ Sections:
 
 | ID | User's words | Requirement | Check | Status | Evidence |
 |---|---|---|---|---|---|
-| TRACE1 | «Latest version of browser commander should provide full links notation recording of dom + changes to it, we must use it, if something is missing report.» | Every run records a browser-commander trace with Links Notation export, including DOM and its changes | `logs/traces/<time>/trace.lino` | 🚧 | `src/tracing.mjs` (`startTrace` with `links`); the LN export has the timeline and checkpoints but not DOM content or mutations, and checkpoints fail on hh.ru's Trusted Types: reported as browser-commander #140 |
-| TRACE2 | «Check DOM, we also may need requests and responses recording by browser commander, there might be some way to find the data.» | Requests and responses (document/xhr/fetch) are recorded with the trace | `logs/traces/<time>/network.lino` | 🚧 response metadata only (method, status, type, URL); bodies and headers are not recorded yet | `src/tracing.mjs` workaround; browser-commander #140 |
-| TRACE3 | «So browser commander provides all the best tools for debug out of the box.» | Debugging tools (trace, network, console) come from browser-commander, not from local code | — | 🚧 | Requested upstream in browser-commander #140; local workaround stays until then |
+| TRACE1 | «Latest version of browser commander should provide full links notation recording of dom + changes to it, we must use it, if something is missing report.» | Every run records a browser-commander trace with Links Notation export, including DOM and its changes | `logs/traces/<time>/trace.lino`, `dom.lino` | 🧪 | browser-commander 0.26.3 and 0.27.0 (same trace code) record DOM per checkpoint and every mutation in the bundle, but `trace.lino` only points at those files. Workaround: `dom.lino` holds a `(snapshot: …)` of the DOM after every load (`page.content()`, read-only: nothing added to the page, no Trusted Types sink) and every bundle mutation batch as `(mutations: (attributes …) (childList …) (text …) (liveState …))`, hidden/password input values and tokens redacted, capped (4 MB per snapshot, 16 MB per interval) with truncation markers. The Trusted Types checkpoint failure (`template.innerHTML` for open shadow roots, 4 of 34 saved traces) is avoided with `dom.openShadowRoots: false`; the 256 MB bundle cap that dropped checkpoints in a 9-hour run is raised to 1 GB. On saved traces: a 27 MB mutation file converts in ~0.1 s, a 3 MB snapshot in ~10 ms. Upstream: browser-commander #140 plus the new issue drafts (DOM in the LN export, Trusted Types, bundle size). `src/trace-dom.mjs`, `src/tracing.mjs`, `tests/trace-dom.test.mjs` |
+| TRACE2 | «Check DOM, we also may need requests and responses recording by browser commander, there might be some way to find the data.» | Requests and responses (document/xhr/fetch) are recorded with the trace | `logs/traces/<time>/network.lino` | 🧪 | browser-commander (0.26.3, 0.27.0) records only failed requests; its network tracker counts pending requests for idle waits. `network.lino` now holds per exchange: method, status, type, URL (token query parameters redacted), request and response headers (Cookie, Set-Cookie, Authorization, `X-*token*`, CSRF/XSRF values redacted, names kept), request body (form posts; password/xsrf/token fields redacted by name in form, JSON and multipart bodies) and response body (HTML hidden inputs and embedded tokens redacted), text capped at 256 KB with `(…Truncated: (bytes) (kept))`, binary bodies skipped with their size and not transferred. The listener only takes a timestamp; headers and bodies are read afterwards. The DOM data asked about is in hh.ru's embedded state, kept in `dom.lino` snapshots and document bodies. `src/trace-network.mjs`, `src/trace-redaction.mjs`, `tests/trace-network.test.mjs` |
+| TRACE3 | «So browser commander provides all the best tools for debug out of the box.» | Debugging tools (trace, network, console) come from browser-commander, not from local code | `trace.lino` timeline | 🧪 | Console messages, page errors, failed requests, dialogs, navigations and interactions come from browser-commander's trace (all event sources kept; e.g. 109 console records in one saved run, page errors in many), written to `trace.lino`. Network headers/bodies and DOM as links are still local workarounds (TRACE1, TRACE2) until browser-commander #140 and the new issue drafts land. `tests/trace-dom.test.mjs` (event sources) |
 | TRACE4 | «Also double check browser-commander have all the tools for gif and video generation in multiple formats, and also easy and unified API for getting screenshots and so on for all supported engines and languages.» | Survey browser-commander's screenshot / video / GIF / trace-render APIs in all engines and languages, and report the gaps | Survey done: no commander-level screenshot, video or GIF API | ✅ | browser-commander #142 |
 
 ## CONF: test mode, confirmations and auto-send
@@ -341,10 +341,10 @@ of them, so none is lost.
 |---|---|---|---|---|---|---|
 | DEP | 5 | 4 | | 1 | | |
 | LOGIN | 8 | 5 | 1 | 1 | 1 | |
-| RUN | 9 | 8 | | 1 | | |
+| RUN | 9 | 8 | 1 | | | |
 | PACE | 6 | 5 | | | | 1 |
 | BRW | 7 | 7 | | | | |
-| TRACE | 4 | 1 | | 3 | | |
+| TRACE | 4 | 1 | 3 | | | |
 | CONF | 11 | 9 | 1 | | | 1 |
 | QA | 12 | 11 | | 1 | | |
 | CAP | 9 | 8 | | | | 1 |
@@ -355,7 +355,7 @@ of them, so none is lost.
 | EXP | 7 | 3 | 2 | 2 | | |
 | SEC | 10 | 9 | | 1 | | |
 | PROC | 14 | 14 | | | | |
-| **Total** | **145** | **107** | **22** | **12** | **1** | **3** |
+| **Total** | **145** | **107** | **26** | **8** | **1** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
@@ -363,5 +363,5 @@ requirement (contacts as placeholders), listed in both places. Section D of form
 all of it) is covered by SEC, PACE6 and PROC1.
 
 Open work, in order: live checks of the chat items (C4, C7, C9–C12), LinkedIn login (LOGIN7) and the LinkedIn side of the experience sync (EXP2, EXP4), a live check of saving sent external-form
-answers on a real form (B14), the most recently updated resume (RUN2), on-site-only vacancy filtering (FLT5), and the
-upstream trace gaps (TRACE1, TRACE3).
+answers on a real form (B14), on-site-only vacancy filtering (FLT5), live checks of the resume choice (RUN2) and of
+the trace workarounds (TRACE1–TRACE3), and the upstream trace gaps they work around.
