@@ -181,3 +181,16 @@ describe('on-site vacancies that are not programming (FLT5), with the rules of d
     assert.equal(filters.description('138000002'), '');
   });
 });
+
+describe('on-site rules and the user\'s own resume', () => {
+  const rules = { vacancy: [], question: [], page: [], 'on-site': ['водитель', 'вахта'], programming: ['разработчик'], remote: ['удаленно'] };
+
+  test('a rule word is found only at the start of a word: «водитель» is not inside «Руководитель»', () => {
+    assert.equal(findFilterMatch(rules, { vacancy: 'Growth Engineer (SEO/GEO)', description: 'Руководитель направления роста' }), null);
+    assert.equal(findFilterMatch(rules, { vacancy: 'Водитель-экспедитор' })?.pattern, 'водитель');
+  });
+
+  test('the form page, which shows the user\'s resume title, does not trigger on-site rules', () => {
+    assert.equal(findFilterMatch(rules, { vacancy: 'Growth Engineer (SEO/GEO)', page: 'Программист/Разработчик/Руководитель; водитель' }), null);
+  });
+});

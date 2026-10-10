@@ -61,7 +61,9 @@ export function normalizeFilterText(text) {
 function findPattern(patterns = [], texts) {
   for (const pattern of patterns) {
     const fragment = normalizeFilterText(pattern);
-    const text = fragment && texts.find((candidate) => normalizeFilterText(candidate).includes(fragment));
+    // At the start of a word: «водитель» is not found inside «руководитель»
+    const atWordStart = fragment && new RegExp(`(^|[^\\p{L}\\p{N}])${fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'u');
+    const text = fragment && texts.find((candidate) => atWordStart.test(normalizeFilterText(candidate)));
     if (text) {
       return { pattern, text };
     }
@@ -100,7 +102,8 @@ export function findFilterMatch(rules, { vacancy = '', description = '', questio
   if (isGuarded(rules, [vacancy, description])) {
     return null;
   }
-  const onSite = findPattern(rules['on-site'], [vacancy, description, ...questions, page]);
+  // Nor is the form page matched: «Руководитель» or «водитель» in the user's own resume says nothing of the job
+  const onSite = findPattern(rules['on-site'], [vacancy, description, ...questions]);
   return onSite && { kind: 'on-site', ...onSite };
 }
 
