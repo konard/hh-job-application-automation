@@ -79,6 +79,23 @@ export async function processModalApplication({
     return FULL_FORM_OPENED;
   }
 
+  // Before anything is typed into the popup
+  const filterMatch = await vacancyFilters?.match({
+    questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
+    page: (await commander.safeEvaluate({
+      fn: (selector) => document.querySelector(selector)?.innerText ?? '',
+      args: [SELECTORS.applicationForm],
+      defaultValue: '',
+      operationName: 'popup text for the vacancy filters',
+      silent: true,
+    })).value,
+  });
+  if (filterMatch) {
+    console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
+    await vacancyFilters.remember(vacancyId, filterMatch);
+    return skipModal({ commander, reason: 'filtered_out' });
+  }
+
   // Expand the cover letter section unless the textarea is already visible (cover letter might be mandatory)
   const textareaVisible = await commander.count({ selector: textareaSelector }) > 0 &&
     await commander.isVisible({ selector: textareaSelector });
@@ -134,22 +151,6 @@ export async function processModalApplication({
     console.log('💡 --ignore-vacancies-with-questionnaire is enabled, skipping this vacancy');
     await rememberIgnoredVacancy(addIgnoredVacancyId, vacancyId);
     return skipModal({ commander, reason: 'questionnaire_ignored' });
-  }
-
-  const filterMatch = await vacancyFilters?.match({
-    questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
-    page: (await commander.safeEvaluate({
-      fn: (selector) => document.querySelector(selector)?.innerText ?? '',
-      args: [SELECTORS.applicationForm],
-      defaultValue: '',
-      operationName: 'popup text for the vacancy filters',
-      silent: true,
-    })).value,
-  });
-  if (filterMatch) {
-    console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
-    await vacancyFilters.remember(vacancyId, filterMatch);
-    return skipModal({ commander, reason: 'filtered_out' });
   }
 
   // Answered later: the vacancy is kept under its questions in deferred-questions.lino
