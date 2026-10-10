@@ -42,8 +42,6 @@ export function registerPageTriggers({
 }) {
   // ID of the vacancy whose vacancy_response page was visited last
   let lastVacancyResponseId = null;
-  // The trigger can fire again on the same page while the handler still runs
-  let isHandlingVacancyResponse = false;
 
   /**
    * An application was sent and hh.ru opened its vacancy page: count it once and go back
@@ -67,7 +65,10 @@ export function registerPageTriggers({
 
   /**
    * Page actions start only once the page is idle, which takes half a minute on hh.ru
-   * vacancy pages, so the sent application is detected as soon as the URL changes
+   * vacancy pages, so the sent application is detected as soon as the URL changes.
+   * browser-commander 0.28's `readyOn: 'domcontentloaded'` does not replace this watch: it
+   * starts on full page loads only (hh.ru opens the vacancy page in place), and a start is
+   * dropped while the form action still runs
    */
   const watchVacancyPage = async (vacancyId) => {
     for (let second = 0; second < 30 && lastVacancyResponseId === vacancyId; second++) {
@@ -91,6 +92,8 @@ export function registerPageTriggers({
   const unregisterVacancyResponse = commander.pageTrigger({
     name: 'vacancy-response-page',
     priority: 10,
+    // The trigger can fire again on the same page while the handler still runs: skipped
+    concurrency: 'skip',
     condition: makeUrlCondition(URL_PATTERNS.vacancyResponse),
     action: async (ctx) => {
       log.debug(() => `📋 [vacancy-response-page] Action started for: ${ctx.url}`);
@@ -107,18 +110,12 @@ export function registerPageTriggers({
         });
       });
 
-      if (isHandlingVacancyResponse) {
-        return;
-      }
-      isHandlingVacancyResponse = true;
       try {
         await handleVacancyResponsePage();
       } catch (error) {
         if (!commander.isActionStoppedError(error)) {
           console.error('Error in vacancy response handler:', error.message);
         }
-      } finally {
-        isHandlingVacancyResponse = false;
       }
     },
   });

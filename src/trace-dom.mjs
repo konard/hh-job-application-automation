@@ -169,7 +169,7 @@ export async function convertMutationFile(file, write, maxBytes = MAX_MUTATION_B
  * @param {string} options.bundle - Directory of the browser-commander trace bundle
  * @param {(text: string) => void} options.write - Receives Links Notation lines
  * @param {(error: Error) => void} [options.onError]
- * @returns {{convertMutations: () => Promise<void>, flush: (timeoutMs?: number) => Promise<void>, detach: () => void}}
+ * @returns {{convertMutations: (options?: {final?: boolean}) => Promise<void>, flush: (timeoutMs?: number) => Promise<void>, detach: () => void}}
  */
 export function recordDom({ page, bundle, write, onError = () => {} }) {
   const pending = new Set();
@@ -193,12 +193,17 @@ export function recordDom({ page, bundle, write, onError = () => {} }) {
   void snapshot('start');
 
   return {
-    /** Convert the mutation files the bundle has completed, in order, one at a time */
-    convertMutations() {
+    /**
+     * Convert the mutation files the bundle has completed, in order, one at a time. While
+     * recording, the newest file is left for later: browser-commander (0.28) appends the
+     * current interval to it every 500 ms. `final` (after the trace stopped) converts it too.
+     */
+    convertMutations({ final = false } = {}) {
       conversion = conversion.then(async () => {
         const directory = path.join(bundle, 'mutations');
         const files = fs.existsSync(directory) ? fs.readdirSync(directory).filter((name) => name.endsWith('.ndjson')).sort() : [];
-        for (const name of files.filter((file) => !converted.has(file))) {
+        const completed = final ? files : files.slice(0, -1);
+        for (const name of completed.filter((file) => !converted.has(file))) {
           converted.add(name);
           await convertMutationFile(path.join(directory, name), write);
         }

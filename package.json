@@ -31,7 +31,7 @@
     "test-anywhere": "^0.9.1"
   },
   "dependencies": {
-    "browser-commander": "^0.27.0",
+    "browser-commander": "^0.28.0",
     "links-notation": "^0.25.1",
     "lino-arguments": "^0.3.0",
     "log-lazy": "^1.0.4",

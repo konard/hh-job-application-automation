@@ -86,7 +86,7 @@ describe('convertMutationFile()', () => {
 });
 
 describe('recordDom()', () => {
-  test('snapshots at start and on every load, converts each completed mutation file once', async () => {
+  test('snapshots at start and on every load, converts each mutation file once it is complete', async () => {
     const bundle = fs.mkdtempSync(path.join(os.tmpdir(), 'trace-bundle-'));
     fs.mkdirSync(path.join(bundle, 'mutations'));
     fs.writeFileSync(path.join(bundle, 'mutations', '0001.ndjson'), `${JSON.stringify(batch)}\n`);
@@ -100,13 +100,20 @@ describe('recordDom()', () => {
     const lines = [];
     const recorder = recordDom({ page, bundle, write: (text) => lines.push(text) });
     listeners.load();
+    const mutationLines = () => lines.filter((line) => parse(line)[0].id === 'mutations').length;
+    // The newest file is the interval still being recorded (browser-commander appends to it)
     await recorder.convertMutations();
+    assert.equal(mutationLines(), 0);
     fs.writeFileSync(path.join(bundle, 'mutations', '0002.ndjson'), `${JSON.stringify(batch)}\n`);
     await recorder.convertMutations();
+    assert.equal(mutationLines(), 1);
+    fs.appendFileSync(path.join(bundle, 'mutations', '0002.ndjson'), `${JSON.stringify(batch)}\n`);
+    await recorder.convertMutations({ final: true });
+    await recorder.convertMutations({ final: true });
     await recorder.flush();
     const ids = lines.map((line) => parse(line)[0].id);
     assert.equal(ids.filter((id) => id === 'snapshot').length, 2);
-    assert.equal(ids.filter((id) => id === 'mutations').length, 2);
+    assert.equal(ids.filter((id) => id === 'mutations').length, 3);
     recorder.detach();
     assert.equal(listeners.load, undefined);
     fs.rmSync(bundle, { recursive: true, force: true });
@@ -114,10 +121,17 @@ describe('recordDom()', () => {
 });
 
 describe('TRACE_OPTIONS', () => {
-  test('avoid the Trusted Types failure and redact hidden inputs in the bundle', () => {
-    assert.equal(TRACE_OPTIONS.dom.openShadowRoots, false);
+  test('capture open shadow roots (Trusted Types safe since 0.28) and redact hidden inputs in the bundle', () => {
+    assert.equal(TRACE_OPTIONS.dom?.openShadowRoots, undefined);
     assert.ok(TRACE_OPTIONS.privacy.redactSelectors.includes('input[type=hidden]'));
     assert.equal(TRACE_OPTIONS.mode, 'continuous');
+  });
+
+  test('leave network capture, DOM links, rotation and gzip to the local recorders', () => {
+    assert.equal(TRACE_OPTIONS.network, undefined);
+    assert.equal(TRACE_OPTIONS.links, undefined);
+    assert.equal(TRACE_OPTIONS.limits.rotate, undefined);
+    assert.equal(TRACE_OPTIONS.gzip, undefined);
   });
 
   test('keep every browser-commander event source: console messages and page errors are on the timeline', () => {

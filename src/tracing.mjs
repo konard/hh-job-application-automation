@@ -7,9 +7,10 @@
  * - `trace.lino` - Links Notation export of that trace, written while recording
  *   (timeline, including console and page errors, and checkpoints)
  * - `network.lino` - document/XHR/fetch requests and responses with headers and bodies
- *   (`trace-network.mjs`). Workaround: browser-commander records only failed requests.
+ *   (`trace-network.mjs`). Kept: browser-commander 0.28's network capture redacts far less.
  * - `dom.lino` - DOM snapshots after every load and the bundle's DOM mutations as links
- *   (`trace-dom.mjs`). Workaround: browser-commander's export only points at those files.
+ *   (`trace-dom.mjs`). Kept: browser-commander 0.28's `links.dom` export is unredacted and
+ *   re-reads the whole bundle on every 500 ms mutation drain.
  *
  * @module tracing
  */
@@ -23,15 +24,19 @@ import { recordDom } from './trace-dom.mjs';
 /**
  * Trace options passed to browser-commander's startTrace
  *
- * - `openShadowRoots: false` - copying open shadow roots assigns `innerHTML`, which hh.ru's
- *   Trusted Types policy rejects, and the whole checkpoint is dropped (browser-commander #140)
  * - hidden inputs hold CSRF tokens, so their values are redacted like passwords
  * - a day-long run writes more than the default 256 MB, after which every checkpoint and
- *   mutation batch is dropped
+ *   mutation batch is dropped (browser-commander #148)
+ * - open shadow roots are captured again: 0.28 copies them without `innerHTML`, which hh.ru's
+ *   Trusted Types policy rejected (#140)
+ * - not used: its network capture (redacts only cookie/authorization headers and a few query
+ *   parameters, not form/JSON fields or tokens in bodies, and stores response bodies base64),
+ *   `links.dom` (unredacted, re-reads the whole bundle on every drain), `limits.rotate` (deletes
+ *   the oldest segments, moves the bundle) and `gzip` (compresses the mutation files before
+ *   dom.lino has read the last ones)
  */
 export const TRACE_OPTIONS = Object.freeze({
   mode: 'continuous',
-  dom: { openShadowRoots: false },
   privacy: { redactSelectors: ['input[type=hidden]', 'input[name*=xsrf]', 'input[name*=csrf]', 'input[name*=token]'] },
   limits: { maxBundleBytes: 1024 * 1024 * 1024 },
 });
@@ -91,7 +96,7 @@ export async function startTracing({ commander, page }) {
  */
 export async function checkpoint(name) {
   await trace?.checkpoint(name).catch((error) => log.debug(() => `Trace checkpoint failed: ${error.message}`));
-  // The checkpoint wrote the previous interval's mutations; they are converted in the background
+  // The checkpoint completed the previous interval's mutations; they are converted in the background
   void recorders.dom?.convertMutations();
 }
 
@@ -108,7 +113,7 @@ export async function stopTracing() {
   network?.detach();
   dom?.detach();
   await current?.stop().catch((error) => log.debug(() => `Trace stop failed: ${error.message}`));
-  dom?.convertMutations();
+  dom?.convertMutations({ final: true });
   await Promise.all([network?.flush(), dom?.flush(STOP_FLUSH_MS)]);
   await Promise.all(open.map((stream) => new Promise((resolve) => stream.end(resolve))));
 }

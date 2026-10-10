@@ -4,6 +4,7 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import { isNavigationError, withNavigationSafety } from 'browser-commander';
+import { isFormLeftDuringWait } from '../src/vacancy-response.mjs';
 
 describe('isNavigationError', () => {
   test('Returns false for null/undefined', () => {
@@ -191,5 +192,24 @@ describe('withNavigationSafety - Real-world usage patterns', () => {
 
     const result = await safeVerify('#input', 'test value');
     assert.deepEqual(result, { verified: false, navigationError: true });
+  });
+});
+
+describe('isFormLeftDuringWait', () => {
+  const FORM = 'https://hh.ru/applicant/vacancy_response?vacancyId=1';
+  const VACANCY = 'https://hh.ru/vacancy/1';
+  const timeout = Object.assign(new Error('Timeout 5000ms exceeded'), { name: 'TimeoutError' });
+  // browser-commander 0.28 turns a wait that timed out after a navigation into this
+  const interrupted = Object.assign(new Error('Navigation interrupted the element wait'), { name: 'NavigationInterruptedError' });
+
+  test('a timed-out or interrupted wait after the form was left', () => {
+    assert.equal(isFormLeftDuringWait(timeout, VACANCY), true);
+    assert.equal(isFormLeftDuringWait(interrupted, VACANCY), true);
+  });
+
+  test('not while still on the form, nor for other errors', () => {
+    assert.equal(isFormLeftDuringWait(timeout, FORM), false);
+    assert.equal(isFormLeftDuringWait(interrupted, FORM), false);
+    assert.equal(isFormLeftDuringWait(new Error('page.goto: net::ERR_ABORTED'), VACANCY), false);
   });
 });
