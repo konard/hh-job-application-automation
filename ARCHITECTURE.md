@@ -31,6 +31,11 @@ src/
 ├── vacancy-filters.mjs       # Vacancies filtered out automatically by data/vacancy-filters.lino
 ├── form-prefill.mjs          # Prefill of external forms: contacts, saved answers, drafts
 ├── prefill-form.mjs          # `bun run prefill-form`: forms in separate browser slots
+├── browser-slots.mjs         # Separate Chrome slots (own profile and port) and copying a site's login into one
+├── experience-sync.mjs       # `bun run experience`: export, diff and sync of hh.ru and LinkedIn work experience
+├── experience.mjs            # Work experience of both sides in one shape: matching, diff, sync plan, report
+├── experience-sites.mjs      # LinkedIn experience reader, prefill of the LinkedIn and hh.ru experience forms
+├── translation.mjs           # Haiku, Luna and Formal AI translations side by side; Formal AI issue reports
 ├── captcha.mjs               # Captcha detection; page actions wait while one is shown
 ├── captcha-solver.mjs        # Captcha answer prefill by local Claude Code (Haiku) and Codex (Luna)
 ├── config.mjs                # Configuration using lino-arguments
