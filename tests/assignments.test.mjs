@@ -6,7 +6,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import {
-  CI_CD_TEMPLATES, employerStems, formVacancy, isAssignmentLinkQuestion, issueProblems, namedLanguages, parseIssue, parseStack,
+  CI_CD_TEMPLATES, answerLanguage, employerStems, hiveMindTemplates, formVacancy, isAssignmentLinkQuestion, issueProblems, namedLanguages, parseIssue, parseStack,
   readAssignments, rememberAssignment, rememberFormVacancy, stackSection,
 } from '../src/assignments.mjs';
 
@@ -60,6 +60,29 @@ describe('the stack of a test assignment', () => {
     const section = stackSection(stack);
     assert.ok(section.includes('most fitting stack') && section.includes('**Python**') && section.includes('python-ai-driven-development-pipeline-template'));
     assert.equal(parseStack('{"language": "Cobol"}'), null);
+    assert.equal(stack.deliverable, 'code');
+  });
+
+  test('a written deliverable asks for a document in the language of the original, not code', () => {
+    const stack = parseStack('{"language": "python", "stack": "FastAPI", "reason": "Fits.", "deliverable": "document"}');
+    const section = stackSection(stack, { answerIn: answerLanguage('Код не требуется. Подготовьте концепцию на две страницы.') });
+    assert.ok(section.includes('written document, not code') && section.includes('**Russian**') && section.includes('`docs/`'));
+    assert.ok(section.includes("replace the template's README"));
+    assert.equal(answerLanguage('Write a short concept.'), 'English');
+  });
+
+  test('the templates are read from the table of the hive-mind CI/CD guide', () => {
+    const guide = `| Language | Template Repository |
+| --- | --- |
+| JavaScript/TypeScript | [js-t](https://github.com/link-foundation/js-t) |
+| Python                | [py-t](https://github.com/link-foundation/py-t) |
+| C#                    | [cs-t](https://github.com/link-foundation/cs-t) |
+| C/C++                 | [cpp-t](https://github.com/link-foundation/cpp-t) |
+| Cobol                 | [cobol-t](https://github.com/link-foundation/cobol-t) |`;
+    assert.deepEqual(hiveMindTemplates(guide), {
+      javascript: 'link-foundation/js-t', typescript: 'link-foundation/js-t', python: 'link-foundation/py-t',
+      csharp: 'link-foundation/cs-t', cpp: 'link-foundation/cpp-t',
+    });
     assert.equal(parseStack('{"language": "C#", "stack": ".NET"}').language, 'csharp');
   });
 

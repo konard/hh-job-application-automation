@@ -7,9 +7,10 @@
  * English in other words by local Claude Code, without anything that names the employer, checked
  * (no employer name, English, not the original wording). The vacancy (--vacancy, or the one of the
  * chat the form was sent in) sets the language and stack: the repository starts from the matching
- * CI/CD template of link-assistant/hive-mind and the issue asks for that stack. Then the repository
- * and its issue are created with gh. Forms prefilled later link to the repository where they ask
- * for the result.
+ * CI/CD template link-assistant/hive-mind recommends (read from its guide) and the issue asks for
+ * that stack, or, for a written deliverable, for a document that proposes it. Then the repository
+ * (started from that template, never empty) and its issue are created with gh. Forms prefilled
+ * later link to the repository where they ask for the result.
  */
 
 import fs from 'fs/promises';
@@ -20,8 +21,8 @@ import { openSlot } from './browser-slots.mjs';
 import { askClaude } from './form-prefill.mjs';
 import { waitForCaptcha } from './form-slots.mjs';
 import {
-  CI_CD_TEMPLATES, LANGUAGE_TITLES, employerStems, formVacancy, issueProblems, issuePrompt, namedLanguages, parseIssue, parseStack,
-  publishAssignment, readAssignment, readAssignments, readVacancy, rememberAssignment, stackPrompt, stackSection, vacancyText,
+  CI_CD_TEMPLATES, LANGUAGE_TITLES, answerLanguage, employerStems, formVacancy, issueProblems, issuePrompt, namedLanguages, parseIssue, parseStack,
+  loadTemplates, publishAssignment, readAssignment, readAssignments, readVacancy, rememberAssignment, stackPrompt, stackSection, vacancyText,
 } from './assignments.mjs';
 
 const USAGE = `Usage: bun run test-assignment -- <repository name> [options]
@@ -151,13 +152,16 @@ for (let attempt = 0; attempt < 2 && !stack; attempt++) {
   stack = parseStack(await askClaude(stackPrompt({ vacancy: vacancyText(vacancy), assignment: assignment.text, named })));
 }
 if (argv.language) {
-  stack = { language: argv.language, stack: stack?.stack ?? '', reason: stack?.reason ?? '' };
+  stack = { language: argv.language, stack: stack?.stack ?? '', reason: stack?.reason ?? '', deliverable: stack?.deliverable ?? 'code' };
 }
-if (!stack || !CI_CD_TEMPLATES[stack.language]) {
+// The templates hive-mind recommends now (its CI/CD guide), else the snapshot of them
+const templates = loadTemplates();
+if (!stack || !templates[stack.language]) {
   console.log(`❌ No stack chosen${argv.language ? `: unknown language ${argv.language}` : ''}; pass --language <${Object.keys(CI_CD_TEMPLATES).join('|')}>`);
   process.exit(1);
 }
-console.log(`🧰 ${LANGUAGE_TITLES[stack.language]}: ${stack.stack}; template ${CI_CD_TEMPLATES[stack.language]}`);
+const template = templates[stack.language];
+console.log(`🧰 ${LANGUAGE_TITLES[stack.language]}: ${stack.stack}; template ${template}; ${stack.deliverable === 'document' ? 'a written deliverable, no code' : 'code'}`);
 
 let issue = null;
 let problems = [];
@@ -166,7 +170,7 @@ for (let attempt = 0; attempt < 2 && (!issue || problems.length > 0); attempt++)
   const retry = problems.length ? `\nThe previous version was rejected because it ${problems.join('; ')}. Fix that.\n` : '';
   issue = parseIssue(await askClaude(issuePrompt(assignment.text, names) + retry));
   if (issue) {
-    issue.body = `${issue.body}\n\n${stackSection(stack)}`;
+    issue.body = `${issue.body}\n\n${stackSection(stack, { template, answerIn: answerLanguage(assignment.text) })}`;
   }
   problems = issue ? issueProblems(issue, { stems, original: `${assignment.text}\n${vacancy?.description ?? ''}` }) : ['is not valid JSON'];
 }
@@ -186,7 +190,7 @@ const repo = `${owner}/${argv.name}`;
 const before = (await readAssignments())[assignment.source];
 const issueNumber = before?.repo === repo ? Number(before.issueUrl.split('/').pop()) : undefined;
 const { repoUrl, issueUrl, created } = publishAssignment({
-  repo, issue, template: CI_CD_TEMPLATES[stack.language], issueNumber, isPrivate: argv.isPrivate,
+  repo, issue, template, issueNumber, isPrivate: argv.isPrivate,
 });
 await rememberAssignment(assignment.source, { repo, repoUrl, issueUrl, vacancy: vacancy?.url ?? null, language: stack.language });
 console.log(`✅ ${created.length ? `Created the ${created.join(' and ')}` : 'Already there'}: ${repoUrl}\n   Issue: ${issueUrl}`);

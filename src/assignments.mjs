@@ -22,7 +22,8 @@ export const ASSIGNMENTS_FILE = path.join(process.cwd(), 'logs', 'assignments.js
 
 /**
  * CI/CD templates by language, as recommended in link-assistant/hive-mind docs/CI-CD-BEST-PRACTICES.md
- * (JavaScript and TypeScript share one, and so do C and C++)
+ * (JavaScript and TypeScript share one, and so do C and C++). A snapshot: loadTemplates() reads the
+ * current table of that document and falls back to it.
  */
 export const CI_CD_TEMPLATES = {
   javascript: 'link-foundation/js-ai-driven-development-pipeline-template',
@@ -37,6 +38,34 @@ export const CI_CD_TEMPLATES = {
 };
 
 export const CI_CD_GUIDE = 'https://github.com/link-assistant/hive-mind/blob/main/docs/CI-CD-BEST-PRACTICES.md';
+
+/**
+ * The templates of the «Recommended CI/CD Templates» table of the hive-mind guide
+ * («| JavaScript/TypeScript | [js-…-template](https://github.com/owner/js-…-template) |»)
+ * @param {string} markdown
+ * @returns {Object<string, string>} language → owner/name
+ */
+export function hiveMindTemplates(markdown) {
+  const keys = { 'c#': ['csharp'], 'c/c++': ['cpp'], 'c++': ['cpp'] };
+  const templates = {};
+  for (const [, languages, repo] of String(markdown).matchAll(/^\|\s*([^|\n]+?)\s*\|\s*\[[^\]]+\]\(https:\/\/github\.com\/([\w.-]+\/[\w.-]+?)\/?\)\s*\|/gm)) {
+    const names = keys[languages.toLowerCase()] ?? languages.toLowerCase().split('/').map((name) => name.trim());
+    names.filter((name) => LANGUAGE_TITLES[name]).forEach((name) => {
+      templates[name] = repo;
+    });
+  }
+  return templates;
+}
+
+/**
+ * The CI/CD templates hive-mind recommends now (its guide, read with gh), else the snapshot
+ * @returns {Object<string, string>} language → owner/name
+ */
+export function loadTemplates() {
+  const result = spawnSync('gh', ['api', 'repos/link-assistant/hive-mind/contents/docs/CI-CD-BEST-PRACTICES.md', '-H', 'Accept: application/vnd.github.raw'], { encoding: 'utf8' });
+  const current = result.status === 0 ? hiveMindTemplates(result.stdout) : {};
+  return Object.keys(current).length > 0 ? { ...CI_CD_TEMPLATES, ...current } : CI_CD_TEMPLATES;
+}
 
 /** Names of the languages in issues */
 export const LANGUAGE_TITLES = {
@@ -84,7 +113,8 @@ export function stackPrompt({ vacancy, assignment, named }) {
 - language: one of ${Object.keys(CI_CD_TEMPLATES).join(', ')}.${named.length ? ` The vacancy names: ${named.join(', ')}; use the main one of them.` : ' The vacancy names no language: choose the most fitting one for the assignment and the vacancy.'}
 - stack: the frameworks, databases, AI and integration technologies to use, in English, one line (generic names only: no company or brand of the employer).
 - reason: one sentence in English why this stack fits, without naming the employer.
-Output only JSON: {"language": "...", "stack": "...", "reason": "..."}
+- deliverable: "document" when the assignment asks for a written answer (a concept, analysis, design or presentation) and does not require code; otherwise "code".
+Output only JSON: {"language": "...", "stack": "...", "reason": "...", "deliverable": "code|document"}
 
 === Vacancy ===
 ${vacancy || '(not known)'}
@@ -104,24 +134,52 @@ export function parseStack(answer) {
   try {
     const stack = JSON.parse(json);
     const language = String(stack.language ?? '').toLowerCase().replace('c#', 'csharp').replace('c++', 'cpp');
-    return CI_CD_TEMPLATES[language] ? { language, stack: String(stack.stack ?? '').trim(), reason: String(stack.reason ?? '').trim() } : null;
+    return CI_CD_TEMPLATES[language]
+      ? {
+        language,
+        stack: String(stack.stack ?? '').trim(),
+        reason: String(stack.reason ?? '').trim(),
+        deliverable: stack.deliverable === 'document' ? 'document' : 'code',
+      }
+      : null;
   } catch {
     return null;
   }
 }
 
+/** Names of the languages an answer can be written in, by the script of the original */
+export const answerLanguage = (original) => {
+  const letters = String(original).match(/\p{L}/gu) ?? [];
+  return letters.filter((letter) => /[а-яё]/i.test(letter)).length > letters.length / 2 ? 'Russian' : 'English';
+};
+
 /**
- * The section of the issue that asks for the stack and the CI/CD of the template
- * @param {{language: string, stack: string, reason: string}} stack
+ * The section of the issue that asks for the stack and the CI/CD of the template. A written
+ * deliverable (a concept, a presentation) asks for no code: the stack is what the document proposes.
+ * @param {{language: string, stack: string, reason: string, deliverable?: string}} stack
+ * @param {Object} [options]
+ * @param {string} [options.template] - owner/name of the CI/CD template (default: the snapshot's)
+ * @param {string} [options.answerIn] - The language the employer reads the answer in
  * @returns {string}
  */
-export function stackSection({ language, stack, reason }) {
+export function stackSection({ language, stack, reason, deliverable = 'code' }, { template = CI_CD_TEMPLATES[language], answerIn = 'English' } = {}) {
+  const named = `**${LANGUAGE_TITLES[language]}**${stack ? ` (${stack})` : ''}`;
+  const base = `The repository is based on the [${template.split('/')[1]}](https://github.com/${template}) CI/CD template ([CI/CD best practices](${CI_CD_GUIDE})): keep all its checks passing, and replace the template's README with one about this project that links to the result first.`;
+  const written = answerIn === 'English' ? '' : ` Write the deliverable itself in **${answerIn}**, the language the assignment was given in.`;
+  if (deliverable === 'document') {
+    return `## Deliverable and stack
+
+The result is a written document, not code (code, service setup and detailed architecture are out of scope): put it in \`docs/\` as Markdown, with diagrams as Mermaid and screenshots as image files next to it, and keep it within the length limit above.${written}
+Where the proposal names technologies, prefer the most fitting stack: ${named}.${reason ? ` ${reason}` : ''} Prefer what can be bought or connected over what must be built. Any small prototype or data check added later uses this stack.
+
+${base}`;
+  }
   return `## Stack
 
-Do it with the most fitting stack for this assignment: **${LANGUAGE_TITLES[language]}**${stack ? ` (${stack})` : ''}.${reason ? ` ${reason}` : ''}
-Any code, prototype or data processing in this repository uses this stack, and the written deliverables live next to it.
+Do it with the most fitting stack for this assignment: ${named}.${reason ? ` ${reason}` : ''}
+Any code, prototype or data processing in this repository uses this stack, and the written deliverables live next to it.${written}
 
-The repository is based on the [${CI_CD_TEMPLATES[language].split('/')[1]}](https://github.com/${CI_CD_TEMPLATES[language]}) CI/CD template ([CI/CD best practices](${CI_CD_GUIDE})): keep all its checks passing.`;
+${base}`;
 }
 
 /**
@@ -261,6 +319,23 @@ function gh(args, { input } = {}) {
 const hasWorkflows = (repo) => spawnSync('gh', ['api', `repos/${repo}/contents/.github/workflows`], { encoding: 'utf8' }).status === 0;
 
 /**
+ * Start an empty repository from a template that is not marked as a GitHub template: the
+ * template's history is pushed as its main branch
+ * @param {string} repo
+ * @param {string} template
+ */
+function seedFromTemplate(repo, template) {
+  const dir = spawnSync('mktemp', ['-d', path.join(os.tmpdir(), 'assignment-XXXXXX')], { encoding: 'utf8' }).stdout.trim();
+  gh(['repo', 'clone', template, dir, '--', '--single-branch']);
+  for (const args of [['remote', 'set-url', 'origin', `https://github.com/${repo}.git`], ['push', 'origin', 'HEAD:main']]) {
+    const result = spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
+    if (result.status !== 0) {
+      throw new Error(`git ${args[0]}: ${(result.stderr || result.stdout).trim()}`);
+    }
+  }
+}
+
+/**
  * Bring a template's files into an existing repository: its history is merged in (nothing of the
  * repository is lost), the template's version of a file both have (README) is taken
  * @param {string} repo
@@ -297,13 +372,13 @@ export function publishAssignment({ repo, issue, template, issueNumber, isPrivat
   const exists = spawnSync('gh', ['repo', 'view', repo, '--json', 'url'], { encoding: 'utf8' }).status === 0;
   if (!exists) {
     const isTemplate = template && JSON.parse(gh(['api', `repos/${template}`])).is_template;
+    // Never an empty repository: a GitHub template is used as one, any other one is pushed into it
     gh(['repo', 'create', repo, isPrivate ? '--private' : '--public', '--description', issue.title,
-      ...(isTemplate ? ['--template', template] : ['--add-readme'])]);
-    created.push(isTemplate ? `repository from ${template}` : 'repository');
+      ...(isTemplate ? ['--template', template] : template ? [] : ['--add-readme'])]);
     if (template && !isTemplate) {
-      applyTemplate(repo, template);
-      created.push(`${template} files`);
+      seedFromTemplate(repo, template);
     }
+    created.push(template ? `repository from ${template}` : 'repository');
   } else if (template && !hasWorkflows(repo)) {
     applyTemplate(repo, template);
     created.push(`${template} files`);
