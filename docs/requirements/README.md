@@ -216,20 +216,26 @@ Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src
 From the user: «we also need to support question answering based on previous answers in chat as
 separate slot on separate page like https://hh.ru/chat/5698827730, and also when immediately after the
 application chat opens.» · «we also need to support templated answers to templated messages from
-multiple companies in the chat like these.»
+multiple companies in the chat like these.» · «we also need to support auto-reading all rejections …
+but better only prefill» · «we also need to add support for auto filling answers or rating here» · «if the
+answer is the same or similar we can learn updated regex/peg like templates from multiple of them.»
 
 Details and checks: [forms-and-chats.md, section C](forms-and-chats.md#c-hhru-chats).
 
 | ID | Requirement | Status |
 |---|---|---|
-| C1 | Chats are answered in their own slot (separate browser and page), not in the single-tab automation browser | ⬜ |
-| C2 | The chat slot copies the automation browser's hh.ru login; cookie values are never printed or stored | ⬜ |
-| C3 | Unanswered employer / bot messages are answered from qa.lino by similarity, drafts for the rest | ⬜ |
-| C4 | Template messages from different companies get the saved template reply (`data/chat-templates.lino`) | ⬜ |
-| C5 | The answer is typed, not sent | ⬜ |
-| C6 | Previous chat answers are learned into qa.lino / chat-templates.lino | ⬜ |
-| C7 | Chats opened right after an application are picked up by a watch mode, one by one | ⬜ |
-| C8 | hh.ru's suggested quick replies are never clicked | ⬜ |
+| C1 | Chats are answered in their own slot (separate browser and page), not in the single-tab automation browser | ✅ |
+| C2 | The chat slot copies the automation browser's hh.ru login; cookie values are never printed or stored | ✅ |
+| C3 | Unanswered employer / bot messages are answered from qa.lino by similarity, drafts for the rest | ✅ |
+| C4 | Template messages from different companies get the saved template reply (`data/chat-templates.lino`) | 🧪 |
+| C5 | The answer is typed, not sent | ✅ |
+| C6 | Previous chat answers are learned into qa.lino / chat-templates.lino | ✅ |
+| C7 | Chats opened right after an application are picked up by a watch mode, one by one | 🧪 |
+| C8 | hh.ru's suggested quick replies are never clicked | ✅ |
+| C9 | Rejections are read; when a reply is possible, the saved question about the reason is typed, not sent | 🧪 |
+| C10 | Questionnaire links from chats are prefilled in form slots | 🧪 |
+| C11 | hh.ru's employer rating poll from a chat opens prefilled (company) in a form slot; ratings stay the user's | 🧪 |
+| C12 | Template messages answered the same way are generalized into learned patterns (`…` gaps, `*` endings) | 🧪 |
 
 ## EXP: work experience export, sync and translation
 
@@ -334,17 +340,17 @@ of them, so none is lost.
 | FLT | 6 | 2 | 3 | 1 | | |
 | RES | 3 | 3 | | | | |
 | FORM (B) | 15 | 9 | 5 | | 1 | |
-| CHAT (C) | 8 | | | | 8 | |
+| CHAT (C) | 12 | 6 | 6 | | | |
 | EXP | 7 | | | | 7 | |
 | SEC | 9 | 9 | | | | |
 | PROC | 13 | 13 | | | | |
-| **Total** | **130** | **96** | **11** | **4** | **16** | **3** |
+| **Total** | **134** | **102** | **17** | **4** | **8** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
 requirement (contacts as placeholders), listed in both places. Section D of forms-and-chats.md (rules for
 all of it) is covered by SEC, PACE6 and PROC1.
 
-Open work, in order: hh.ru chats (C1–C8), work experience sync (EXP1–EXP7), saving sent external-form
+Open work, in order: live checks of the chat items (C4, C7, C9–C12), work experience sync (EXP1–EXP7), saving sent external-form
 answers (B14), the most recently updated resume (RUN2), on-site-only vacancy filtering (FLT5), and the
 upstream trace gaps (TRACE1, TRACE3).
