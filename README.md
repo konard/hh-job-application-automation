@@ -270,6 +270,15 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   forms; the rest are drafted by local Claude Code from the resume and saved answers, with
   «[уточнить: …]» where only you know the fact (`--no-draft` turns drafts off).
 - A site captcha is left to you; the slot fills the form after it. Nothing is ever submitted.
+- What you finally send is learned: a small detached watcher per slot (`src/form-watch.mjs`)
+  attaches to the slot browser, reads the answers on every page (a multi-page Google Form's «Далее»
+  pages too) and, once the form is really sent (its confirmation such as «Ваш ответ записан» or
+  «Спасибо», or the form gone after a click on its send button), saves them to `data/qa.lino` and
+  adds the saved questions to the report. Contacts are stored as `{{placeholders}}`; empty answers,
+  answers with «[уточнить: …]» left in, contacts the prefill took from the profile and you did not
+  change, test assignment links, and answers `qa.lino` already gives are not saved. The watcher
+  exits after the send, when the slot browser closes, or when the slot is prefilled again; its log
+  is `logs/forms/watch-slot-<n>.log`. `--no-learn` turns it off (also in `answer-chats`).
 - Contacts that are public anyway (Telegram, phone, LinkedIn, GitHub) are kept in
   `data/contacts.lino`. Saved answers and the cover letter can use them as placeholders
   (`{{telegram}}`, `{{phone}}`, `{{linkedin}}`, `{{github}}`), so a changed contact is changed in
@@ -321,7 +330,8 @@ browser. For the message waiting for an answer the reply is typed into the messa
 - a question gets the saved answer of a close question in `data/qa.lino`, otherwise local Claude Code
   drafts the reply from the chat, the resume and saved answers;
 - questionnaire links (and hh.ru's employer rating poll) are prefilled in form slots;
-- what you have answered in chats is learned into `qa.lino` and `chat-templates.lino`.
+- what you have answered in chats is learned into `qa.lino` and `chat-templates.lino`, and what you
+  send in those questionnaires into `qa.lino` (`--no-learn` turns the questionnaire part off);
   Template messages you answered the same way are generalized into patterns, e.g.
   `pattern: ваше резюме … опыт* … позиции … свяже* с вами` (shared words in order, `…` for any
   words, `*` for any ending), which match other companies' wordings of the same message.

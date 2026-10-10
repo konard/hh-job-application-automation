@@ -12,6 +12,13 @@ import { chromium } from 'playwright';
 import { connectOrLaunchBrowser, isBrowserRunning } from './browser-session.mjs';
 
 /**
+ * The profile directory of a slot: ~/.hh-automation/<name>
+ * @param {string} name
+ * @returns {string}
+ */
+export const slotDir = (name) => path.join(os.homedir(), '.hh-automation', name);
+
+/**
  * Open (or attach to) a slot
  * @param {Object} options
  * @param {string} options.name - Profile name: ~/.hh-automation/<name>
@@ -22,7 +29,7 @@ import { connectOrLaunchBrowser, isBrowserRunning } from './browser-session.mjs'
 export function openSlot({ name, port, keepOpenHours = 24 }) {
   return connectOrLaunchBrowser({
     engine: 'playwright',
-    userDataDir: path.join(os.homedir(), '.hh-automation', name),
+    userDataDir: slotDir(name),
     port,
     keepOpen: true,
     idleTimeoutMinutes: keepOpenHours * 60,

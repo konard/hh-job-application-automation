@@ -30,11 +30,12 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --watch                Go through the chats waiting for an answer, one at a time, and keep watching
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
+  --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
   --poll <seconds>       How often the chat list is checked in --watch (default 300: hh.ru is not polled often
                          while the automation browser applies)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, draft: true, forms: true, poll: 300 };
+  const parsed = { chats: [], watch: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -46,6 +47,8 @@ function parseArgs(args) {
       parsed.draft = false;
     } else if (flag === '--no-forms') {
       parsed.forms = false;
+    } else if (flag === '--no-learn') {
+      parsed.learn = false;
     } else if (flag === '--poll') {
       parsed.poll = Number(inline ?? args[++i]);
     } else {
@@ -136,7 +139,7 @@ async function prefillChat(id) {
   if (links.length > 0) {
     links.forEach((link) => handledForms.add(link));
     console.log(`📝 Prefilling the questionnaire(s) from the chat in form slots: ${links.join(', ')}`);
-    prefillForms(links, { draft: argv.draft, sources, company: chat.company })
+    prefillForms(links, { draft: argv.draft, learn: argv.learn, sources, company: chat.company })
       .then(async ({ reportFile, results }) => {
         console.log(`📄 Questionnaire report: ${reportFile}`);
         // A test assignment in the form takes the language and stack of this vacancy

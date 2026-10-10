@@ -32,6 +32,8 @@ src/
 ├── form-prefill.mjs          # Prefill of external forms: contacts, saved answers, drafts
 ├── prefill-form.mjs          # `bun run prefill-form`: forms in separate browser slots
 ├── form-slots.mjs            # Prefilled forms in browser slots (used by prefill-form and answer-chats)
+├── form-answers.mjs          # Answers sent in external forms: page values, submission, what is saved to qa.lino
+├── form-watch.mjs            # Detached watcher of a form slot: saves what the user sends, then exits
 ├── browser-slots.mjs         # Separate browser slots and copying the hh.ru session into them
 ├── contacts.mjs              # data/contacts.lino and {{placeholders}} in answers
 ├── chat-answers.mjs          # Chat replies: templates, rejections, saved answers, learning
@@ -229,6 +231,27 @@ Q&A pairs stored in Links Notation format (`data/qa.lino`):
   option2
   option3
 ```
+
+## Answers Sent in External Forms
+
+`prefill-form` (and the questionnaires of `answer-chats`) exits while the prefilled forms wait for
+the user, so the answers the user finally sends are learned by a detached watcher per slot, started
+like the idle watchdog of the slot browser:
+
+1. `startFormWatch` (`form-answers.mjs`) writes the slot's state (port, the report, the prefill's
+   contact answers) to `~/.hh-automation/form-slot-<n>/hh-automation-form-watch.json` and spawns
+   `form-watch.mjs`. A newer prefill of the slot rewrites the state, and the older watcher exits.
+2. The watcher attaches over CDP and polls every frame: `readFormFields` (the prefill's
+   `data-prefill-id` marks, nothing visible) gives the questions, `watchFormValues` their values, and
+   a click listener keeps the values at the moment of a button click (sessionStorage and a CDP
+   binding), so the last edit before «Далее» or «Отправить» is not lost when the page navigates.
+   Answers are kept by question across the pages of a multi-page form.
+3. A real submission (`isSubmitted`): the form's controls are gone, its pages have loaded, and its
+   confirmation shows («Ваш ответ записан», «Спасибо», «Your response was submitted») or its send
+   button was clicked; twice in a row. A form closed or left unsent saves nothing.
+4. `saveSentAnswers` drops empty answers, «[уточнить: …]» marks, unchanged prefilled contacts and
+   company, test assignment links, and answers `findBestMatch` already gives the same way, then
+   writes through `withContacts` (contacts become `{{placeholders}}`, the phone also as formatted).
 
 ## Deferred Questions
 

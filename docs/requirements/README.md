@@ -208,7 +208,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B11 | Multi-page forms: current page filled, report says to open the next page | 🧪 |
 | B12 | Report of every question and its source in `logs/forms/` | ✅ |
 | B13 | One implementation for every form, shared with hh.ru forms | ✅ |
-| B14 | Answers the user finally sends in an external form are saved to qa.lino | ⬜ |
+| B14 | Answers the user finally sends in an external form are saved to qa.lino (detached watcher per slot, only on a real submission, contacts as placeholders; `--no-learn`) | 🧪 `tests/form-answers.test.mjs`; local forms in an own headless Chromium |
 | B15 | Drafts in forms are plain text, without Markdown | 🧪 |
 | B16 | A form's test assignment becomes a repository (given name) with an issue restated in English, without the employer, via gh | ✅ konard/marketplace-retail-ai-control #1 |
 | B17 | The completed-assignment link question gets the repository link | 🧪 |
@@ -350,18 +350,18 @@ of them, so none is lost.
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 3 | 1 | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 21 | 11 | 8 | 1 | 1 | |
+| FORM (B) | 21 | 11 | 9 | 1 | | |
 | CHAT (C) | 13 | 7 | 6 | | | |
 | EXP | 7 | 3 | 2 | 2 | | |
 | SEC | 10 | 9 | | 1 | | |
 | PROC | 14 | 14 | | | | |
-| **Total** | **145** | **107** | **21** | **12** | **2** | **3** |
+| **Total** | **145** | **107** | **22** | **12** | **1** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
 requirement (contacts as placeholders), listed in both places. Section D of forms-and-chats.md (rules for
 all of it) is covered by SEC, PACE6 and PROC1.
 
-Open work, in order: live checks of the chat items (C4, C7, C9–C12), LinkedIn login (LOGIN7) and the LinkedIn side of the experience sync (EXP2, EXP4), saving sent external-form
-answers (B14), the most recently updated resume (RUN2), on-site-only vacancy filtering (FLT5), and the
+Open work, in order: live checks of the chat items (C4, C7, C9–C12), LinkedIn login (LOGIN7) and the LinkedIn side of the experience sync (EXP2, EXP4), a live check of saving sent external-form
+answers on a real form (B14), the most recently updated resume (RUN2), on-site-only vacancy filtering (FLT5), and the
 upstream trace gaps (TRACE1, TRACE3).

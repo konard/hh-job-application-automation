@@ -10,9 +10,10 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { isAssignmentLinkQuestion, readAssignment, readAssignments } from './assignments.mjs';
-import { copySession, openSlot } from './browser-slots.mjs';
+import { copySession, openSlot, slotDir } from './browser-slots.mjs';
 import { isBrowserRunning } from './browser-session.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
+import { startFormWatch } from './form-answers.mjs';
 import { createQADatabase } from './qa-database.mjs';
 import {
   askClaude, draftPrompt, loadProfile, pickOptions, plainText, planAnswers, readFormFields, relatedAnswers, TO_CHECK,
@@ -163,7 +164,7 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
     }
   }
   if (form.hasNextPage) {
-    log('ℹ️  The form has a next page ("Далее"): open it yourself and run the prefill again for it');
+    log('ℹ️  The form has a next page ("Далее"): open it yourself and run the prefill again for it; the answers of every page are saved when you send it');
   }
   await session.release();
   return { url, pageUrl: page.url(), slot, title: form.title, fields: planned };
@@ -230,20 +231,30 @@ export async function nextFreeSlot() {
  * @param {number} [options.keepOpenHours=24]
  * @param {Object} [options.sources] - loadAnswerSources()
  * @param {string} [options.company] - The employer, for a poll that asks to find it (rating.hh.ru)
+ * @param {boolean} [options.learn=true] - Save the answers the user sends to qa.lino (a detached watcher per slot)
  * @returns {Promise<{text: string, reportFile: string}>}
  */
-export async function prefillForms(urls, { firstSlot, draft = true, keepOpenHours = 24, sources, company } = {}) {
+export async function prefillForms(urls, { firstSlot, draft = true, keepOpenHours = 24, sources, company, learn = true } = {}) {
   const known = sources ?? await loadAnswerSources();
   const first = firstSlot ?? await nextFreeSlot();
   const results = await Promise.all(urls.map((url, index) => prefillSlot(String(url), first + index, known, { draft, keepOpenHours, company })
     .catch((error) => {
       console.log(`[slot ${first + index}] ❌ ${error.message}`);
-      return { url, slot: first + index, fields: [] };
+      return { url, slot: first + index, fields: [], failed: true };
     })));
-  const text = `# Prefilled forms (${new Date().toISOString()})\n\nNothing was submitted: review each slot's browser, change what is needed and send it yourself.\n\n${results.map(report).join('\n\n')}\n`;
+  const learned = learn ? ' What you send is saved to data/qa.lino.' : '';
+  const text = `# Prefilled forms (${new Date().toISOString()})\n\nNothing was submitted: review each slot's browser, change what is needed and send it yourself.${learned}\n\n${results.map(report).join('\n\n')}\n`;
   const reportDir = path.join(process.cwd(), 'logs', 'forms');
   await fs.mkdir(reportDir, { recursive: true });
   const reportFile = path.join(reportDir, `${new Date().toISOString().replace(/[:.]/g, '-')}.md`);
   await fs.writeFile(reportFile, text);
+  if (learn) {
+    // The prefill exits while the forms wait for the user: a watcher per slot learns what is sent
+    for (const result of results.filter((item) => !item.failed)) {
+      startFormWatch({
+        slot: result.slot, port: 9330 + result.slot, userDataDir: slotDir(`form-slot-${result.slot}`), planned: result.fields, reportFile, keepOpenHours,
+      });
+    }
+  }
   return { text, reportFile, results };
 }

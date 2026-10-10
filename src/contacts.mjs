@@ -37,6 +37,21 @@ export function expandContacts(text, contacts) {
 }
 
 /**
+ * How a contact is found in an answer: as written, and the phone also as people write it
+ * («+7 958 200-05-67», the way prefilled forms type it)
+ * @param {string} key
+ * @param {string} value
+ * @returns {RegExp}
+ */
+function contactPattern(key, value) {
+  const digits = value.replace(/\D/g, '');
+  if (key === 'phone' && digits.length >= 10) {
+    return new RegExp(`(?<!\\d)\\+?${digits.split('').join('[\\s()-]*')}(?!\\d)`, 'g');
+  }
+  return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+}
+
+/**
  * Write contact values in an answer as placeholders
  * @param {string} text
  * @param {Object} contacts
@@ -45,7 +60,7 @@ export function expandContacts(text, contacts) {
 export function contractContacts(text, contacts) {
   return CONTRACTED.filter((key) => typeof contacts[key] === 'string' && contacts[key])
     .sort((a, b) => contacts[b].length - contacts[a].length)
-    .reduce((result, key) => result.split(contacts[key]).join(`{{${key}}}`), String(text));
+    .reduce((result, key) => result.replace(contactPattern(key, contacts[key]), `{{${key}}}`), String(text));
 }
 
 const expandAnswer = (answer, contacts) => (Array.isArray(answer)
