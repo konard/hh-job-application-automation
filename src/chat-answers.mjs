@@ -89,6 +89,13 @@ export function pendingMessages(messages) {
 }
 
 /**
+ * Whether a chat no longer waits for the user: their own message is the last one, or it is closed
+ * @param {{messages: Array<{mine: boolean}>, canReply: boolean}} chat - From readChat
+ * @returns {boolean}
+ */
+export const isChatAnswered = (chat) => !chat.canReply || pendingMessages(chat.messages).length === 0;
+
+/**
  * A template message without what differs between companies: the greeting line with the
  * user's name, and a signature (a name line, or the sender's name from the bubble title)
  * @param {string} text

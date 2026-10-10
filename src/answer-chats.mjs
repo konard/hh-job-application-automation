@@ -22,14 +22,16 @@ import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
   --watch                Go through the chats waiting for an answer, one at a time, and keep watching
-  --auto                 Unread-only watch mode for use alongside apply: process unread chats without
-                         interactive prompts; stop on a chat that needs a human reply and leave it open
+  --auto                 Unread chats only, without prompts (apply --process-chats): chats that need nothing
+                         sent are handled; at the first one that needs a message (a reply typed or drafted
+                         for you to check, or none found) it stops with that chat open and waits until you
+                         have answered it
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
   --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
@@ -214,12 +216,25 @@ if (argv.watch) {
   // A chat is seen again when its last message changes (the employer wrote again)
   const seen = new Set();
   const seenKey = (chat) => `${chat.id}\n${chat.subtitle}`;
-  // In auto mode: track the chat that needs a human reply, pause until it is resolved
-  let stuckChat = null; // { id: string, title: string }
+  // --auto: the chat left open for the user; nothing else is processed until it is answered
+  let stuckChat = null;
   console.log(argv.auto
-    ? `💬 Auto-processing unread chats every ${argv.poll} s`
+    ? `💬 Processing unread chats every ${argv.poll} s`
     : `👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
   for (;;) {
+    if (stuckChat) {
+      // Read where it was left (the typed reply stays), without the chat list
+      if (!page.url().startsWith(chatUrl(stuckChat.id))) {
+        await page.goto(chatUrl(stuckChat.id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
+      }
+      const chat = await page.evaluate(readChat).catch(() => null);
+      if (!chat || !isChatAnswered(chat)) {
+        await sleep(argv.poll * 1000);
+        continue;
+      }
+      console.log(`💬 Chat answered, processing unread chats again: ${stuckChat.title}`);
+      stuckChat = null;
+    }
     await page.goto('https://hh.ru/chat', { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
     await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
     if (!await waitForCaptcha(page, console.log)) {
@@ -227,42 +242,22 @@ if (argv.watch) {
       continue;
     }
     const chats = await page.evaluate(readChatList);
-
-    // In auto mode: check whether the stuck chat has been resolved before processing more
-    if (stuckChat) {
-      const found = chats.find((c) => c.id === stuckChat.id);
-      if (!found || !found.unread || found.lastIsMine) {
-        console.log(`💬 Chat was handled, resuming auto-processing: ${stuckChat.title}`);
-        stuckChat = null;
-      } else {
-        // Still waiting for the user's reply: skip this cycle
-        await sleep(argv.poll * 1000);
-        continue;
-      }
-    }
-
-    const waiting = argv.auto
-      ? chats.filter((chat) => chat.unread && !chat.lastIsMine && !seen.has(seenKey(chat)))
-      : chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) && !argv.chats.includes(chat.id));
-    if (!argv.auto) {
-      argv.chats.length = 0;
-    }
+    const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) &&
+      (argv.auto ? chat.unread : !argv.chats.includes(chat.id)));
+    argv.chats.length = 0;
     for (const chat of waiting) {
       seen.add(seenKey(chat));
       const answered = await prefillChat(chat.id);
       if (!answered) {
         continue;
       }
-      if (!answered.replied && argv.auto) {
-        // Chat needs a human reply: stop processing, leave it open, alert the user
-        const url = chatUrl(chat.id);
-        console.log(`💬 Chat needs your reply: ${chat.title} ${url}`);
+      if (argv.auto) {
+        // Nothing is sent by the tool: stop here with the chat open until the user has answered it
+        console.log(`💬 ${answered.replied ? 'Check the typed reply and send it' : 'Chat needs your reply'}: ${chat.title} ${chatUrl(chat.id)}`);
         stuckChat = { id: chat.id, title: chat.title };
         break;
       }
-      if (!argv.auto) {
-        await waitForSend(answered.id);
-      }
+      await waitForSend(answered.id);
     }
     await sleep(argv.poll * 1000);
   }
