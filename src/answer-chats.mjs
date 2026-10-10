@@ -17,8 +17,8 @@ import path from 'path';
 import { openSlot, copySession } from './browser-slots.mjs';
 import { askUser, enableConfirmations, withdrawPrompt } from './confirmations.mjs';
 import { createQADatabase, findBestMatch } from './qa-database.mjs';
-import { askClaude, relatedAnswers } from './form-prefill.mjs';
-import { loadAnswerSources, prefillForms } from './form-slots.mjs';
+import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
+import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import {
   TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
@@ -28,10 +28,11 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --watch                Go through the chats waiting for an answer, one at a time, and keep watching
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
-  --poll <seconds>       How often the chat list is checked in --watch (default 60)`;
+  --poll <seconds>       How often the chat list is checked in --watch (default 300: hh.ru is not polled often
+                         while the automation browser applies)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, draft: true, forms: true, poll: 60 };
+  const parsed = { chats: [], watch: false, draft: true, forms: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -109,6 +110,9 @@ async function prefillChat(id) {
   if (!page.url().startsWith(chatUrl(id))) {
     await page.goto(chatUrl(id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
   }
+  if (!await waitForCaptcha(page, console.log)) {
+    return null;
+  }
   await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
   const chat = await page.evaluate(readChat);
   await learn(chat.messages);
@@ -142,7 +146,7 @@ async function prefillChat(id) {
     const drafted = await askClaude(chatDraftPrompt({
       vacancy: chat.vacancy, messages: chat.messages, resume: sources.resume, related: relatedAnswers(templateCore(last.text), sources.qaMap),
     }));
-    reply = drafted && { answer: drafted, source: 'draft, check it' };
+    reply = drafted && { answer: plainText(drafted), source: 'draft, check it' };
   }
   if (reply?.noReply) {
     console.log(`📭 No reply needed (${reply.source}${reply.matched ? `: ${reply.matched.slice(0, 80)}` : ''}): read`);
@@ -191,14 +195,22 @@ for (const id of argv.chats) {
 }
 
 if (argv.watch) {
-  const done = new Set(argv.chats);
+  // A chat is seen again when its last message changes (the employer wrote again)
+  const seen = new Set();
+  const seenKey = (chat) => `${chat.id}\n${chat.subtitle}`;
   console.log(`👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
   for (;;) {
     await page.goto('https://hh.ru/chat', { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
     await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
-    const waiting = (await page.evaluate(readChatList)).filter((chat) => !chat.lastIsMine && !done.has(chat.id));
+    if (!await waitForCaptcha(page, console.log)) {
+      await sleep(argv.poll * 1000);
+      continue;
+    }
+    const chats = await page.evaluate(readChatList);
+    const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) && !argv.chats.includes(chat.id));
+    argv.chats.length = 0;
     for (const chat of waiting) {
-      done.add(chat.id);
+      seen.add(seenKey(chat));
       const answered = await prefillChat(chat.id);
       if (answered) {
         await waitForSend(answered);

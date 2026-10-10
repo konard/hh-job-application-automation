@@ -32,7 +32,7 @@ async function readProfileOverrides() {
   return Object.fromEntries([...entries].map(([key, value]) => [key, key === 'links' ? [value].flat() : [value].flat().join('\n')]));
 }
 
-async function waitForCaptcha(page, log) {
+export async function waitForCaptcha(page, log) {
   const started = Date.now();
   let told = false;
   while (CAPTCHA_URL.test(page.url()) && Date.now() - started < CAPTCHA_WAIT_MS) {
@@ -126,7 +126,10 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
       planned.filter((field) => isAssignmentLinkQuestion(field.title) && field.kind !== 'file')
         .forEach((field) => Object.assign(field, { open: false, answer: record.repoUrl, source: 'test assignment repository' }));
     } else {
-      log(`🧪 Test assignment «${assignment.title}»: create its repository first: bun run test-assignment -- <repository name> --from ${url}`);
+      // The assignment comes before any answer: the form is left as it is until its repository exists
+      log(`🧪 Test assignment «${assignment.title}»: create its repository first, then prefill again: bun run test-assignment -- <repository name> --from ${url}`);
+      await session.release();
+      return { url, slot, title: form.title, fields: planned.map((field) => ({ ...field, open: true, note: 'waits for the test assignment repository' })) };
     }
   }
 

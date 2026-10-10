@@ -5,7 +5,7 @@ that its delivery can be tracked. Each row quotes the user's own words (in the o
 trimmed to the relevant sentence), restates the requirement precisely, says how to check it, and
 gives the status and the evidence (commit, file, test).
 
-Status is taken from the repository and `git log`, as of 2026-10-10 (HEAD `ec58db0`):
+Status is taken from the repository and `git log`, as of 2026-10-10 (audited against the code at `35342c4`, see PROC14):
 
 - ✅ done and verified live, on hh.ru or the real browser
 - 🧪 done, verified offline only (unit tests, a replay or a sample page)
@@ -49,7 +49,7 @@ Sections:
 
 | ID | User's words | Requirement | Check | Status | Evidence |
 |---|---|---|---|---|---|
-| DEP1 | «Update all dependencies of this project to latest versions» | Every dependency is on its latest version | `package.json` versions vs. npm latest at the time | ✅ | 54b771f (browser-commander 0.5.4 → 0.26.3, links-notation 0.23.0, lino-arguments 0.3.0, playwright 1.64.0, puppeteer 25.12.0, eslint 10.12.0) |
+| DEP1 | «Update all dependencies of this project to latest versions» | Every dependency is on its latest version | `package.json` versions vs. npm latest at the time | 🚧 newer since: browser-commander 0.27.0, links-notation 0.25.1, puppeteer 25.13.0 — upgrade at the next run restart | 54b771f (browser-commander 0.5.4 → 0.26.3, links-notation 0.23.0, lino-arguments 0.3.0, playwright 1.64.0, puppeteer 25.12.0, eslint 10.12.0) |
 | DEP2 | «we need to make sure our code is simple, short and elegant, and our dependencies are feature-reach enough, so generic code is not duplicated across usages, with biggest focus on browser-commander» | Generic browser code lives in the dependencies (browser-commander first), not in this repository | No local copies of what browser-commander provides (`waitForUrlCondition`, `installClickListener`, `findToggleButton`, `isEnabled`…) | ✅ | 54b771f (src ~5400 → ~3000 lines) |
 | DEP3 | «if some missing features are in these dependencies report them» · «report issues on missing issues to browser commander» · «all missing features of browser commander must be reported» · «If needed report issues to browser commander.» | Every feature missing from a dependency is filed as an issue in that dependency's repository | [Upstream issues](#upstream-issues) | ✅ | browser-commander #136, #137, #140–#145; lino-arguments #40; links-notation #333 |
 | DEP4 | «make sure to draft all code with workarounds if possible» · «Do workaround here, and in browser commander report issues if any.» | Until upstream fixes land, the repository works around each gap in its own code | Workarounds: detached browser + watchdog, `network.lino`, merged `--disable-features`, single-tab via CDP | ✅ | `src/browser-session.mjs`, `src/browser-watchdog.mjs`, `src/tracing.mjs`; 101b754, 6114822, 61901a1 |
@@ -77,8 +77,8 @@ Sections:
 | RUN3 | «И проверяй на ошибки и возврат к списку вакансий в поиске после успешного отклика. … сейчас тут застряли.» | After a sent application the run returns to the search list right away (no 36 s wait for the vacancy page) | Log: sent → list within seconds | ✅ | 86e3b0a; browser-commander #143, #144 |
 | RUN4 | «Chat is not closed after we send first message there.» | The employer chat panel that hh.ru opens after an application is closed | «💬 Closed the chat panel» (live, run 13) | ✅ | a389a53 |
 | RUN5 | «we have multiple critical bugs here.» (two popups were sent unconfirmed while a captcha was shown) | An application hh.ru does not confirm as sent stops the run (unattended) or waits for the user; it never moves on to the next vacancy | «hh.ru did not mark vacancy … as responded» → wait | ✅ | a389a53; `isVacancyCardResponded` in `src/vacancies.mjs` |
-| RUN6 | «новые интервалы делаем по умолчанию, чтобы пользователи наши не страдали, и все настройки, чтобы минимум настроек и оно всё само шло - делаем по умолчанию» | The settings proven in the session are the defaults; a plain `bun run apply` needs no options | Option defaults in `src/config.mjs` and `.lenv.example` | ✅ | cfd842e, cfc8e55, e1d615b, 61901a1 |
-| RUN7 | «кроме сопроводительного письма - его только по выбору, но сейчас тестируем с этим что уже проверили - моим.» | No cover letter by default; it is sent only with `--message` / `--message-file`; `data/cover-letter.txt` holds the user's letter | A run without the options sends no letter | ✅ | cfd842e; `data/cover-letter.txt` |
+| RUN6 | «новые интервалы делаем по умолчанию, чтобы пользователи наши не страдали, и все настройки, чтобы минимум настроек и оно всё само шло - делаем по умолчанию» | The settings proven in the session are the defaults; `bun run apply` needs no option except the cover letter choice (RUN7) | Option defaults in `src/config.mjs` and `.lenv.example` | ✅ | cfd842e, cfc8e55, e1d615b, 61901a1 |
+| RUN7 | «кроме сопроводительного письма - его только по выбору, но сейчас тестируем с этим что уже проверили - моим.» | The cover letter is always an explicit choice: the run does not start without `--message` / `--message-file`; `data/cover-letter.txt` holds the user's letter | A run without `--message`/`--message-file` stops with «Choose a cover letter…» | ✅ | cfd842e; `data/cover-letter.txt` |
 | RUN8 | «Continue 1 by 1.» · «we stop only if input from me is required, and we have no known answer» | The run handles one vacancy at a time and stops only when it needs the user | Continuous run log | ✅ | 37e4055, 6ec31d8 |
 | RUN9 | «Is it working? Do we do applications?» · «We need to fix everything if we stuck.» | A stuck run is a bug: its cause is found and fixed in the code, not only restarted | Each stall has a fix commit | ✅ | 86e3b0a (vacancy page idle), 965531d (popup → full form), 61901a1 (background tab), 36f8af7 (hidden notice) |
 
@@ -110,7 +110,7 @@ Sections:
 | ID | User's words | Requirement | Check | Status | Evidence |
 |---|---|---|---|---|---|
 | TRACE1 | «Latest version of browser commander should provide full links notation recording of dom + changes to it, we must use it, if something is missing report.» | Every run records a browser-commander trace with Links Notation export, including DOM and its changes | `logs/traces/<time>/trace.lino` | 🚧 | `src/tracing.mjs` (`startTrace` with `links`); the LN export has the timeline and checkpoints but not DOM content or mutations, and checkpoints fail on hh.ru's Trusted Types: reported as browser-commander #140 |
-| TRACE2 | «Check DOM, we also may need requests and responses recording by browser commander, there might be some way to find the data.» | Requests and responses (document/xhr/fetch) are recorded with the trace | `logs/traces/<time>/network.lino` | ✅ | `src/tracing.mjs` workaround; browser-commander #140 |
+| TRACE2 | «Check DOM, we also may need requests and responses recording by browser commander, there might be some way to find the data.» | Requests and responses (document/xhr/fetch) are recorded with the trace | `logs/traces/<time>/network.lino` | 🚧 response metadata only (method, status, type, URL); bodies and headers are not recorded yet | `src/tracing.mjs` workaround; browser-commander #140 |
 | TRACE3 | «So browser commander provides all the best tools for debug out of the box.» | Debugging tools (trace, network, console) come from browser-commander, not from local code | — | 🚧 | Requested upstream in browser-commander #140; local workaround stays until then |
 | TRACE4 | «Also double check browser-commander have all the tools for gif and video generation in multiple formats, and also easy and unified API for getting screenshots and so on for all supported engines and languages.» | Survey browser-commander's screenshot / video / GIF / trace-render APIs in all engines and languages, and report the gaps | Survey done: no commander-level screenshot, video or GIF API | ✅ | browser-commander #142 |
 
@@ -144,7 +144,7 @@ Sections:
 | QA8 | «Не сейчас, а на последнем месте работы там был PostgreSQL, PHP Symphony, Go и т.п. Дополняй ответ и дай посмотреть.» · «Redis, RabbitMQ, Docker или ClickHouse именно ни все.» | The stack answer names the last job's stack (PHP Symfony, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker) and is shown to the user before use | «на каком стеке вы разрабатываете?» in `data/qa.lino` | ✅ | 3a630bd |
 | QA9 | «replace all such answers to Нячанг, Вьетнам и там где нужно указать часовой пояс укажи его.» | Every location answer says Нячанг, Вьетнам, with the time zone (UTC+7, +4 to Moscow) where asked | `grep -c Гоа data/qa.lino` = 0 | ✅ | 39d71ea |
 | QA10 | «На основе моего резюме и моих прошлых ответов помоги разработать качественный ответ на этот вопрос "Какой портфель автоматизаций и AI-продуктов вам удалось реализовать? Как считали эффекты для бизнеса?"» | A draft answer from the resume and saved answers, with an effect methodology and no invented numbers | Case study draft | ✅ | 1e02ee8; [case study](../case-studies/hard-question-ai-portfolio/case-study.md) |
-| QA11 | «we have linked in at `https://www.linkedin.com/in/konard` save it is as contact so we can paste a templated insert if contacts changes.» | Contacts live in `data/contacts.lino`; answers use placeholders (= [B4a](forms-and-chats.md#b-external-forms-google-forms-yandex-forms-a-companys-own-job-form)) | `tests/contacts.test.mjs` | 🧪 | ec58db0 |
+| QA11 | «we have linked in at `https://www.linkedin.com/in/konard` save it is as contact so we can paste a templated insert if contacts changes.» | Contacts live in `data/contacts.lino`; answers use placeholders (= [B4a](forms-and-chats.md#b-external-forms-google-forms-yandex-forms-a-companys-own-job-form)) | `tests/contacts.test.mjs` | 🚧 code done (src/contacts.mjs); qa.lino and the cover letter still hold contact values, migrated at the next run restart | ec58db0 |
 | QA12 | «Проверяй сохранились ли ответы и коммить и пуш всё что не закоммитили и не запушили.» · «qa.lino was not committed? Why?» | Answers the user saves during a run are checked and committed and pushed promptly | `git status data/qa.lino` clean after each run | ✅ | the «Save answers on …» commits (3a630bd … 28e6223) |
 
 ## CAP: captcha
@@ -198,7 +198,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B2 | Each form in its own browser slot (own Chrome, profile, port), apart from the hh.ru browser; stays open for review | ✅ |
 | B3 | Nothing is ever submitted | ✅ |
 | B4 | Contacts from the exported resume (not committed) and `data/profile.lino` | ✅ |
-| B4a | Contacts in `data/contacts.lino` as placeholders (LinkedIn) | 🧪 |
+| B4a | Contacts in `data/contacts.lino` as placeholders (LinkedIn) | 🚧 code done; data not migrated yet |
 | B5 | Link questions get the links they ask for | ✅ |
 | B6 | Saved answers from qa.lino by the same similarity and option matching as hh.ru forms | ✅ |
 | B7 | Open questions drafted by local Claude Code with «[уточнить: …]» marks; a choice gets one of its options | ✅ |
@@ -209,9 +209,10 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B12 | Report of every question and its source in `logs/forms/` | ✅ |
 | B13 | One implementation for every form, shared with hh.ru forms | ✅ |
 | B14 | Answers the user finally sends in an external form are saved to qa.lino | ⬜ |
-| B15 | Drafts in forms are plain text, without Markdown | ✅ |
-| B16 | A form's test assignment becomes a repository (given name) with an issue restated in English, without the employer, via gh | 🧪 |
+| B15 | Drafts in forms are plain text, without Markdown | 🧪 |
+| B16 | A form's test assignment becomes a repository (given name) with an issue restated in English, without the employer, via gh | ✅ konard/marketplace-retail-ai-control #1 |
 | B17 | The completed-assignment link question gets the repository link | 🧪 |
+| B18 | A form with a test assignment is not answered until the assignment's repository exists | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -235,7 +236,7 @@ Details and checks: [forms-and-chats.md, section C](forms-and-chats.md#c-hhru-ch
 | C4 | Template messages from different companies get the saved template reply (`data/chat-templates.lino`) | 🧪 |
 | C5 | The answer is typed, not sent | ✅ |
 | C6 | Previous chat answers are learned into qa.lino / chat-templates.lino | ✅ |
-| C7 | Chats opened right after an application are picked up by a watch mode, one by one | 🧪 |
+| C7 | Chats opened right after an application are picked up by a watch mode, one by one; a chat is visited again when its last message changes | 🧪 |
 | C8 | hh.ru's suggested quick replies are never clicked | ✅ |
 | C9 | Rejections are read; when a reply is possible, the saved question about the reason is typed, not sent | 🧪 |
 | C10 | Questionnaire links from chats are prefilled in form slots | 🧪 |
@@ -272,7 +273,7 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | SEC2 | Session constraint (a password option and a plaintext session-cookie file were refused during the session) | Cookie values and passwords are never printed, logged or stored; no password option, no session-cookie file; logins are copied in memory only | ✅ | `src/login.mjs`, `src/resume-export.mjs` (error output sanitized after a Playwright error printed a cookie header) |
 | SEC3 | «Captcha is not detected it can lead to account block.» · «I asked you to not do to much requests and use single browser instance, and you failed me» | Nothing may risk the account: captcha guard (CAP1), single instance and tab (PACE5, PACE6), pause after every vacancy (PACE3), stop on unconfirmed applications (RUN5) | ✅ | a389a53, cfc8e55, 61901a1 |
 | SEC4 | «please don't kill this browser instance» | The automation browser on port 9322, with the user's pending answers, is never killed by tools or by the agent (= BRW7) | ✅ | df08e17, ec11d6e |
-| SEC5 | «And never again skip anything» | No vacancy is skipped silently: every skip (filter, deferral, unattended skip) is logged and recorded in a `.lino` file | ✅ | 37e4055, 1e02ee8, 4167d35 |
+| SEC5 | «And never again skip anything» | No vacancy is skipped silently: every skip (filter, deferral, unattended skip) is logged and recorded in a `.lino` file | 🚧 logged everywhere; recorded in .lino only for filters and deferrals — external-site, hidden-resume, timeout and button skips are not recorded yet | 37e4055, 1e02ee8, 4167d35 |
 | SEC6 | Session constraint (a full-screen capture exposed another app) | Screenshots for checking are of the Chrome window only, never the full screen | ✅ | process rule; no screen capture in `src/` |
 | SEC7 | Session constraint (a stale «y» nearly confirmed an unseen form) | The agent never answers a prompt for the user unless they said so, and only while that prompt is pending | ✅ | 70e0acd guards it in code |
 | SEC8 | Session constraint | Personal data (resume export, `data/profile.lino`, form reports, traces) stays out of git | ✅ | `.gitignore` (`data/resume/`, `logs`) |
@@ -295,6 +296,8 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | PROC11 | «Draft exactly all requirements and we will test them as soon as I'm ready.» · «Please double check that all requirements from the conversation are listed in the repository so we fully track their delivery.» | All requirements are listed in the repository with checks and status, and kept up to date | ✅ | this file; [forms-and-chats.md](forms-and-chats.md) |
 | PROC12 | «To speed up drafting/development you may use up to 3 subagents of Opus 5.5.» | Up to 3 Opus 5.5 subagents may work in parallel | ✅ ongoing | this list, `experience-sync.md` |
 | PROC13 | «Ok, continue monitoring.» · «Ok, continue to monitor.» | Keep watching the run and report when the user is needed | ✅ ongoing | — |
+| PROC14 | «Double check that all our requirements are fully done and our scripts machinery answers them all.» | Statuses are audited against the code; overstated ones are corrected | Audit of HEAD 35342c4: RUN6/RUN7 reworded, TRACE2, SEC5, DEP1, QA11, B4a and B15 corrected | ✅ ongoing | this commit |
+| SEC10 | «Yes, it is public.» (the health answer in qa.lino) | The answers in data/qa.lino and contacts in data/contacts.lino are public by the user's decision; the resume export, profile and logs stay out of git | `git check-ignore data/resume logs data/profile.lino` | ✅ | 58a0268 |
 
 ## Upstream issues
 
@@ -334,23 +337,23 @@ of them, so none is lost.
 
 | Section | Requirements | ✅ | 🧪 | 🚧 | ⬜ | ↪ |
 |---|---|---|---|---|---|---|
-| DEP | 5 | 5 | | | | |
+| DEP | 5 | 4 | | 1 | | |
 | LOGIN | 8 | 5 | 1 | 1 | 1 | |
 | RUN | 9 | 8 | | 1 | | |
 | PACE | 6 | 5 | | | | 1 |
 | BRW | 7 | 7 | | | | |
-| TRACE | 4 | 2 | | 2 | | |
+| TRACE | 4 | 1 | | 3 | | |
 | CONF | 11 | 9 | 1 | | | 1 |
-| QA | 12 | 11 | 1 | | | |
+| QA | 12 | 11 | | 1 | | |
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 3 | 1 | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 18 | 10 | 7 | | 1 | |
+| FORM (B) | 19 | 9 | 8 | 1 | 1 | |
 | CHAT (C) | 13 | 7 | 6 | | | |
 | EXP | 7 | 3 | 2 | 2 | | |
-| SEC | 9 | 9 | | | | |
-| PROC | 13 | 13 | | | | |
-| **Total** | **140** | **107** | **21** | **7** | **2** | **3** |
+| SEC | 10 | 9 | | 1 | | |
+| PROC | 14 | 14 | | | | |
+| **Total** | **143** | **105** | **21** | **12** | **2** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

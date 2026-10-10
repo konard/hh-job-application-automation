@@ -451,6 +451,12 @@ export async function handleVacancyResponsePage({
       console.log('⚠️  Page navigation detected during form handling, continuing with next vacancy');
       return;
     }
+    // After a sent application the page trigger and this handler both return to the list: the
+    // second navigation aborts the first, which is no error
+    if (/net::ERR_ABORTED/.test(error.message)) {
+      log.debug(() => `Navigation replaced by another one: ${error.message.split('\n')[0]}`);
+      return;
+    }
     // A wait for an element of the form fails once the form was sent or left in the
     // browser; the vacancy page watch counts a sent application
     if (isTimeoutError(error) && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {

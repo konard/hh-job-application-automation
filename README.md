@@ -67,8 +67,9 @@ The application supports configuration via `.lenv` files using the [lino-argumen
 to the browser) and an installed Google Chrome. The browser is started the way a person would start
 it (no automation infobars); the profile is kept in `~/.hh-automation/chrome-profile`.
 
-**Zero-configuration run:** `bun run apply` logs in, picks your most recently updated resume and
-applies to the vacancies hh.ru suggests for it:
+**Run with defaults:** `bun run apply -- --message-file data/cover-letter.txt` needs no other option
+(the cover letter is the one choice the run asks of you): it logs in, picks your most recently updated
+resume and applies to the vacancies hh.ru suggests for it:
 
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names

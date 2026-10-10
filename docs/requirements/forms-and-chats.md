@@ -81,9 +81,10 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 | B12 | A report lists every question with its source (profile / qa.lino score and saved question / draft / open) and is saved to `logs/forms/<time>.md` | Report file after a run | ✅ |
 | B13 | One implementation for every form: the same matching (`findBestMatch`), option matching (`findMatchingOption`), answer text (`answerText`) as hh.ru forms; the question reader is generic (aria-labelledby, label, legend, placeholder, nearest heading) | No form-specific code for Google Forms or Yandex Forms | ✅ |
 | B14 | Answers the user finally sends in an external form are saved to qa.lino | After sending, the pairs appear in qa.lino | ⬜ |
-| B15 | Drafts are plain text: forms show Markdown as typed, so drafts are asked for without it and its marks (`**`, `#`, backticks, links, list markers) are taken out | Натур Пласт form: «**Проект:**» → «Проект:»; `tests/form-prefill.test.mjs` | ✅ |
+| B15 | Drafts are plain text: forms show Markdown as typed, so drafts are asked for without it and its marks (`**`, `#`, backticks, links, list markers) are taken out | Натур Пласт form: «**Проект:**» → «Проект:»; `tests/form-prefill.test.mjs` | 🧪 |
 | B16 | A test assignment in a form comes first: `bun run test-assignment -- <name>` restates it as a GitHub issue in English in other words (not a translation of the form's text), without any mention of the employer, checks that (employer names in any case ending, English, no six words in a row from the original) and creates the repository with the given name and the issue with gh | Натур Пласт's «Тестовое задание — система управления бизнесом с ИИ», dry run; `tests/assignments.test.mjs` | 🧪 |
 | B17 | The form question asking for the completed assignment («Ссылка на выполненное тестовое задание») is prefilled with the assignment's repository link; until the repository exists, the prefill says to create it first | `[slot N] 🧪 Test assignment …: create its repository first` | 🧪 |
+| B18 | A form with a test assignment is not answered until the assignment's repository exists: the prefill stops with the `test-assignment` command to run, and the next prefill links the repository | Натур Пласт form → https://github.com/konard/marketplace-retail-ai-control (issue #1), link prefilled in slot 1 | 🧪 |
 
 ## C. hh.ru chats
 
