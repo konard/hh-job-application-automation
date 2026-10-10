@@ -303,6 +303,7 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | PROC12 | «To speed up drafting/development you may use up to 3 subagents of Opus 5.5.» | Up to 3 Opus 5.5 subagents may work in parallel | ✅ ongoing | this list, `experience-sync.md` |
 | PROC13 | «Ok, continue monitoring.» · «Ok, continue to monitor.» | Keep watching the run and report when the user is needed | ✅ ongoing | — |
 | PROC14 | «Double check that all our requirements are fully done and our scripts machinery answers them all.» | Statuses are audited against the code; overstated ones are corrected | Audit of HEAD 35342c4: RUN6/RUN7 reworded, TRACE2, SEC5, DEP1, QA11, B4a and B15 corrected | ✅ ongoing | this commit |
+| PROC15 | «be short and consise if you want anything from me, I cannot read so much text» | When asking the user for input, do only what cannot be done without them first, then ask in one short line; do not print long reports in chat | ✅ ongoing | process constraint; no code required |
 | SEC10 | «Yes, it is public.» (the health answer in qa.lino) | The answers in data/qa.lino and contacts in data/contacts.lino are public by the user's decision; the resume export, profile and logs stay out of git | `git check-ignore data/resume logs data/profile.lino` | ✅ | 58a0268 |
 
 ## Upstream issues
@@ -339,6 +340,10 @@ of them, so none is lost.
 | «Что такое "cycle time"?» | Answered; explained in the case study |
 | «What happenned? Why no browser?» | Root cause in the agent's own run setup (a pipe holder that expired after 24 h), not in the code; the idle watchdog then closed Chrome as designed (BRW2) |
 | «[Image] why it stuck now?» | Fixed in 36f8af7 (FLT6) |
+| «Everything that is blocked by my actions - do at the end.» | Scheduling instruction: items waiting on the user (LinkedIn login, live checks) deferred to the end of the session; independent work done first (led to the ordering of the 2026-10-10 subagents) |
+| «linkedin must be unblocked - search the ways, i have logged in by other browsers.» | Reinforcement of LOGIN7; user signals an active LinkedIn session exists in their other browsers; LOGIN7 remains ⬜ until a path to import that session is safe to implement |
+| «[Image] that may be used as default template for rejection.» | The shown rejection message pattern is the default template for asking about rejection reasons (C9); covered by chat-templates.lino |
+| «what is going on here?» | Question about a stuck run state; answered inline; no lasting requirement |
 
 ## Summary
 
