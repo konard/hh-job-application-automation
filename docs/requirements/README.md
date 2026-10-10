@@ -247,8 +247,8 @@ Details and checks: [forms-and-chats.md, section C](forms-and-chats.md#c-hhru-ch
 | C11 | hh.ru's employer rating poll from a chat opens prefilled (company) in a form slot; ratings stay the user's | 🧪 |
 | C12 | Template messages answered the same way are generalized into learned patterns (`…` gaps, `*` endings) | 🧪 |
 | C13 | Messages that need no reply (a bot's summary of answers, `[без ответа]` templates) are only read; summaries are learned | ✅ |
-| C14 | `apply.mjs --process-chats` starts `answer-chats.mjs --auto` as a child process alongside the application loop; stopped when apply exits; `--chats-interval-minutes` (default 120) sets the poll interval | 🧪 |
-| C15 | `--auto` takes unread chats only; handles what needs nothing sent; stops at the first chat that needs a message, with it open and the reply typed, until the user has answered it; nothing is sent by the tool | 🧪 |
+| C14 | `apply.mjs --process-chats` starts `answer-chats.mjs --auto` as a child process alongside the application loop; stopped when apply exits; `--chats-interval-minutes` (default 120) sets the poll interval | ✅ live 2026-10-10: «💬 Chat processor started (checking unread chats every 120 min)», chat slot 9340 reused, applications ran alongside |
+| C15 | `--auto` takes unread chats only; handles what needs nothing sent; stops at the first chat that needs a message, with it open and the reply typed, until the user has answered it; nothing is sent by the tool | 🧪 live: stopped at the first chat with the reply typed («💬 Check the typed reply and send it: …»); resuming after the user's answer not yet seen |
 
 ## EXP: work experience export, sync and translation
 
@@ -356,11 +356,11 @@ of them, so none is lost.
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
 | FORM (B) | 23 | 14 | 9 | | | |
-| CHAT (C) | 15 | 7 | 8 | | | |
-| EXP | 7 | 3 | 2 | 2 | | |
+| CHAT (C) | 15 | 8 | 7 | | | |
+| EXP | 7 | 3 | 4 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 14 | 14 | | | | |
-| **Total** | **149** | **109** | **33** | **3** | **1** | **3** |
+| **Total** | **149** | **110** | **34** | **1** | **1** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
