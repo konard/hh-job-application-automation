@@ -419,13 +419,14 @@ What about paths?
   describe('Lock mechanism edge cases', () => {
     test('should handle rapid sequential writes', async () => {
       await cleanup();
-      // Rapidly add 20 entries without awaiting each one individually
+      // Rapidly start 20 writes without awaiting each one individually
+      const writes = [];
       for (let i = 0; i < 20; i++) {
-        addOrUpdateQA(`Rapid ${i}?`, `Answer ${i}`); // Not awaited
+        writes.push(addOrUpdateQA(`Rapid ${i}?`, `Answer ${i}`));
       }
-
-      // Small delay to let operations complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Waits for the writes themselves: a fixed delay is too short on a loaded machine (each one
+      // takes the file lock), and unfinished writes then land in the next test's file
+      await Promise.all(writes);
 
       const result = await readQADatabase();
       // Should have all 20 entries due to locking
