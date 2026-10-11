@@ -75,13 +75,20 @@ export function createInstantChat({
   page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, closePanel,
   firstMessageMs = 20000, nextMessageMs = 15000, log = console.log,
 }) {
-  const chatFrame = () => page.frames().find((frame) => CHAT_FRAME.test(frame.url()));
-
-  async function waitForFrame(ms) {
+  /**
+   * The open panel's chat of this vacancy. A closed panel keeps its frame, hidden, with the
+   * chat of an earlier application: only a visible one of this vacancy counts
+   */
+  async function waitForChat(vacancyId, ms) {
     for (const started = Date.now(); Date.now() - started < ms; await sleep(500)) {
-      const frame = chatFrame();
-      if (frame) {
-        return frame;
+      for (const frame of page.frames().filter((candidate) => CHAT_FRAME.test(candidate.url()))) {
+        if (!await frame.frameElement().then((element) => element.isVisible()).catch(() => false)) {
+          continue;
+        }
+        const chatVacancy = extractVacancyId((await frame.evaluate(readChat).catch(() => null))?.vacancyUrl ?? '');
+        if (!vacancyId || chatVacancy === vacancyId) {
+          return frame;
+        }
       }
     }
     return null;
@@ -150,8 +157,9 @@ export function createInstantChat({
   }
 
   return async function answerInstantChat(vacancyId) {
-    const frame = await waitForFrame(5000);
+    const frame = await waitForChat(vacancyId, 10000);
     if (!frame) {
+      log('💬 hh.ru opened no chat panel for this application');
       return;
     }
     let handled = null;
@@ -160,12 +168,9 @@ export function createInstantChat({
     for (;;) {
       const chat = await frame.evaluate(readChat).catch(() => null);
       // Closed by the user, or another chat opened in it
-      if (!chat || frame.isDetached()) {
-        return;
-      }
-      const chatVacancy = extractVacancyId(chat.vacancyUrl ?? '');
-      if (vacancyId && chatVacancy && chatVacancy !== vacancyId) {
-        log(`💬 The chat panel shows another vacancy (${chat.vacancy}): left as it is`);
+      const chatVacancy = extractVacancyId(chat?.vacancyUrl ?? '');
+      if (!chat || frame.isDetached() || (vacancyId && chatVacancy && chatVacancy !== vacancyId)) {
+        log('💬 The chat panel was closed or shows another chat: left as it is');
         return;
       }
       const last = pendingMessages(chat.messages).at(-1);
