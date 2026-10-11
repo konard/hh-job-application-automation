@@ -375,6 +375,8 @@ export async function addLinkedInMedia(page, { url, title }) {
     return { added: false, problem: 'no «Add media» → «Add a link» in the form' };
   }
   await linkItem.click();
+  // Paced like a person: LinkedIn's form broke on back-to-back clicks
+  await sleep(1500);
   const input = page.locator('input[aria-label^="Paste or type a link"], input[aria-label*="ссылк"]').first();
   const titleInput = page.getByLabel(/^(Title|Название)\*?$/).first();
   // LinkedIn's preview of a link fails now and then: it is tried again; a site's root also with «/»
@@ -384,6 +386,7 @@ export async function addLinkedInMedia(page, { url, title }) {
   for (const link of [url, withSlash, url, withSlash]) {
     await input.fill('');
     await input.pressSequentially(link, { delay: 30 });
+    await sleep(800);
     await page.getByRole('button', { name: /^(Add|Добавить)$/ }).first().click();
     if (await titleInput.waitFor({ timeout: 20000 }).then(() => true, () => false)) {
       break;
@@ -398,7 +401,7 @@ export async function addLinkedInMedia(page, { url, title }) {
   await titleInput.click();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
   await page.keyboard.type(title, { delay: 30 });
-  await sleep(500);
+  await sleep(1500);
   await page.getByRole('button', { name: /^(Save|Сохранить)$/ }).last().click();
   await sleep(3000);
   // LinkedIn's form now and then breaks on saving a link («Something went wrong on our end»)
