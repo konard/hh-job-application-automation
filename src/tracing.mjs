@@ -65,10 +65,12 @@ function openLog(file) {
  * @param {Object} options
  * @param {Object} options.commander - Browser commander instance
  * @param {Object} options.page - Raw engine page
+ * @param {string} [options.name] - Added to the directory name (e.g. experience-linkedin)
  * @returns {Promise<string>} Trace directory
  */
-export async function startTracing({ commander, page }) {
-  const directory = path.join(process.cwd(), 'logs', 'traces', new Date().toISOString().replace(/[:.]/g, '-'));
+export async function startTracing({ commander, page, name = '' }) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const directory = path.join(process.cwd(), 'logs', 'traces', name ? `${stamp}-${name}` : stamp);
   fs.mkdirSync(directory, { recursive: true });
 
   // The network log starts first, so the requests of the initial checkpoint are in it
