@@ -22,15 +22,15 @@ const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 's
 export async function loadContacts(filePath, { rate = usdRate } = {}) {
   const entries = await createQADatabase(filePath).readQADatabase();
   const contacts = Object.fromEntries([...entries].map(([key, value]) => [key, Array.isArray(value) ? value : String(value)]));
-  // Salary answers ({{salary_gross}}, …) from the net baseline in dollars (salary.mjs)
-  const netUsd = Number(String(contacts.salary_net_usd ?? '').replace(/\D/g, ''));
-  if (netUsd > 0) {
-    const usdRub = await rate();
-    if (usdRub) {
-      Object.assign(contacts, salaryValues({ netUsd, usdRate: usdRub }));
-    } else {
-      console.log('⚠️  No dollar rate (Central Bank unreachable, none cached): salary answers are left as open questions');
+  // Salary answers ({{salary_gross}}, …) from the net baselines in rubles and dollars (salary.mjs)
+  const amount = (key) => Number(String(contacts[key] ?? '').replace(/\D/g, ''));
+  const [netRub, netUsd] = [amount('salary_net_rub'), amount('salary_net_usd')];
+  if (netRub > 0 || netUsd > 0) {
+    const usdRub = netUsd > 0 ? await rate() : null;
+    if (netUsd > 0 && !usdRub) {
+      console.log('⚠️  No dollar rate (Central Bank unreachable, none cached): gross in dollars is left as an open question');
     }
+    Object.assign(contacts, salaryValues({ netRub, netUsd, usdRate: usdRub }));
   }
   return contacts;
 }

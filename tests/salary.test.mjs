@@ -21,14 +21,18 @@ describe('Gross from net', () => {
     assert.deepEqual(rates, [0.13, 0.15, 0.18]);
   });
 
-  test('$6000 net at 84.9 ₽: rubles rounded up to 10 000, dollars to 100', () => {
-    assert.deepEqual(salaryValues({ netUsd: 6000, usdRate: 84.9048 }), {
-      salary_net: '510 000 ₽',
-      salary_gross: '610 000 ₽',
+  test('rubles and dollars from their own baselines, gross rounded up', () => {
+    assert.deepEqual(salaryValues({ netRub: 450000, netUsd: 6000, usdRate: 84.9048 }), {
+      salary_net: '450 000 ₽',
+      salary_gross: '530 000 ₽',
+      salary_ndfl: '13% / 15% / 18%',
       salary_net_usd: '$6 000',
       salary_gross_usd: '$7 100',
-      salary_ndfl: '13% / 15% / 18%',
     });
+  });
+
+  test('no rate: the dollar gross is left out', () => {
+    assert.ok(!('salary_gross_usd' in salaryValues({ netRub: 450000, netUsd: 6000 })));
   });
 });
 

@@ -1,12 +1,13 @@
 /**
- * Salary answers from one baseline: the net pay a month in dollars (data/contacts.lino
- * «salary_net_usd», e.g. 6000). Answers use placeholders, filled in like contacts:
- *   {{salary_net}}       510 000 ₽     net a month in rubles, at the Central Bank's rate of the day
- *   {{salary_gross}}     610 000 ₽     gross a month: the pay before the progressive personal income tax
+ * Salary answers from two baselines, the net pay a month (data/contacts.lino): in rubles
+ * «salary_net_rub» (e.g. 450000) and in dollars «salary_net_usd» (e.g. 6000), set apart, not
+ * converted. Answers use placeholders, filled in like contacts:
+ *   {{salary_net}}       450 000 ₽
+ *   {{salary_gross}}     530 000 ₽     the pay before the progressive personal income tax
  *   {{salary_net_usd}}   $6 000
- *   {{salary_gross_usd}} $7 100
- *   {{salary_ndfl}}      13% / 15% / 18%   the tax rates that gross goes through
- * Rubles are rounded up to 10 000, dollars to 100 («от» pay is never below the baseline).
+ *   {{salary_gross_usd}} $7 100        the same tax, its brackets at the Central Bank's rate of the day
+ *   {{salary_ndfl}}      13% / 15% / 18%   the tax rates the ruble gross goes through
+ * Gross is rounded up: rubles to 10 000, dollars to 100 («от» pay is never below the baseline).
  *
  * @module salary
  */
@@ -54,21 +55,25 @@ const roundUp = (value, step) => Math.ceil(value / step) * step;
 const grouped = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
 /**
- * The placeholders' values
- * @param {{netUsd: number, usdRate: number}} options
+ * The placeholders' values; the dollar gross only with a rate
+ * @param {{netRub?: number, netUsd?: number, usdRate?: number|null}} options
  * @returns {Object<string, string>}
  */
-export function salaryValues({ netUsd, usdRate }) {
-  const netRub = netUsd * usdRate;
-  const { gross, rates } = annualGrossFromNet(netRub * 12);
-  const grossRub = gross / 12;
-  return {
-    salary_net: `${grouped(roundUp(netRub, 10000))} ₽`,
-    salary_gross: `${grouped(roundUp(grossRub, 10000))} ₽`,
-    salary_net_usd: `$${grouped(netUsd)}`,
-    salary_gross_usd: `$${grouped(roundUp(grossRub / usdRate, 100))}`,
-    salary_ndfl: rates.map((rate) => `${Math.round(rate * 100)}%`).join(' / '),
-  };
+export function salaryValues({ netRub = 0, netUsd = 0, usdRate = null }) {
+  const values = {};
+  if (netRub > 0) {
+    const { gross, rates } = annualGrossFromNet(netRub * 12);
+    values.salary_net = `${grouped(netRub)} ₽`;
+    values.salary_gross = `${grouped(roundUp(gross / 12, 10000))} ₽`;
+    values.salary_ndfl = rates.map((rate) => `${Math.round(rate * 100)}%`).join(' / ');
+  }
+  if (netUsd > 0) {
+    values.salary_net_usd = `$${grouped(netUsd)}`;
+    if (usdRate > 0) {
+      values.salary_gross_usd = `$${grouped(roundUp(annualGrossFromNet(netUsd * usdRate * 12).gross / 12 / usdRate, 100))}`;
+    }
+  }
+  return values;
 }
 
 /**
