@@ -362,8 +362,10 @@ export async function addLinkedInSkills(page, skills) {
  *   already there; broken: the form broke and has to be opened again
  */
 export async function addLinkedInMedia(page, { url, title }) {
-  const existing = page.locator('dialog[open], [role="dialog"]').getByText(title, { exact: true });
-  if (await existing.count().catch(() => 0) > 0) {
+  // Only the form's Media list counts: the title is also the organization's name elsewhere in it
+  const mediaList = page.locator('[data-testid$="position-mediaUiCollection"]').first();
+  const inMedia = async () => (await mediaList.innerText().catch(() => '')).split('\n').some((line) => line.trim() === title);
+  if (await inMedia()) {
     return { added: false, problem: '' };
   }
   const linkItem = page.getByRole('menuitem', { name: /^(Add a link|Добавить ссылку)$/ });
@@ -408,7 +410,7 @@ export async function addLinkedInMedia(page, { url, title }) {
   if (await page.getByText(/Something went wrong|Что-то пошло не так/).first().isVisible().catch(() => false)) {
     return { added: false, broken: true, problem: `LinkedIn's form broke on adding ${url}` };
   }
-  const added = await existing.count().catch(() => 0) > 0;
+  const added = await inMedia();
   return { added, problem: added ? '' : `the link ${url} did not show in Media` };
 }
 
