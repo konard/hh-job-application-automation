@@ -14,7 +14,7 @@
  * @module chat-answers
  */
 
-import { findBestMatch, normalizeQuestion, stringSimilarity } from './qa-database.mjs';
+import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isPattern, matchesPattern, normalizeQuestion, patternWords, stringSimilarity } from './qa-database.mjs';
 import { answerText } from './qa.mjs';
 
 /** A template message is the same text in other words; its saved reply needs a close match */
@@ -197,15 +197,7 @@ export function knownReply(message, { templates, qaMap }) {
   return null;
 }
 
-/** Prefix of a learned pattern in data/chat-templates.lino */
-export const PATTERN_PREFIX = 'pattern: ';
-const GAP = '…';
-
-/** @param {string} key @returns {boolean} */
-export const isPattern = (key) => key.startsWith(PATTERN_PREFIX);
-
-/** Words of a message for patterns: lowercase, without punctuation, ё as е */
-const patternWords = (text) => normalizeQuestion(String(text).replace(/[«»"()—–]/g, ' ')).replace(/ё/g, 'е').split(' ').filter(Boolean);
+export { PATTERN_PREFIX, isPattern, matchesPattern };
 
 /** Words that carry meaning: prepositions and conjunctions do not count when patterns are compared */
 const meaningful = (tokens) => tokens.filter((token) => token !== GAP && token.replace(/\*$/, '').length >= 3).length;
@@ -271,29 +263,6 @@ function mergeTokens(a, b) {
     .filter((token, index, kept) => !(token === GAP && (index === 0 || kept[index - 1] === GAP)));
 }
 
-/**
- * Whether a message is another wording of a pattern: its words in order, anything in the gaps,
- * any ending after a stem
- * @param {string} pattern - With or without the «pattern: » prefix
- * @param {string} text
- * @returns {boolean}
- */
-export function matchesPattern(pattern, text) {
-  const tokens = pattern.replace(PATTERN_PREFIX, '').split(' ').filter(Boolean);
-  const escape = (word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  let source = '(?:^| )';
-  tokens.forEach((token, index) => {
-    if (token === GAP) {
-      source += '(?:\\S+ )*?';
-      return;
-    }
-    source += token.endsWith('*') ? `${escape(token.slice(0, -1))}\\S*` : escape(token);
-    if (index < tokens.length - 1) {
-      source += ' ';
-    }
-  });
-  return new RegExp(`${source}(?: |$)`, 'u').test(patternWords(text).join(' '));
-}
 
 /** Replies that say the same: equal, or nearly so («Благодарю, ожидаю» and «Благодарю, ожидаю!») */
 const sameReply = (a, b) => stringSimilarity(normalizeQuestion(answerText(a)), normalizeQuestion(answerText(b))) >= 0.85;

@@ -11,6 +11,7 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import os from 'os';
 import { findBestMatch } from './qa-database.mjs';
+import { expandContacts } from './contacts.mjs';
 import { answerText, findMatchingOption } from './qa.mjs';
 
 /** Placeholder a draft uses where only the user knows the fact */
@@ -389,6 +390,9 @@ export function readFormFields() {
   };
 }
 
+const expandOverrides = (overrides, contacts) => Object.fromEntries(Object.entries(overrides ?? {})
+  .map(([key, value]) => [key, Array.isArray(value) ? value.map((item) => expandContacts(item, contacts)) : expandContacts(value, contacts)]));
+
 /**
  * Load the resume and profile for a prefill
  * @param {Object} paths
@@ -412,6 +416,7 @@ export async function loadProfile({ resumeMarkdown, resumeJson, resumeFile, cove
   const hasResumeFile = await fs.access(resumeFile).then(() => true, () => false);
   return {
     resume,
-    profile: { ...profile, ...known, links, resumeFile: hasResumeFile ? resumeFile : null, ...profileOverrides },
+    // profile.lino may use the contacts' placeholders, e.g. «salary» with {{salary_net}} and {{salary_gross}}
+    profile: { ...profile, ...known, links, resumeFile: hasResumeFile ? resumeFile : null, ...expandOverrides(profileOverrides, contacts) },
   };
 }

@@ -10,17 +10,29 @@
  */
 
 import { createQADatabase } from './qa-database.mjs';
+import { salaryValues, usdRate } from './salary.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
-const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email'];
+const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd'];
 
 /**
  * @param {string} filePath - data/contacts.lino
  * @returns {Promise<Object<string, string|string[]>>}
  */
-export async function loadContacts(filePath) {
+export async function loadContacts(filePath, { rate = usdRate } = {}) {
   const entries = await createQADatabase(filePath).readQADatabase();
-  return Object.fromEntries([...entries].map(([key, value]) => [key, Array.isArray(value) ? value : String(value)]));
+  const contacts = Object.fromEntries([...entries].map(([key, value]) => [key, Array.isArray(value) ? value : String(value)]));
+  // Salary answers ({{salary_gross}}, …) from the net baseline in dollars (salary.mjs)
+  const netUsd = Number(String(contacts.salary_net_usd ?? '').replace(/\D/g, ''));
+  if (netUsd > 0) {
+    const usdRub = await rate();
+    if (usdRub) {
+      Object.assign(contacts, salaryValues({ netUsd, usdRate: usdRub }));
+    } else {
+      console.log('⚠️  No dollar rate (Central Bank unreachable, none cached): salary answers are left as open questions');
+    }
+  }
+  return contacts;
 }
 
 /**
@@ -78,7 +90,9 @@ export function withContacts(db, contacts) {
     ...db,
     async readQADatabase() {
       const raw = await db.readQADatabase();
-      return new Map([...raw].map(([question, answer]) => [question, expandAnswer(answer, contacts)]));
+      // An answer with a placeholder that has no value (e.g. no dollar rate) is not typed as is
+      return new Map([...raw].map(([question, answer]) => [question, expandAnswer(answer, contacts)])
+        .filter(([, answer]) => ![answer].flat().some((item) => /\{\{\w+\}\}/.test(item))));
     },
     async addOrUpdateQA(question, answer) {
       const saved = (await db.readQADatabase()).get(question);

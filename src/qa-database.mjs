@@ -417,6 +417,41 @@ export function stringSimilarity(a, b) {
   return 1 - distance / maxLength;
 }
 
+/** Prefix of a pattern key: in data/chat-templates.lino (learned) and data/qa.lino (question templates) */
+export const PATTERN_PREFIX = 'pattern: ';
+/** A gap of any words in a pattern */
+export const PATTERN_GAP = '…';
+
+/** @param {string} key @returns {boolean} */
+export const isPattern = (key) => key.startsWith(PATTERN_PREFIX);
+
+/** Words of a message for patterns: lowercase, without punctuation, ё as е */
+export const patternWords = (text) => normalizeQuestion(String(text).replace(/[«»"()—–/]/g, ' ')).replace(/ё/g, 'е').split(' ').filter(Boolean);
+
+/**
+ * Whether a message is another wording of a pattern: its words in order, anything in the gaps,
+ * any ending after a stem
+ * @param {string} pattern - With or without the «pattern: » prefix
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function matchesPattern(pattern, text) {
+  const tokens = pattern.replace(PATTERN_PREFIX, '').split(' ').filter(Boolean);
+  const escape = (word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let source = '(?:^| )';
+  tokens.forEach((token, index) => {
+    if (token === PATTERN_GAP) {
+      source += '(?:\\S+ )*?';
+      return;
+    }
+    source += token.endsWith('*') ? `${escape(token.slice(0, -1))}\\S*` : escape(token);
+    if (index < tokens.length - 1) {
+      source += ' ';
+    }
+  });
+  return new RegExp(`${source}(?: |$)`, 'u').test(patternWords(text).join(' '));
+}
+
 /**
  * Normalize a question string for comparison
  * @param {string} question - Question to normalize
@@ -616,9 +651,22 @@ export function findBestMatch(question, qaDatabase, options = {}) {
     return returnAll ? [result] : result;
   }
 
+  // A question template («pattern: gross») takes every wording of its question
+  // The most specific one wins: «pattern: gross … usd» over «pattern: gross»
+  const template = [...qaDatabase.entries()]
+    .filter(([dbQuestion]) => isPattern(dbQuestion) && matchesPattern(dbQuestion, question))
+    .sort(([a], [b]) => b.split(' ').length - a.split(' ').length)[0];
+  const templateMatch = template ? { question: template[0], answer: template[1], score: 1.0 } : null;
+  if (templateMatch && !returnAll) {
+    return templateMatch;
+  }
+
   const matches = [];
 
   for (const [dbQuestion, answer] of qaDatabase.entries()) {
+    if (isPattern(dbQuestion)) {
+      continue;
+    }
     // "опыт на C#" must not take the answer of "опыт на Go" (threshold 0 still lists everything)
     if (threshold > 0 && subjectTermsConflict(question, dbQuestion)) {
       continue;
@@ -650,7 +698,7 @@ export function findBestMatch(question, qaDatabase, options = {}) {
   matches.sort((a, b) => b.score - a.score);
 
   if (returnAll) {
-    return matches;
+    return templateMatch ? [templateMatch, ...matches] : matches;
   } else {
     // Return best match (first in sorted array) or null if no matches
     return matches.length > 0 ? matches[0] : null;
