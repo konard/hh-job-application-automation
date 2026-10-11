@@ -28,6 +28,7 @@ import { createVacancyFilters } from './vacancy-filters.mjs';
 import { createSkippedVacancies } from './skipped-vacancies.mjs';
 import { expandContacts, loadContacts, withContacts } from './contacts.mjs';
 import { createInstantChat } from './instant-chat.mjs';
+import { blockHangingHosts } from './hanging-hosts.mjs';
 import { closeChatPanel } from './helpers/page-helpers.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
@@ -137,6 +138,9 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
 
   commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose });
   console.log(`Using ${commander.engine} automation engine`);
+  // Ad and tracker requests that hang kept every page from being ready for half a minute
+  await blockHangingHosts(session.page)
+    .catch((error) => console.log(`⚠️  Could not block the hanging ad hosts: ${error.message}`));
 
   if (argv.trace) {
     await startTracing({ commander, page: session.page });
