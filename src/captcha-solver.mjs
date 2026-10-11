@@ -44,8 +44,8 @@ const IMAGE_NAME = 'image.png';
 const PROMPT = 'I am logged in to my own hh.ru account and it shows me a captcha. Your reading is typed into ' +
   'the captcha field for me and sent once; if it is not accepted, I solve the captcha myself. ' +
   'The image is the captcha. It usually shows one or two Russian words in Cyrillic ' +
-  'letters, curved or distorted. Output ONLY the text shown in it, exactly as written (the same letters, digits, ' +
-  'case and spaces between words), with no quotes, comments or explanation, also when unsure.';
+  'letters, curved or distorted, always lowercase. Output ONLY the text shown in it in lowercase (the same letters, ' +
+  'digits and spaces between words), with no quotes, comments or explanation, also when unsure.';
 /** Reads of one captcha picture when the models give no answer (Haiku sometimes declines) */
 const MAX_ATTEMPTS = 3;
 /** The dialog fades in; the picture is taken once it is shown in full */
@@ -59,7 +59,8 @@ const PLAUSIBLE_ANSWER = /^(?=.{2,30}$)[а-яёa-z0-9]+(?: [а-яёa-z0-9]+){0,2
 
 /**
  * The answer in a model reply: its last line that looks like a captcha answer, without quotes
- * or a final period (a comment such as "the first word is cut off" is skipped)
+ * or a final period, in lowercase as hh.ru's captchas are (a comment such as "the first word is
+ * cut off" is skipped)
  * @param {string|null|undefined} reply
  * @returns {string|null} Null when no line is a plausible captcha answer
  */
@@ -67,7 +68,7 @@ export function cleanAnswer(reply) {
   const answers = String(reply ?? '').split('\n')
     .map((line) => line.trim().replace(/^["'`«»“”]+|["'`«»“”.]+$/g, '').trim())
     .filter((line) => PLAUSIBLE_ANSWER.test(line));
-  return answers.pop() ?? null;
+  return answers.pop()?.toLowerCase() ?? null;
 }
 
 /**

@@ -10,7 +10,7 @@ import { waitWhileCaptcha } from '../src/captcha.mjs';
 
 describe('cleanAnswer', () => {
   test('keeps the text of the last line, without quotes or a final period', () => {
-    assert.equal(cleanAnswer('Here it is:\n"x7kQp".\n'), 'x7kQp');
+    assert.equal(cleanAnswer('Here it is:\n"x7kQp".\n'), 'x7kqp');
   });
 
   test('Cyrillic captchas are answers too', () => {
@@ -254,5 +254,12 @@ describe('waitWhileCaptcha with a prefill', () => {
     } });
     assert.equal(solved, true);
     assert.ok(calls >= 1);
+  });
+});
+
+describe('captcha answers in lowercase', () => {
+  test('a reading in capitals is typed in lowercase', () => {
+    assert.equal(cleanAnswer('СДЕЛАЙ СБЕРЕЖЕНИЯ'), 'сделай сбережения');
+    assert.equal(cleanAnswer('Стиль съедаемую'), 'стиль съедаемую');
   });
 });
