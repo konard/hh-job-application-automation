@@ -491,8 +491,13 @@ export async function handleVacancyResponsePage({
 
     await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true, autoSend });
     console.log('Clicked submit button');
-    for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !await isResponseSubmitted(commander); waited += 1000) {
+    const backOnList = () => URL_PATTERNS.searchVacancy.test(commander.getUrl());
+    for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !backOnList() && !await isResponseSubmitted(commander); waited += 1000) {
       await commander.wait({ ms: 1000, reason: 'submission to complete' });
+    }
+    // Back on the vacancy list: the vacancy page watch saw it sent and counted it
+    if (backOnList()) {
+      return;
     }
     if (!await isResponseSubmitted(commander)) {
       console.log(`⚠️  hh.ru did not confirm the application to vacancy ${vacancyId}, manual check required`);
