@@ -63,3 +63,13 @@ describe('Question templates', () => {
     assert.equal(expandContacts('{{salary_net}}', { salary_net: '510 000 ₽' }), '510 000 ₽');
   });
 });
+
+describe('Salary written back as placeholders', () => {
+  test('as people write it, in rubles and dollars', async () => {
+    const { contractContacts } = await import('../src/contacts.mjs');
+    const contacts = { salary_net: '450 000 ₽', salary_gross: '530 000 ₽', salary_net_usd: '$6 000' };
+    assert.equal(contractContacts('От 6000 долларов на руки.', contacts), 'От {{salary_net_usd}} на руки.');
+    assert.equal(contractContacts('От $6000, от 450000 рублей, 530 000 ₽', contacts), 'От {{salary_net_usd}}, от {{salary_net}}, {{salary_gross}}');
+    assert.equal(contractContacts('Опыт 6000 часов, 1450000 рублей', contacts), 'Опыт 6000 часов, 1450000 рублей');
+  });
+});
