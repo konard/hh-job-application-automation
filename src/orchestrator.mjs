@@ -16,7 +16,7 @@ import {
 import { handleVacancyResponsePage } from './vacancy-response.mjs';
 import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
 import { dismissOverlays, isResponseSubmitted } from './helpers/page-helpers.mjs';
-import { registerPageTriggers } from './page-triggers.mjs';
+import { registerPageTriggers, saveFormAnswers } from './page-triggers.mjs';
 import { ensureLoggedIn } from './login.mjs';
 import { findSuggestedVacanciesUrl, latestResumeSearchUrl } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
@@ -354,7 +354,10 @@ export function createOrchestrator({
           // A handler still busy with an earlier form keeps the trigger from starting on this one
           if (handledResponseUrl !== formUrl && URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
             console.log(`⚠️  The full form was not picked up by its page handler${responseHandling ? ' (it is still busy with an earlier form)' : ''}: filling it here`);
+            // What the user types is saved as the page trigger would
+            const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
             await vacancyResponseHandler().catch((error) => console.error('Error in vacancy response handler:', error.message));
+            await stopSaving();
             // Sent in the browser: hh.ru opened its vacancy page, which the safety net checks and leaves
             const formVacancyId = extractVacancyIdFromResponseUrl(formUrl);
             if (formVacancyId && extractVacancyId(commander.getUrl()) === formVacancyId) {

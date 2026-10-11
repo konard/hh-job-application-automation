@@ -223,7 +223,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B25 | A city question asking for the time zone gets «Нячанг, Вьетнам, UTC+7, МСК+4» from the profile | 🧪 |
 | B26 | Pay answers follow the form's vacancy: below the target, the top of its range as the minimum plus the comfortable hourly rate; not learned | 🧪 |
 | B27 | A pay stated in the form's own description comes first as the minimum (converted to the asked unit), plus the comfortable rate; one or two short sentences | 🧪 |
-| B28 | A full application form is never left unfilled: when its page handler does not start, the main loop fills it (cover letter, saved answers, open questions prompt), and once it is sent in the browser the run counts it and goes back to the vacancy list | 🧪 |
+| B28 | A full application form is never left unfilled: when its page handler does not start, the main loop fills it (cover letter, saved answers, open questions prompt) and saves what the user types (qa.lino), and once it is sent in the browser the run counts it and goes back to the vacancy list | 🧪 |
 | B29 | The chat panel hh.ru opens on the vacancy list after an application is handled before the next vacancy: a recruiter bot's questions take saved answers; a perfect match (the saved question word for word, and the saved answer is one of the bot's buttons when it offers them) is sent and the panel closed when the bot is done; anything else is prefilled, scrolled to the last message, and waits for the user; what the user answers is learned | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;

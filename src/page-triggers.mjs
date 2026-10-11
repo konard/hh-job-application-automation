@@ -19,6 +19,27 @@ import { URL_PATTERNS, extractVacancyIdFromResponseUrl, extractVacancyId } from 
 import { withdrawPrompt } from './confirmations.mjs';
 
 /**
+ * Save the answers typed into the full form every 5 s, so what the user answers in the browser
+ * is learned (qa.lino) also when they send it themselves
+ * @returns {() => Promise<void>} Stops the saving after a last save
+ */
+export function saveFormAnswers({ commander, addOrUpdateQA }) {
+  const save = async (reason) => {
+    const count = await saveQAPairs({ commander, addOrUpdateQA });
+    if (count > 0) {
+      console.log(`Saved ${count} Q&A pair(s) ${reason}`);
+    }
+  };
+  const interval = setInterval(() => save('(auto-save)').catch(() => {}), 5000);
+  return async () => {
+    clearInterval(interval);
+    await save('before navigation').catch((error) => {
+      log.debug(() => `⚠️ Error saving Q&A on cleanup: ${error.message}`);
+    });
+  };
+}
+
+/**
  * Register all page triggers for the HH.ru automation
  *
  * @param {Object} options - Configuration options
@@ -82,13 +103,6 @@ export function registerPageTriggers({
     }
   };
 
-  const saveQA = async (reason) => {
-    const count = await saveQAPairs({ commander, addOrUpdateQA });
-    if (count > 0) {
-      console.log(`Saved ${count} Q&A pair(s) ${reason}`);
-    }
-  };
-
   const unregisterVacancyResponse = commander.pageTrigger({
     name: 'vacancy-response-page',
     priority: 10,
@@ -100,14 +114,11 @@ export function registerPageTriggers({
       lastVacancyResponseId = extractVacancyIdFromResponseUrl(ctx.url) ?? lastVacancyResponseId;
 
       // Periodic Q&A save, plus a final save when leaving the page
-      const saveInterval = setInterval(() => saveQA('(auto-save)').catch(() => {}), 5000);
+      const stopSaving = saveFormAnswers({ commander, addOrUpdateQA });
       ctx.onCleanup(async () => {
-        clearInterval(saveInterval);
         // The form was sent or left in the browser, so a question on stdin no longer applies
         withdrawPrompt();
-        await saveQA('before navigation').catch((error) => {
-          log.debug(() => `⚠️ Error saving Q&A on cleanup: ${error.message}`);
-        });
+        await stopSaving();
       });
 
       try {
