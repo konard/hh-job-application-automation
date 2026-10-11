@@ -134,6 +134,10 @@ export function createOrchestrator({
    * @param {string|null} vacancyId
    */
   async function applicationNotConfirmed(vacancyId) {
+    // The vacancy page watch saw «Вы откликнулись» first and went back to the list
+    if (vacancyId && sentVacancyIds.has(vacancyId)) {
+      return;
+    }
     const message = `hh.ru did not confirm the application to vacancy ${vacancyId}. ` +
       'Check the browser (an error, a captcha, a message)';
     if (!isInteractive()) {
