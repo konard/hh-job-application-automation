@@ -27,7 +27,7 @@ import {
   planSync, withEditLinks,
 } from './experience.mjs';
 import {
-  closeLinkedInFollowUp, discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, linkedInFormOutcome,
+  closeLinkedInFollowUp, discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, linkedInFormOutcome, watchLinkedInSave,
   prefillHhExperience, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
 } from './experience-sites.mjs';
 import { createTranslator, reportFormalAiFailures, TRANSLATORS, FORMAL_AI_REPO } from './translation.mjs';
@@ -256,6 +256,9 @@ async function runSync(argv, data, diff, translator) {
     }
     // Saved or closed in the browser instead of answering: the prompt is withdrawn and that is taken
     let inBrowser = null;
+    if (argv.to === 'linkedin') {
+      await watchLinkedInSave(page);
+    }
     const watch = argv.to === 'linkedin' ? setInterval(async () => {
       inBrowser ??= await linkedInFormOutcome(page);
       if (inBrowser) {

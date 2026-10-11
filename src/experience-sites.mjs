@@ -566,19 +566,42 @@ export async function saveLinkedInPosition(page) {
 }
 
 /**
+ * Notice the user's Save of the position form in the browser: an edited position closes without
+ * «Your experience is saved», so the click itself is what tells saved from closed. Only the form's
+ * own Save counts (its dialog has the «Notify network» switch), not the Save of a media step
+ */
+export async function watchLinkedInSave(page) {
+  await page.evaluate(() => {
+    window.__positionSaveClicked = false;
+    if (!window.__positionSaveWatch) {
+      window.__positionSaveWatch = true;
+      document.addEventListener('click', (event) => {
+        const button = event.target.closest?.('button');
+        const dialog = button?.closest('dialog, [role="dialog"]');
+        if (button && dialog?.querySelector('[role="switch"]') && /^(Save|Сохранить)$/.test(button.innerText.trim())) {
+          window.__positionSaveClicked = true;
+        }
+      }, true);
+    }
+  }).catch(() => {});
+}
+
+/**
  * What became of the position form in the browser: 'saved', 'closed', 'broken' (LinkedIn's
  * «Something went wrong», nothing saved) or null (still open)
  */
 export async function linkedInFormOutcome(page) {
   const state = await page.evaluate(() => ({
     broken: /Something went wrong on our end|Что-то пошло не так/i.test(document.querySelector('dialog[open]')?.innerText ?? ''),
-    saved: /\/edit\/forms\/next-action\//.test(window.location.href) || /Your experience is saved|Опыт работы сохран/i.test(document.body?.innerText ?? ''),
+    saved: /\/edit\/forms\/next-action\//.test(window.location.href) || /Your experience is saved|Опыт работы сохран/i.test(document.body?.innerText ?? '')
+      || (window.__positionSaveClicked === true && !document.querySelector('dialog[open] [role="switch"]')),
     open: /\/edit\/forms\//.test(window.location.href) || /\/add-edit\//.test(window.location.href),
   })).catch(() => null);
   if (!state) {
     return null;
   }
-  return state.saved ? 'saved' : state.broken ? 'broken' : state.open ? null : 'closed';
+  // A form that broke on Save saved nothing
+  return state.broken ? 'broken' : state.saved ? 'saved' : state.open ? null : 'closed';
 }
 
 /**
