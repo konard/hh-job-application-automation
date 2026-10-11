@@ -145,7 +145,17 @@ export function createOrchestrator({
     }
   }
 
-  const vacancyResponseHandler = () => handleVacancyResponsePage({
+  // The full form's handler: run by the page trigger, or directly when the trigger did not start it
+  let responseHandling = null;
+  let handledResponseUrl = null;
+  const vacancyResponseHandler = () => {
+    handledResponseUrl = commander.getUrl();
+    responseHandling = runVacancyResponseHandler().finally(() => {
+      responseHandling = null;
+    });
+    return responseHandling;
+  };
+  const runVacancyResponseHandler = () => handleVacancyResponsePage({
     commander,
     MESSAGE: argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message,
     readQADatabase: qaDB.readQADatabase,
@@ -318,6 +328,18 @@ export function createOrchestrator({
           pageClosedByUser: getPageClosedByUser,
         });
 
+        if (result.status === 'vacancy_response_detected') {
+          // The page trigger fills the form; a form it did not start on is filled here, never left as it is
+          const formUrl = commander.getUrl();
+          for (let waited = 0; waited < 8000 && handledResponseUrl !== formUrl; waited += 500) {
+            await commander.wait({ ms: 500, reason: 'the full form handler to start' });
+          }
+          // A handler still busy with an earlier form keeps the trigger from starting on this one
+          if (handledResponseUrl !== formUrl && URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
+            console.log(`⚠️  The full form was not picked up by its page handler${responseHandling ? ' (it is still busy with an earlier form)' : ''}: filling it here`);
+            await vacancyResponseHandler().catch((error) => console.error('Error in vacancy response handler:', error.message));
+          }
+        }
         if (openedVacancy(result) && result.status !== 'success') {
           scheduleNextApplication(`Vacancy ${result.vacancyId ?? ''} opened (${result.status}${result.reason ? `: ${result.reason}` : ''})`);
         }
