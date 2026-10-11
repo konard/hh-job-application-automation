@@ -162,6 +162,10 @@ export function createOrchestrator({
   let responseHandling = null;
   let handledResponseUrl = null;
   const vacancyResponseHandler = () => {
+    // A trigger that starts late finds the form already being filled: one handler per form
+    if (responseHandling && handledResponseUrl === commander.getUrl()) {
+      return responseHandling;
+    }
     handledResponseUrl = commander.getUrl();
     responseHandling = runVacancyResponseHandler().finally(() => {
       responseHandling = null;
