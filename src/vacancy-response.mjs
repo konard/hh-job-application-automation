@@ -367,6 +367,8 @@ export async function handleVacancyResponsePage({
 
     if (submitWithoutTestSelector) {
       console.log('Using special "Откликнуться без теста" flow');
+      // Questions outside the test (e.g. the salary) still take their saved answers
+      await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
       await commander.clickButton({ selector: submitWithoutTestSelector, scrollIntoView: true, smoothScroll: true });
       console.log('Clicked "Откликнуться без теста" button');
       await commander.wait({ ms: 2000, reason: 'submit without test to complete' });
