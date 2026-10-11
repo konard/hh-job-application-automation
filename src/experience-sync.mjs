@@ -230,7 +230,10 @@ async function runSync(argv, data, diff, translator) {
       process.exit(0);
     },
   });
-  for (const [index, change] of changes.entries()) {
+  // A LinkedIn form that broke («Something went wrong») is prefilled again, up to twice
+  let rebuilt = 0;
+  for (let index = 0; index < changes.length; index++) {
+    const change = changes[index];
     console.log(`\n[${index + 1}/${changes.length}] ${formatChange(change, argv.to).split('\n')[0]}`);
     if (!hasFillableFields(change, argv.to)) {
       // Nothing for the form (e.g. hh.ru keeps skills per resume): a note for the user, no form opened
@@ -261,6 +264,13 @@ async function runSync(argv, data, diff, translator) {
     const answer = await askUser(`Prefilled on ${site} (slot window on port ${argv.to === 'linkedin' ? argv.linkedinPort : argv.hhPort}): check it, then save it?`, {
       skip: 'skip it (nothing is saved)',
     }).finally(() => clearInterval(watch));
+    if (answer === 'withdrawn' && inBrowser === 'broken' && rebuilt < 2) {
+      rebuilt++;
+      console.log('⚠️  LinkedIn\'s form broke («Something went wrong»), nothing was saved: prefilling it again');
+      index--;
+      continue;
+    }
+    rebuilt = 0;
     if (answer === 'withdrawn' && inBrowser) {
       console.log(inBrowser === 'saved' ? '💾 Saved by you in the browser' : '↪️  Closed by you in the browser: not saved');
       if (inBrowser === 'saved') {

@@ -377,9 +377,11 @@ export async function addLinkedInMedia(page, { url, title }) {
   await linkItem.click();
   const input = page.locator('input[aria-label^="Paste or type a link"], input[aria-label*="ссылк"]').first();
   const titleInput = page.getByLabel(/^(Title|Название)\*?$/).first();
-  // LinkedIn's preview of a link fails now and then: it is tried with and without its last «/»
-  const other = url.endsWith('/') ? url.slice(0, -1) : `${url}/`;
-  for (const link of [url, other, url, other]) {
+  // LinkedIn's preview of a link fails now and then: it is tried again; a site's root also with «/»
+  // (https://kaiten.ru/), a page only as written (https://github.com/deep-foundation)
+  const root = /^https?:\/\/[^/]+\/?$/.test(url);
+  const withSlash = root && !url.endsWith('/') ? `${url}/` : url;
+  for (const link of [url, withSlash, url, withSlash]) {
     await input.fill('');
     await input.pressSequentially(link, { delay: 30 });
     await page.getByRole('button', { name: /^(Add|Добавить)$/ }).first().click();
@@ -533,16 +535,20 @@ export async function saveLinkedInPosition(page) {
   await closeLinkedInFollowUp(page);
 }
 
-/** What the user did with the position form in the browser: 'saved', 'closed' or null (still open) */
+/**
+ * What became of the position form in the browser: 'saved', 'closed', 'broken' (LinkedIn's
+ * «Something went wrong», nothing saved) or null (still open)
+ */
 export async function linkedInFormOutcome(page) {
   const state = await page.evaluate(() => ({
+    broken: /Something went wrong on our end|Что-то пошло не так/i.test(document.querySelector('dialog[open]')?.innerText ?? ''),
     saved: /\/edit\/forms\/next-action\//.test(window.location.href) || /Your experience is saved|Опыт работы сохран/i.test(document.body?.innerText ?? ''),
     open: /\/edit\/forms\//.test(window.location.href) || /\/add-edit\//.test(window.location.href),
   })).catch(() => null);
   if (!state) {
     return null;
   }
-  return state.saved ? 'saved' : state.open ? null : 'closed';
+  return state.saved ? 'saved' : state.broken ? 'broken' : state.open ? null : 'closed';
 }
 
 /**

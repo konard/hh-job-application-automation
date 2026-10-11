@@ -307,16 +307,16 @@ describe('withEditLinks', () => {
 
 describe('company website as a LinkedIn media link', () => {
   test('the «Website:» line of a description gives the link', () => {
-    assert.equal(companyWebsite({ description: 'Website: kaiten.ru\n\nDevelopment of Kaiten.' }), 'https://kaiten.ru/');
-    assert.equal(companyWebsite({ description: 'Сайт: https://github.com/deep-foundation/' }), 'https://github.com/deep-foundation/');
-    assert.equal(companyWebsite({ description: 'No site here' }, { description: 'Website: example.com' }), 'https://example.com/');
+    assert.equal(companyWebsite({ description: 'Website: kaiten.ru\n\nDevelopment of Kaiten.' }), 'https://kaiten.ru');
+    assert.equal(companyWebsite({ description: 'Сайт: https://github.com/deep-foundation/' }), 'https://github.com/deep-foundation');
+    assert.equal(companyWebsite({ description: 'No site here' }, { description: 'Website: example.com' }), 'https://example.com');
     assert.equal(companyWebsite({ description: 'Built the website: fast' }), '');
   });
 
   test('a LinkedIn update carries the website, and skills open the LinkedIn form', () => {
     const diff = { pairs: [{ hh: { company: 'Kaiten', title: 'Dev', description: '', skills: ['iOS'] }, linkedin: { company: 'Kaiten.ru', description: 'Website: kaiten.ru' }, differences: [{ field: 'skills', onlyHh: ['iOS'], onlyLinkedin: [] }] }], onlyHh: [], onlyLinkedin: [] };
     const [change] = planSync(diff, 'linkedin');
-    assert.equal(change.fields.website, 'https://kaiten.ru/');
+    assert.equal(change.fields.website, 'https://kaiten.ru');
     assert.deepEqual(change.notes, []);
     assert.equal(hasFillableFields({ fields: { skills: ['iOS'] } }, 'linkedin'), true);
   });
@@ -344,7 +344,7 @@ describe('a LinkedIn form saved or closed in the browser', () => {
   // The page function runs against a stand-in location and document
   const pageAt = (href, text = '') => ({
     evaluate: (fn) => {
-      Object.assign(globalThis, { window: { location: { href } }, document: { body: { innerText: text } } });
+      Object.assign(globalThis, { window: { location: { href } }, document: { body: { innerText: text }, querySelector: () => ({ innerText: text }) } });
       try {
         return Promise.resolve(fn());
       } finally {
@@ -359,5 +359,6 @@ describe('a LinkedIn form saved or closed in the browser', () => {
     assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/', 'Your experience is saved')), 'saved');
     assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/edit/forms/2505851835/')), null);
     assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/')), 'closed');
+    assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/edit/forms/2505850858', 'Edit role Something went wrong on our end Try refreshing the page.')), 'broken');
   });
 });

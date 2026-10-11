@@ -504,11 +504,11 @@ const WEBSITE_LINE = /^(?:website|site|сайт)\s*:\s*(?:https?:\/\/)?(\S+?)\/?
 /**
  * The company website a position's description names, as a link LinkedIn can preview
  * @param {...Object} jobs - The positions to look in, first match wins
- * @returns {string} https://<site>/ or ''
+ * @returns {string} https://<site> as written (github.com/deep-foundation → https://github.com/deep-foundation) or ''
  */
 export function companyWebsite(...jobs) {
   const site = jobs.map((job) => String(job?.description ?? '').match(WEBSITE_LINE)?.[1]).find(Boolean);
-  return site ? `https://${site}/` : '';
+  return site ? `https://${site}` : '';
 }
 
 /**
