@@ -353,20 +353,52 @@ export async function addLinkedInSkills(page, skills) {
 }
 
 /**
- * Add a link to the open position form's Media (e.g. the company website), titled as given.
- * Typed like a person: LinkedIn's form breaks on a pasted link or title. Skipped when the form
- * already has a media item with this title
- * @param {Object} page
- * @param {{url: string, title: string}} link
- * @returns {Promise<{added: boolean, problem: string, broken?: boolean}>} problem: '' when added or
- *   already there; broken: the form broke and has to be opened again
+ * A media link's title: the link itself as people write it (github.com/deep-foundation). The
+ * company name read as another site (Deep.Foundation is also a domain)
+ * @param {string} url
+ * @returns {string}
  */
-export async function addLinkedInMedia(page, { url, title }) {
-  // Only the form's Media list counts: the title is also the organization's name elsewhere in it
+export function mediaTitle(url) {
+  return url.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
+}
+
+/**
+ * Add a link to the open position form's Media (e.g. the company website), titled with the link
+ * itself. Typed like a person: LinkedIn's form breaks on a pasted link or title. Skipped when the
+ * form already has it; an item titled with the company name earlier is renamed instead
+ * @param {Object} page
+ * @param {{url: string, oldTitle?: string}} link - oldTitle: the company name earlier items took
+ * @returns {Promise<{added: boolean, problem: string, broken?: boolean, title: string}>} problem:
+ *   '' when added or already there; broken: the form broke and has to be opened again
+ */
+export async function addLinkedInMedia(page, { url, oldTitle = '' }) {
+  const title = mediaTitle(url);
+  // Only the form's Media list counts: the company name is also elsewhere in the form
   const mediaList = page.locator('[data-testid$="position-mediaUiCollection"]').first();
-  const inMedia = async () => (await mediaList.innerText().catch(() => '')).split('\n').some((line) => line.trim() === title);
-  if (await inMedia()) {
-    return { added: false, problem: '' };
+  const titled = async (name) => (await mediaList.innerText().catch(() => '')).split('\n')
+    .some((line) => line.trim().toLowerCase() === name.toLowerCase());
+  const titleInput = page.getByLabel(/^(Title|Название)\*?$/).first();
+  const typeTitle = async () => {
+    await sleep(1000);
+    await titleInput.click();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+    await page.keyboard.type(title, { delay: 30 });
+    await sleep(1500);
+    await page.getByRole('button', { name: /^(Save|Сохранить)$/ }).last().click();
+    await sleep(3000);
+  };
+  if (await titled(title)) {
+    return { added: false, problem: '', title };
+  }
+  if (oldTitle && await titled(oldTitle)) {
+    // Its edit link is labelled «Edit media, <title>»
+    await mediaList.locator('a').filter({ hasText: `, ${oldTitle}` }).first().click();
+    if (!await titleInput.waitFor({ timeout: 10000 }).then(() => true, () => false)) {
+      return { added: false, problem: `the media item «${oldTitle}» did not open to be renamed to ${title}`, title };
+    }
+    await typeTitle();
+    const renamed = await titled(title);
+    return { added: renamed, problem: renamed ? '' : `the media item «${oldTitle}» was not renamed to ${title}`, title };
   }
   const linkItem = page.getByRole('menuitem', { name: /^(Add a link|Добавить ссылку)$/ });
   for (let attempt = 0; attempt < 5 && !await linkItem.isVisible().catch(() => false); attempt++) {
@@ -374,13 +406,12 @@ export async function addLinkedInMedia(page, { url, title }) {
     await sleep(1500);
   }
   if (!await linkItem.isVisible().catch(() => false)) {
-    return { added: false, problem: 'no «Add media» → «Add a link» in the form' };
+    return { added: false, problem: 'no «Add media» → «Add a link» in the form', title };
   }
   await linkItem.click();
   // Paced like a person: LinkedIn's form broke on back-to-back clicks
   await sleep(1500);
   const input = page.locator('input[aria-label^="Paste or type a link"], input[aria-label*="ссылк"]').first();
-  const titleInput = page.getByLabel(/^(Title|Название)\*?$/).first();
   // LinkedIn's preview of a link fails now and then: it is tried again; a site's root also with «/»
   // (https://kaiten.ru/), a page only as written (https://github.com/deep-foundation)
   const root = /^https?:\/\/[^/]+\/?$/.test(url);
@@ -397,21 +428,15 @@ export async function addLinkedInMedia(page, { url, title }) {
   if (!await titleInput.isVisible().catch(() => false)) {
     // «Add media» is a step of the position form: its ✕ discards the whole form and its Back works
     // only with a preview, so the window is left for the user
-    return { added: false, problem: `LinkedIn could not preview ${url}: the «Add media» window is left open, use Try again or another link, then Back or Save` };
+    return { added: false, problem: `LinkedIn could not preview ${url}: the «Add media» window is left open, use Try again or another link, then Back or Save`, title };
   }
-  await sleep(1000);
-  await titleInput.click();
-  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
-  await page.keyboard.type(title, { delay: 30 });
-  await sleep(1500);
-  await page.getByRole('button', { name: /^(Save|Сохранить)$/ }).last().click();
-  await sleep(3000);
+  await typeTitle();
   // LinkedIn's form now and then breaks on saving a link («Something went wrong on our end»)
   if (await page.getByText(/Something went wrong|Что-то пошло не так/).first().isVisible().catch(() => false)) {
-    return { added: false, broken: true, problem: `LinkedIn's form broke on adding ${url}` };
+    return { added: false, broken: true, problem: `LinkedIn's form broke on adding ${url}`, title };
   }
-  const added = await inMedia();
-  return { added, problem: added ? '' : `the link ${url} did not show in Media` };
+  const added = await titled(title);
+  return { added, problem: added ? '' : `the link ${url} did not show in Media`, title };
 }
 
 /**
@@ -494,8 +519,8 @@ export async function prefillLinkedInPosition(page, change, { profileUrl = LINKE
     }
   }
   if (change.fields.website) {
-    const title = change.target?.company ?? change.fields.company ?? change.source?.company ?? '';
-    const { added, problem, broken } = await addLinkedInMedia(page, { url: change.fields.website, title });
+    const oldTitle = change.target?.company ?? change.fields.company ?? change.source?.company ?? '';
+    const { added, problem, broken, title } = await addLinkedInMedia(page, { url: change.fields.website, oldTitle });
     if (broken) {
       // Prefilled again from the start, without the link
       const { website, ...fields } = change.fields;

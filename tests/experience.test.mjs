@@ -8,7 +8,7 @@ import {
   companyWebsite, linkedInItemsFromText, matchJobs, withEditLinks, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
   textSimilarity,
 } from '../src/experience.mjs';
-import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl, linkedInFormOutcome } from '../src/experience-sites.mjs';
+import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl, linkedInFormOutcome, mediaTitle } from '../src/experience-sites.mjs';
 
 describe('LinkedIn pages', () => {
   test('login and sign-up walls are recognized', () => {
@@ -360,5 +360,12 @@ describe('a LinkedIn form saved or closed in the browser', () => {
     assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/edit/forms/2505851835/')), null);
     assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/')), 'closed');
     assert.equal(await linkedInFormOutcome(pageAt('https://www.linkedin.com/in/konard/details/experience/edit/forms/2505850858', 'Edit role Something went wrong on our end Try refreshing the page.')), 'broken');
+  });
+});
+
+describe('LinkedIn media title', () => {
+  test('is the link itself, not the company name (Deep.Foundation is also a domain)', () => {
+    assert.equal(mediaTitle('https://github.com/deep-foundation'), 'github.com/deep-foundation');
+    assert.equal(mediaTitle('https://www.kaiten.ru/'), 'kaiten.ru');
   });
 });
