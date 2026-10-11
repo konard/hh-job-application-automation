@@ -99,6 +99,11 @@ export function createConfig() {
             'and autofill answered it with the saved answer; other forms are autofilled and wait for you',
           default: getenv('AUTO_SEND_EXACT_ANSWERS', true),
         })
+        .option('network-idle-ms', {
+          type: 'number',
+          description: 'How long the page has no requests before it counts as ready for the next step (browser-commander waits 30000 by default)',
+          default: getenv('NETWORK_IDLE_MS', 2000),
+        })
         .option('answer-instant-chats', {
           type: 'boolean',
           description: 'Answer the chat hh.ru opens after an application (a recruiter bot\'s questions) before the next vacancy: ' +

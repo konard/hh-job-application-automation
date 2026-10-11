@@ -136,7 +136,9 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   }
   let applicationsSent = 0;
 
-  commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose });
+  // browser-commander waits for 30 s without requests by default before a click counts the page as
+  // ready; hh.ru's anti-bot request repeats every 30 s, so every click waited half a minute
+  commander = makeBrowserCommander({ page: session.page, verbose: argv.verbose, networkIdleForMs: argv.networkIdleMs });
   console.log(`Using ${commander.engine} automation engine`);
   // Ad and tracker requests that hang kept every page from being ready for half a minute
   await blockHangingHosts(session.page)
