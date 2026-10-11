@@ -20,7 +20,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
-import { openSlot, copySession } from './browser-slots.mjs';
+import { openSlot, copySession, tracingEnabled } from './browser-slots.mjs';
 import { enableConfirmations, askUser, withdrawPrompt } from './confirmations.mjs';
 import {
   applySyncDecision, detectLanguage, diffExperience, formatChange, formatDiffReport, linkedInItemsFromText, normalizeHhJobs, normalizeLinkedInJobs,
@@ -31,8 +31,6 @@ import {
   prefillHhExperience, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
 } from './experience-sites.mjs';
 import { createTranslator, reportFormalAiFailures, TRANSLATORS, FORMAL_AI_REPO } from './translation.mjs';
-import { startTracing, stopTracing } from './tracing.mjs';
-import { makeBrowserCommander } from 'browser-commander';
 
 const USAGE = `Usage: bun run experience -- <export|diff|sync> [options]
 
@@ -59,7 +57,7 @@ function parseArgs(args) {
   const parsed = {
     command: null, to: null, auto: false, refreshHh: false, skipLinkedin: false, profile: LINKEDIN_PROFILE,
     translators: TRANSLATORS, reportFormalAi: true, dryRunIssues: false, linkedinPort: 9350, hhPort: 9351,
-    hhBrowserPort: 9322, keepOpenHours: 24, trace: true,
+    hhBrowserPort: 9322, keepOpenHours: 24, trace: tracingEnabled(),
   };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split(/=(.*)/s);
@@ -217,14 +215,9 @@ async function runSync(argv, data, diff, translator) {
   }
 
   const session = argv.to === 'linkedin'
-    ? await openSlot({ name: 'linkedin-slot', port: argv.linkedinPort, keepOpenHours: argv.keepOpenHours })
-    : await openSlot({ name: 'hh-experience-slot', port: argv.hhPort, keepOpenHours: argv.keepOpenHours });
+    ? await openSlot({ name: 'linkedin-slot', port: argv.linkedinPort, keepOpenHours: argv.keepOpenHours, trace: argv.trace })
+    : await openSlot({ name: 'hh-experience-slot', port: argv.hhPort, keepOpenHours: argv.keepOpenHours, trace: argv.trace });
   const { page } = session;
-  // The slot window is recorded like the application run: what happened in it, by the script or by you
-  if (argv.trace) {
-    await startTracing({ commander: makeBrowserCommander({ page, enableNetworkTracking: false }), page, name: `experience-${argv.to}` })
-      .catch((error) => console.log(`⚠️  No trace: ${error.message.split('\n')[0]}`));
-  }
   if (argv.to === 'hh') {
     // Only the hh.ru cookies are copied; the automation browser keeps running untouched
     const copied = await copySession({ fromPort: argv.hhBrowserPort, page, domain: /(^|\.)hh\.ru$/ });
@@ -235,7 +228,6 @@ async function runSync(argv, data, diff, translator) {
     steps: [],
     onStop: async () => {
       console.log('⏹️  Stopped: the current form stays prefilled in the slot window for you to review and save yourself');
-      await stopTracing();
       await session.release();
       process.exit(0);
     },
@@ -300,7 +292,6 @@ async function runSync(argv, data, diff, translator) {
     }
     done.push(outcome);
   }
-  await stopTracing();
   await session.release();
   return { changes, planText, done };
 }

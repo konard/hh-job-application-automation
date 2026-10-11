@@ -43,9 +43,8 @@ export const TRACE_OPTIONS = Object.freeze({
 
 const STOP_FLUSH_MS = 15000;
 
-let trace = null;
-let recorders = {};
-let streams = [];
+// The application run's own trace (startTracing/checkpoint/stopTracing)
+let current = null;
 
 const report = (what) => (error) => log.debug(() => `${what} log error: ${error.message}`);
 
@@ -61,14 +60,15 @@ function openLog(file) {
 }
 
 /**
- * Start recording into logs/traces/<timestamp>
+ * Record one page into logs/traces/<time>[-<name>]: trace bundle, trace.lino, network.lino and
+ * dom.lino. Several pages can be recorded at once, each into its own directory
  * @param {Object} options
- * @param {Object} options.commander - Browser commander instance
+ * @param {Object} options.commander - Browser commander instance of the page
  * @param {Object} options.page - Raw engine page
- * @param {string} [options.name] - Added to the directory name (e.g. experience-linkedin)
- * @returns {Promise<string>} Trace directory
+ * @param {string} [options.name] - Added to the directory name (e.g. form-slot-4)
+ * @returns {Promise<{directory: string, checkpoint: (name: string) => Promise<void>, stop: () => Promise<void>}>}
  */
-export async function startTracing({ commander, page, name = '' }) {
+export async function createTracing({ commander, page, name = '' }) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const directory = path.join(process.cwd(), 'logs', 'traces', name ? `${stamp}-${name}` : stamp);
   fs.mkdirSync(directory, { recursive: true });
@@ -77,7 +77,7 @@ export async function startTracing({ commander, page, name = '' }) {
   const network = openLog(path.join(directory, 'network.lino'));
   const networkRecorder = recordNetwork({ page, write: network.write, onError: report('Network') });
 
-  trace = await commander.startTrace({
+  const trace = await commander.startTrace({
     ...TRACE_OPTIONS,
     output: path.join(directory, 'trace'),
     links: { output: path.join(directory, 'trace.lino') },
@@ -85,37 +85,60 @@ export async function startTracing({ commander, page, name = '' }) {
 
   const dom = openLog(path.join(directory, 'dom.lino'));
   const domRecorder = recordDom({ page, bundle: trace.path, write: dom.write, onError: report('DOM') });
-
-  recorders = { network: networkRecorder, dom: domRecorder };
-  streams = [network.stream, dom.stream];
-  console.log(`🎥 Recording trace to ${directory}`);
-  return directory;
+  let stopped = false;
+  return {
+    directory,
+    /** Name the current page state in the trace (DOM snapshot + screenshot) */
+    checkpoint: async (label) => {
+      if (stopped) {
+        return;
+      }
+      await trace.checkpoint(label).catch((error) => log.debug(() => `Trace checkpoint failed: ${error.message}`));
+      // The checkpoint completed the previous interval's mutations; they are converted in the background
+      void domRecorder.convertMutations();
+    },
+    /** Finish the trace so the bundle and its Links Notation exports are complete */
+    stop: async () => {
+      if (stopped) {
+        return;
+      }
+      stopped = true;
+      networkRecorder.detach();
+      domRecorder.detach();
+      await trace.stop().catch((error) => log.debug(() => `Trace stop failed: ${error.message}`));
+      domRecorder.convertMutations({ final: true });
+      await Promise.all([networkRecorder.flush(), domRecorder.flush(STOP_FLUSH_MS)]);
+      await Promise.all([network.stream, dom.stream].map((stream) => new Promise((resolve) => stream.end(resolve))));
+    },
+  };
 }
 
 /**
- * Name the current page state in the trace (DOM snapshot + screenshot)
+ * Start recording the application run's page into logs/traces/<timestamp>
+ * @param {Object} options
+ * @param {Object} options.commander - Browser commander instance
+ * @param {Object} options.page - Raw engine page
+ * @returns {Promise<string>} Trace directory
+ */
+export async function startTracing({ commander, page }) {
+  current = await createTracing({ commander, page });
+  console.log(`🎥 Recording trace to ${current.directory}`);
+  return current.directory;
+}
+
+/**
+ * Name the current page state in the run's trace (DOM snapshot + screenshot)
  * @param {string} name
  */
 export async function checkpoint(name) {
-  await trace?.checkpoint(name).catch((error) => log.debug(() => `Trace checkpoint failed: ${error.message}`));
-  // The checkpoint completed the previous interval's mutations; they are converted in the background
-  void recorders.dom?.convertMutations();
+  await current?.checkpoint(name);
 }
 
 /**
- * Finish the trace so the bundle and its Links Notation exports are complete
+ * Finish the run's trace so the bundle and its Links Notation exports are complete
  */
 export async function stopTracing() {
-  const current = trace;
-  const { network, dom } = recorders;
-  const open = streams;
-  trace = null;
-  recorders = {};
-  streams = [];
-  network?.detach();
-  dom?.detach();
-  await current?.stop().catch((error) => log.debug(() => `Trace stop failed: ${error.message}`));
-  dom?.convertMutations({ final: true });
-  await Promise.all([network?.flush(), dom?.flush(STOP_FLUSH_MS)]);
-  await Promise.all(open.map((stream) => new Promise((resolve) => stream.end(resolve))));
+  const tracing = current;
+  current = null;
+  await tracing?.stop();
 }

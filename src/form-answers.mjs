@@ -17,7 +17,10 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { makeBrowserCommander } from 'browser-commander';
 import { chromium } from 'playwright';
+import { tracingEnabled } from './browser-slots.mjs';
+import { createTracing } from './tracing.mjs';
 import { isAssignmentLinkQuestion } from './assignments.mjs';
 import { findBestMatch } from './qa-database.mjs';
 import { answerText } from './qa.mjs';
@@ -270,9 +273,15 @@ const originOf = (url) => {
  */
 export async function watchSentAnswers({
   port, timeoutMs = 24 * 3600000, pollMs = POLL_MS, isCurrent = () => true, log = console.log, initial = [], onEdit = null,
+  trace = tracingEnabled(), traceName = `form-watch-${port}`,
 }) {
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
   const context = browser.contexts()[0];
+  // What the user does in the form is recorded (DOM, its changes, field values, network)
+  const watchedPage = context.pages()[0];
+  const commander = trace && watchedPage ? makeBrowserCommander({ page: watchedPage, enableNetworkTracking: false }) : null;
+  const tracing = commander ? await createTracing({ commander, page: watchedPage, name: traceName })
+    .catch((error) => log(`⚠️  The form is not recorded: ${error.message.split('\n')[0]}`)) : null;
   const answers = new Map();
   const fieldsByOrigin = new Map();
   const clicks = [];
@@ -346,6 +355,8 @@ export async function watchSentAnswers({
     }
     return { submitted: false, answers: [...answers.values()] };
   } finally {
+    await tracing?.stop().catch(() => {});
+    await commander?.destroy?.().catch?.(() => {});
     // Disconnects only: the slot browser keeps running
     await browser.close().catch(() => {});
   }

@@ -12,11 +12,14 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
+import { makeBrowserCommander } from 'browser-commander';
 import TurndownService from 'turndown';
 import { makeConfig } from 'lino-arguments';
 import { describeChoice, pickResume, readResumes } from './resumes.mjs';
 import { collectStack, formatStackMarkdown } from './resume-stack.mjs';
 import { SELECTORS } from './hh-selectors.mjs';
+import { tracingEnabled } from './browser-slots.mjs';
+import { createTracing } from './tracing.mjs';
 
 const FORMATS = ['pdf', 'doc', 'rtf', 'txt'];
 /** hh.ru's "doc" export is the same RTF file as "rtf", so it is only downloaded on request */
@@ -124,10 +127,14 @@ async function main() {
   console.log(`🔑 Copied ${cookies.length} hh.ru cookie(s) from the browser on port ${argv.browserPort} (it stays open)`);
 
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  let tracing = null;
   try {
     const context = await browser.newContext({ locale: 'ru-RU' });
     await context.addCookies(cookies);
     const page = await context.newPage();
+    // Recorded like every browser window of the automation (TRACE=0 turns it off)
+    const commander = tracingEnabled() ? makeBrowserCommander({ page, enableNetworkTracking: false }) : null;
+    tracing = commander ? await createTracing({ commander, page, name: 'resume-export' }).catch(() => null) : null;
 
     let hash = argv.resume;
     if (!hash) {
@@ -191,6 +198,7 @@ async function main() {
 
     console.log(`\n🧰 ${stack.all.length} technologies: ${stack.all.join(', ')}`);
   } finally {
+    await tracing?.stop().catch(() => {});
     await browser.close();
   }
 }

@@ -279,7 +279,7 @@ link-assistant/formal-ai (link-foundation/formal-ai does not exist).
 | EXP7 | Any Formal AI translation failure is reported as an issue in link-assistant/formal-ai | An issue per failure | ✅ link-assistant/formal-ai #1192, #1193, comment on #1174; deduplicated on rerun; #1194 (short phrases, 2026-10-10: Formal AI translated 1 of 27 texts, Haiku 26, Luna 27) |
 | EXP8 | LinkedIn prefill picks the position's skills from the profile's skills and adds the company website as a media link; nothing is saved without y | Kaiten: iOS, Android; https://kaiten.ru/ «Kaiten.ru» | 🧪 |
 | EXP9 | A LinkedIn form saved or closed by the user in the browser is detected (the prompt is withdrawn, «people you may know» skipped); a form where nothing could be filled is closed without a question; skills and media lines are not read as the description | Kaiten saved by you: detected on re-read, only ClickUp left | 🧪 |
-| EXP10 | The experience sync's slot window is recorded by default like the application run (DOM snapshot and changes, field values, network) to logs/traces/<time>-experience-<site>; the user's own clicks are not in browser-commander traces yet: link-foundation/browser-commander#162 | 🧪 |
+| EXP10 | Every browser window of the automation is recorded by default (TRACE=0 turns it off): the application run, every slot (forms, chat, LinkedIn, hh.ru experience), the form watcher while you fill a form, the hh.ru login and the resume export. Each gets logs/traces/<time>-<name>: DOM snapshot and changes, field values, network, Links Notation. Your own clicks are not in browser-commander traces yet: link-foundation/browser-commander#162 | Smoke test: a slot window's DOM change and request are in its dom.lino and network.lino | 🧪 |
 
 ## SEC: safety constraints
 

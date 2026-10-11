@@ -21,6 +21,8 @@ import {
   setCookies,
 } from 'browser-commander';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
+import { tracingEnabled } from './browser-slots.mjs';
+import { createTracing } from './tracing.mjs';
 import { dismissOverlays } from './helpers/page-helpers.mjs';
 import { log } from './logging.mjs';
 
@@ -126,6 +128,8 @@ async function hhCookiesFromProfile({ browser, profile, providers }) {
     attach: { mode: 'snapshot', browser, profile },
   });
   const commander = makeBrowserCommander({ page: session.page, enableNetworkTracking: false });
+  // Recorded like every browser window of the automation (TRACE=0 turns it off); passwords are redacted
+  const tracing = tracingEnabled() ? await createTracing({ commander, page: session.page, name: `login-${browser}` }).catch(() => null) : null;
   try {
     await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
     await commander.wait({ ms: 2000, reason: 'profile page to render' });
@@ -139,6 +143,7 @@ async function hhCookiesFromProfile({ browser, profile, providers }) {
     }
     return loggedIn ? (await saveStorageState(session.page)).cookies.filter(isHhCookie) : null;
   } finally {
+    await tracing?.stop().catch(() => {});
     await commander.destroy();
     await session.close();
   }
