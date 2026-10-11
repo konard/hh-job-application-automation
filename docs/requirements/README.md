@@ -224,6 +224,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B26 | Pay answers follow the form's vacancy: below the target, the top of its range as the minimum plus the comfortable hourly rate; not learned | 🧪 |
 | B27 | A pay stated in the form's own description comes first as the minimum (converted to the asked unit), plus the comfortable rate; one or two short sentences | 🧪 |
 | B28 | A full application form is never left unfilled: when its page handler does not start, the main loop fills it (cover letter, saved answers, open questions prompt), and once it is sent in the browser the run counts it and goes back to the vacancy list | 🧪 |
+| B29 | The chat panel hh.ru opens on the vacancy list after an application is handled before the next vacancy: a recruiter bot's questions take saved answers; a perfect match (the saved question word for word, and the saved answer is one of the bot's buttons when it offers them) is sent and the panel closed when the bot is done; anything else is prefilled, scrolled to the last message, and waits for the user; what the user answers is learned | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -380,12 +381,12 @@ of them, so none is lost.
 | CAP | 9 | 8 | | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 29 | 14 | 15 | | | |
+| FORM (B) | 30 | 14 | 16 | | | |
 | CHAT (C) | 15 | 8 | 7 | | | |
 | EXP | 10 | 4 | 6 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **160** | **113** | **44** | **0** | **0** | **3** |
+| **Total** | **161** | **113** | **45** | **0** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

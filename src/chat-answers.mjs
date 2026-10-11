@@ -144,7 +144,10 @@ export function isRejection(message) {
     /не готовы пригласить|не можем пригласить|приняли решение (не продолжать|отказать)|выбрали другого кандидата|к сожалению,? (мы )?(не готовы|вынуждены отказать|не можем)/i.test(message.text);
 }
 
-const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
+/** The same text, apart from case, spacing and punctuation */
+const sameText = (a, b) => !isPattern(b) && normalizeQuestion(a) === normalizeQuestion(b);
+
+export const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
 
 /**
  * The reply to a waiting message, when it is known
@@ -152,16 +155,17 @@ const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
  * @param {Object} sources
  * @param {Map} sources.templates - data/chat-templates.lino: template message -> reply
  * @param {Map} sources.qaMap - data/qa.lino with contacts filled in
- * @returns {{answer: string, source: string, matched: string}|null}
+ * @returns {{answer: string, noReply?: boolean, perfect: boolean, source: string, matched: string}|null}
+ *   perfect: the saved question or template is the message itself (or a template is contained in it word for word)
  */
 export function knownReply(message, { templates, qaMap }) {
   // A bot's summary of the answers given is not a question to the user
   if (summaryPairs(message.text).length > 0) {
-    return { answer: '', noReply: true, source: 'summary of the answers given', matched: '' };
+    return { answer: '', noReply: true, perfect: true, source: 'summary of the answers given', matched: '' };
   }
   // A rejection gets the saved question about its reason, whatever its wording
   if (isRejection(message) && templates.has(REJECTION_KEY)) {
-    return { answer: answerText(templates.get(REJECTION_KEY)), source: 'rejection: asking for the reason', matched: REJECTION_KEY };
+    return { answer: answerText(templates.get(REJECTION_KEY)), perfect: false, source: 'rejection: asking for the reason', matched: REJECTION_KEY };
   }
   const core = templateCore(message.text, { sender: message.title });
   const examples = new Map([...templates].filter(([key]) => !isPattern(key)));
@@ -176,12 +180,18 @@ export function knownReply(message, { templates, qaMap }) {
     : findBestMatch(core, examples, { threshold: TEMPLATE_THRESHOLD });
   if (template) {
     const answer = answerText(template.answer);
-    return { answer: answer === NO_REPLY ? '' : answer, noReply: answer === NO_REPLY, source: `chat-templates.lino ${template.score.toFixed(2)}`, matched: template.question };
+    return {
+      answer: answer === NO_REPLY ? '' : answer,
+      noReply: answer === NO_REPLY,
+      perfect: Boolean(contained) || sameText(core, template.question),
+      source: `chat-templates.lino ${template.score.toFixed(2)}`,
+      matched: template.question,
+    };
   }
   if (isQuestion(core)) {
     const saved = findBestMatch(core, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
     if (saved) {
-      return { answer: answerText(saved.answer), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
+      return { answer: answerText(saved.answer), perfect: sameText(core, saved.question), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
     }
   }
   return null;

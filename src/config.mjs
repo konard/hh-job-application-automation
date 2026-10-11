@@ -99,6 +99,12 @@ export function createConfig() {
             'and autofill answered it with the saved answer; other forms are autofilled and wait for you',
           default: getenv('AUTO_SEND_EXACT_ANSWERS', true),
         })
+        .option('answer-instant-chats', {
+          type: 'boolean',
+          description: 'Answer the chat hh.ru opens after an application (a recruiter bot\'s questions) before the next vacancy: ' +
+            'perfect matches of saved answers are sent (with --auto-send-exact-answers), others wait for you in the panel',
+          default: getenv('ANSWER_INSTANT_CHATS', true),
+        })
         .option('single-tab', {
           type: 'boolean',
           description: 'Keep the automation browser to one tab: other tabs are closed when the run attaches, new ones as they open',

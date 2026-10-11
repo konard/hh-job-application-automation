@@ -11,7 +11,7 @@ import { noteSkip } from './skipped-vacancies.mjs';
 import { saveMarkedQAPairs, saveQAPairs, setupQAHandling } from './vacancy-response.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
-import { closeChatPanel, findCoverLetterToggle, isButtonEnabled } from './helpers/page-helpers.mjs';
+import { findCoverLetterToggle, isButtonEnabled } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
@@ -339,9 +339,7 @@ export async function processModalApplication({
     return { success: false, reason: 'not_confirmed' };
   }
   console.log(`✅ Application sent for vacancy ${vacancyId}`);
-  // hh.ru opens the employer chat with the cover letter after an application
-  await commander.wait({ ms: 1500, reason: 'chat panel to open after the application' });
-  await closeChatPanel(commander);
+  // hh.ru opens the employer chat with the cover letter: its questions are answered there next
   return { success: true };
 }
 

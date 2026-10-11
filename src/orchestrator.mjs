@@ -39,11 +39,13 @@ const PAGE_READY_TIMEOUT = 120000;
  * @param {Object} [options.vacancyFilters] - Vacancies filtered out automatically (vacancy-filters.mjs)
  * @param {Object} [options.skippedVacancies] - Every other skip, kept (skipped-vacancies.mjs)
  * @param {Function} options.onPageClosed - Called when the user closes the tab
+ * @param {Function} [options.answerInstantChat] - Answers the chat hh.ru opens after an application (instant-chat.mjs)
  * @returns {Object} Orchestrator with start method
  */
 export function createOrchestrator({
   commander, page, argv, qaDB, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, onPageClosed,
   onApplicationSent = async () => {},
+  answerInstantChat = async () => {},
 }) {
   let START_URL = argv.url;
   const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
@@ -81,6 +83,8 @@ export function createOrchestrator({
   const sentVacancyIds = new Set();
   // The next application waits until then, so the load on hh.ru stays low
   let nextApplicationAt = 0;
+  // The chat of the application just sent, answered before anything else happens on the page
+  let followUp = null;
 
   /**
    * Schedule the next vacancy (see pacing.mjs), so the load on hh.ru stays low
@@ -111,6 +115,11 @@ export function createOrchestrator({
     }
     await checkpoint('application-sent');
     scheduleNextApplication('Application sent');
+    // The questions in its chat (a recruiter bot asks at once) come before the next vacancy
+    followUp = answerInstantChat(vacancyId)
+      .catch((error) => console.log(`⚠️  Answering the chat after the application failed: ${error.message}`));
+    await followUp;
+    followUp = null;
     await onApplicationSent();
     return true;
   }
@@ -281,6 +290,10 @@ export function createOrchestrator({
       while (!pageClosedByUser) {
         if (stopError) {
           throw stopError;
+        }
+        if (followUp) {
+          await followUp;
+          continue;
         }
         // Ensure page is fully loaded
         if (commander.navigationManager?.isNavigating() || commander.shouldAbort()) {

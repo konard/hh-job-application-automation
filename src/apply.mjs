@@ -27,6 +27,8 @@ import { createDeferredQuestions, formatQuestions } from './deferred-questions.m
 import { createVacancyFilters } from './vacancy-filters.mjs';
 import { createSkippedVacancies } from './skipped-vacancies.mjs';
 import { expandContacts, loadContacts, withContacts } from './contacts.mjs';
+import { createInstantChat } from './instant-chat.mjs';
+import { closeChatPanel } from './helpers/page-helpers.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 
@@ -155,6 +157,15 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     vacancyFilters,
     skippedVacancies,
     onPageClosed: () => shutdown('Tab close detected'),
+    // Recruiter bots ask in the chat panel right after the application
+    answerInstantChat: argv.answerInstantChats ? createInstantChat({
+      page: session.page,
+      readQADatabase,
+      addOrUpdateQA,
+      readTemplates: withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), contacts).readQADatabase,
+      autoSend: argv.autoSendExactAnswers,
+      closePanel: () => closeChatPanel(commander),
+    }) : undefined,
     onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),
   });
