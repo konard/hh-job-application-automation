@@ -20,7 +20,7 @@ import { registerPageTriggers } from './page-triggers.mjs';
 import { ensureLoggedIn } from './login.mjs';
 import { findSuggestedVacanciesUrl, latestResumeSearchUrl } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
-import { URL_PATTERNS } from './hh-selectors.mjs';
+import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
 import { pauseMs } from './pacing.mjs';
@@ -338,6 +338,11 @@ export function createOrchestrator({
           if (handledResponseUrl !== formUrl && URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
             console.log(`⚠️  The full form was not picked up by its page handler${responseHandling ? ' (it is still busy with an earlier form)' : ''}: filling it here`);
             await vacancyResponseHandler().catch((error) => console.error('Error in vacancy response handler:', error.message));
+            // Sent in the browser: hh.ru opened its vacancy page, which the safety net checks and leaves
+            const formVacancyId = extractVacancyIdFromResponseUrl(formUrl);
+            if (formVacancyId && extractVacancyId(commander.getUrl()) === formVacancyId) {
+              isOnVacancyPageFromResponse = true;
+            }
           }
         }
         if (openedVacancy(result) && result.status !== 'success') {

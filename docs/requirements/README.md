@@ -223,7 +223,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B25 | A city question asking for the time zone gets «Нячанг, Вьетнам, UTC+7, МСК+4» from the profile | 🧪 |
 | B26 | Pay answers follow the form's vacancy: below the target, the top of its range as the minimum plus the comfortable hourly rate; not learned | 🧪 |
 | B27 | A pay stated in the form's own description comes first as the minimum (converted to the asked unit), plus the comfortable rate; one or two short sentences | 🧪 |
-| B28 | A full application form is never left unfilled: when its page handler does not start, the main loop fills it (cover letter, saved answers, open questions prompt) | 🧪 |
+| B28 | A full application form is never left unfilled: when its page handler does not start, the main loop fills it (cover letter, saved answers, open questions prompt), and once it is sent in the browser the run counts it and goes back to the vacancy list | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.

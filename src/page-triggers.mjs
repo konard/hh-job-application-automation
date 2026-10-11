@@ -169,6 +169,10 @@ export function registerPageTriggers({
     if (URL_PATTERNS.searchVacancy.test(newUrl)) {
       onSearchPageVisited(newUrl);
     }
+    // Also when its trigger does not start (the main loop then fills the form itself)
+    if (URL_PATTERNS.vacancyResponse.test(newUrl)) {
+      lastVacancyResponseId = extractVacancyIdFromResponseUrl(newUrl) ?? lastVacancyResponseId;
+    }
     if (lastVacancyResponseId && extractVacancyId(newUrl) === lastVacancyResponseId) {
       watchVacancyPage(lastVacancyResponseId).catch((error) => {
         log.debug(() => `Vacancy page watch failed: ${error.message}`);
