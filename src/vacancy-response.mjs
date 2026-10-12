@@ -516,8 +516,10 @@ export async function handleVacancyResponsePage({
       await onApplicationNotConfirmed(vacancyId);
       return;
     }
-    console.log(`✅ Application sent for vacancy ${vacancyId}`);
-    await onApplicationSent(vacancyId);
+    // False: the vacancy page watch already counted and logged it
+    if (await onApplicationSent(vacancyId) !== false) {
+      console.log(`✅ Application sent for vacancy ${vacancyId}`);
+    }
     await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
   } catch (error) {
     if (error instanceof PromptWithdrawnError) {
