@@ -207,7 +207,8 @@ export function readCaptchaForm({ imageSelector, inputSelector }) {
   if (!window.__captchaUserActivity) {
     window.__captchaUserActivity = { at: 0 };
     const mark = (event) => {
-      if (event.isTrusted) {
+      // The prefill's own typing and click are not the user's
+      if (event.isTrusted && !window.__captchaAutomating) {
         window.__captchaUserActivity.at = Date.now();
       }
     };
@@ -408,9 +409,23 @@ export function createCaptchaPrefill({
       silent: true,
     })).value;
     const answer = sendButton ? haiku : text;
-    await commander.fillTextArea({
-      selector: CAPTCHA_INPUT_SELECTOR, text: answer, checkEmpty: true, scrollIntoView: false, simulateTyping: true,
+    const automating = (on) => commander.safeEvaluate({
+      fn: (value) => {
+        window.__captchaAutomating = value;
+      },
+      args: [on],
+      defaultValue: null,
+      operationName: 'captcha automation mark',
+      silent: true,
     });
+    await automating(true);
+    try {
+      await commander.fillTextArea({
+        selector: CAPTCHA_INPUT_SELECTOR, text: answer, checkEmpty: true, scrollIntoView: false, simulateTyping: true,
+      });
+    } finally {
+      await automating(false);
+    }
     if (!sendButton) {
       if (trySend && haiku) {
         console.log('🤖 The captcha send button was not found, so nothing is sent');
@@ -426,7 +441,12 @@ export function createCaptchaPrefill({
     episode.sent = true;
     episode.sentSrc = form.src;
     console.log(`📨 Sending Haiku's reading of the captcha (once): "${answer}"`);
-    await commander.clickButton({ selector: sendButton, scrollIntoView: false });
+    await automating(true);
+    try {
+      await commander.clickButton({ selector: sendButton, scrollIntoView: false });
+    } finally {
+      await automating(false);
+    }
   }
 
   return (commander, episode = {}) => {
