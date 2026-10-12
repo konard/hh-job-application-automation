@@ -369,9 +369,12 @@ async function learnFromAllChats() {
     await unreadOnly.click({ timeout: 5000 }).catch(() => {});
     await humanPause(1500, 2500);
   }
-  const chats = (await loadChatList()).filter((chat) => !chat.unread);
+  const all = await loadChatList();
+  // A chat whose last message is the application itself has no answer in it
+  const chats = all.filter((chat) => !chat.unread && !(chat.lastIsMine && chat.last === 'Отклик на вакансию'));
   const savedBefore = sources.qaMap.size;
-  console.log(`📚 Reading ${chats.length} chat(s) for answers not saved yet (unread chats are left unread)`);
+  console.log(`📚 Reading ${chats.length} of ${all.length} chat(s) for answers not saved yet (unread chats are left ` +
+    'unread; chats with only the application are not opened)');
   for (const [index, chat] of chats.entries()) {
     await openChat(chat.id, chat.top);
     if (!await waitForCaptcha(page, console.log)) {
