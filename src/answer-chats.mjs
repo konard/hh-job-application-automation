@@ -26,6 +26,9 @@ import {
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
+import { createSkippedVacancies, isSkippedForGood, SKIP_REASONS } from './skipped-vacancies.mjs';
+import { createVacancyFilters, describeFilterMatch } from './vacancy-filters.mjs';
+import { extractVacancyId } from './hh-selectors.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
@@ -135,6 +138,30 @@ const sources = await loadAnswerSources();
 // Template replies may hold contact placeholders too
 const templatesDb = withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), sources.contacts);
 const handledForms = new Set();
+const skippedVacancies = createSkippedVacancies(path.join(process.cwd(), 'data', 'skipped-vacancies.lino'));
+const vacancyFilters = createVacancyFilters({
+  rulesPath: path.join(process.cwd(), 'data', 'vacancy-filters.lino'),
+  filteredPath: path.join(process.cwd(), 'data', 'filtered-vacancies.lino'),
+});
+
+/**
+ * Why the chat's vacancy gets no reply: on the skip list, filtered out before, or its name matches a
+ * vacancy filter (data/vacancy-filters.lino); null when it is answered
+ * @param {{vacancy: string, vacancyUrl: string}} chat - From readChat
+ * @returns {Promise<string|null>}
+ */
+async function leftAloneBecause(chat) {
+  const vacancyId = extractVacancyId(chat.vacancyUrl ?? '');
+  const skipped = vacancyId ? (await skippedVacancies.read()).get(vacancyId) : null;
+  if (skipped && isSkippedForGood(skipped)) {
+    return `on the skip list (${SKIP_REASONS[skipped.reason]?.text ?? skipped.reason})`;
+  }
+  if (vacancyId && (await vacancyFilters.filteredVacancyIds()).has(vacancyId)) {
+    return 'filtered out before (data/filtered-vacancies.lino)';
+  }
+  const match = await vacancyFilters.match({ vacancy: chat.vacancy ?? '' });
+  return match ? `filtered out: ${describeFilterMatch(match)}` : null;
+}
 
 const session = await openSlot({ name: 'chat-slot', port: CHAT_SLOT_PORT });
 const { page } = session;
@@ -216,6 +243,11 @@ async function prefillChat(id, depth = 0, top = undefined) {
     return null;
   }
   const last = pending[pending.length - 1];
+  const leftAlone = await leftAloneBecause(chat);
+  if (leftAlone) {
+    console.log(`⏭️  Chat ${id} (${chat.vacancy}): the vacancy is ${leftAlone}; read, no reply`);
+    return null;
+  }
   // Opening the chat has read it; a closed chat cannot be answered
   if (!chat.canReply) {
     console.log(`📭 Chat ${id} (${chat.vacancy}): ${isRejection(last) ? 'rejection' : 'message'} read; the chat is closed for replies`);
