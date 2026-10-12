@@ -161,6 +161,7 @@ async function openChat(id) {
       return;
     }
   }
+  console.log(`🔗 Chat ${id} is not in the chat list: opened by its address`);
   await page.goto(chatUrl(id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
 }
 
