@@ -358,10 +358,13 @@ export function withLearnedPatterns(templates) {
   return new Map([...examples, ...learnPatterns(new Map(examples))]);
 }
 
+/** hh.ru's own notices shown on the user's side of a chat: not the user's answers */
+const HH_NOTICE = /^ответьте на приглашение, даже если оно вам не интересно/i;
+
 /**
  * Pairs the user has answered in a chat, to learn: an employer's message followed by the user's
- * reply, and the lines of a recruiter bot's summary. Questions go to qa.lino, other messages are templates. The application itself and
- * replies that are questions back («Можно без опыта?») are not answers
+ * reply, and the lines of a recruiter bot's summary. Questions go to qa.lino, other messages are templates. The application itself,
+ * hh.ru's notices and replies that are questions back («Можно без опыта?») are not answers
  * @param {Array<{mine: boolean, title: string, text: string}>} messages
  * @returns {{questions: Array<[string, string]>, templates: Array<[string, string]>}}
  */
@@ -374,7 +377,7 @@ export function learnedPairs(messages) {
       questions.push(...summaryPairs(message.text).filter(([, answer]) => !isQuestion(answer)));
       return;
     }
-    if (message.title === APPLICATION_TITLE || isQuestion(message.text)) {
+    if (message.title === APPLICATION_TITLE || HH_NOTICE.test(message.text) || isQuestion(message.text)) {
       return;
     }
     const asked = messages[index - 1];

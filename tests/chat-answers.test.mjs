@@ -63,6 +63,8 @@ describe('chat answers', () => {
       { mine: true, title: '', text: 'Нет.' },
       { mine: false, title: 'Ирина', text: 'Ирина, добрый день!\nМы получили ваш отклик.\nИванова Ирина' },
       { mine: true, title: '', text: 'Спасибо, жду.' },
+      { mine: false, title: 'HR', text: 'Резюме отправлено на рассмотрение.' },
+      { mine: true, title: '', text: 'Ответьте на приглашение, даже если оно вам не интересно. Так мы сможем рекомендовать вам более подходящие вакансии.' },
     ]);
     assert.deepEqual(questions, [['Есть ли опыт с BIM?', 'Нет.']]);
     assert.deepEqual(learned, [['Мы получили ваш отклик.', 'Спасибо, жду.']]);
