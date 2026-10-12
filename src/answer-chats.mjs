@@ -91,65 +91,98 @@ const chatUrl = (id) => `https://hh.ru/chat/${id}`;
 /** A chat whose list cell says «Отказ»: the employer's rejection */
 const isRejectionCell = (chat) => /^отказ$/i.test(chat.last ?? '');
 
+/** A person's pause between chats: a few seconds, never the same */
+const humanPause = (fromMs = 3000, toMs = 7000) => sleep(fromMs + Math.random() * (toMs - fromMs));
+
+/** Where the chat list is scrolled, and its place on screen; null without a list */
+const listPosition = () => page.evaluate(scrollChatList, null).catch(() => null);
+
+/** The mouse wheel turned over the chat list, as a person scrolls it */
+async function wheelChatList(by) {
+  const at = await listPosition();
+  if (!at) {
+    return null;
+  }
+  await page.mouse.move(at.x + at.width * (0.3 + Math.random() * 0.4), at.y + at.view * (0.3 + Math.random() * 0.4), { steps: 5 });
+  await page.mouse.wheel(0, by);
+  await sleep(400 + Math.random() * 400);
+  return listPosition();
+}
+
+/** The list wheeled back up to its top */
+async function wheelToTop() {
+  for (let at = await listPosition(); at && at.top > 0; ) {
+    const before = at.top;
+    at = await wheelChatList(-Math.round(at.view * (0.6 + Math.random() * 0.3)));
+    if (!at || at.top >= before) {
+      break;
+    }
+  }
+}
+
 /** At the list's end hh.ru loads the next older chats (about 20, in a few seconds): whether it did */
 async function moreChatsLoaded(height) {
   for (const started = Date.now(); Date.now() - started < 5000; await sleep(500)) {
-    if ((await page.evaluate(scrollChatList, null).catch(() => null))?.height > height) {
+    if ((await listPosition())?.height > height) {
       return true;
     }
   }
   return false;
 }
 
-/**
- * The whole chat list, read as it is scrolled down screen by screen (a virtual list: only the
- * chats on screen are in the page), then scrolled back to its top
- */
-async function loadChatList() {
-  const chats = new Map();
-  for (let top = 0; ; ) {
-    const at = await page.evaluate(scrollChatList, top).catch(() => null);
-    await sleep(700);
-    for (const chat of await page.evaluate(readChatList).catch(() => [])) {
-      chats.set(chat.id, chat);
-    }
-    if (!at) {
-      break;
-    }
-    if (at.top + at.view >= at.height - 5 && !await moreChatsLoaded(at.height)) {
-      break;
-    }
-    top = at.top + Math.round(at.view * 0.8);
-  }
-  await page.evaluate(scrollChatList, 0).catch(() => {});
-  return [...chats.values()].sort((a, b) => a.top - b.top);
+/** The chats wholly on screen in the list, from the top */
+async function chatsOnScreen() {
+  const at = await listPosition();
+  const rows = await page.evaluate(readChatList).catch(() => []);
+  return rows.filter((chat) => !at || (chat.top >= at.top - 2 && chat.top + chat.height <= at.top + at.view + 2))
+    .sort((a, b) => a.top - b.top);
 }
 
-/** The chat's cell scrolled into the list's view: from where it was, else screen by screen from the top */
-async function scrollToChat(id, top) {
-  const cell = page.locator(`[data-qa="chatik-open-chat-${id}"]`).first();
-  const shown = () => cell.count().then((count) => count > 0, () => false);
-  if (await shown()) {
-    return cell;
-  }
-  if (top !== undefined) {
-    await page.evaluate(scrollChatList, Math.max(0, top - 160)).catch(() => {});
-    await sleep(700);
-    if (await shown()) {
-      return cell;
+/**
+ * Go down the chat list as a person does: from its top, the chats on screen one by one, then the
+ * list wheeled on a little; at its end hh.ru loads the older chats. The page is not reloaded and
+ * the list does not jump
+ * @param {(chat: Object) => Promise<boolean>} visit - Each chat once; true stops the walk
+ * @returns {Promise<boolean>} Whether a visit stopped it
+ */
+async function walkChatList(visit) {
+  await wheelToTop();
+  const done = new Set();
+  for (;;) {
+    const next = (await chatsOnScreen()).find((chat) => !done.has(chat.id));
+    if (next) {
+      done.add(next.id);
+      if (await visit(next)) {
+        return true;
+      }
+      continue;
     }
-  }
-  for (let at = await page.evaluate(scrollChatList, 0).catch(() => null); at; ) {
-    await sleep(700);
-    if (await shown()) {
-      return cell;
+    const at = await listPosition();
+    if (!at || (at.top + at.view >= at.height - 5 && !await moreChatsLoaded(at.height))) {
+      return false;
     }
-    if (at.top + at.view >= at.height - 5) {
-      break;
-    }
-    at = await page.evaluate(scrollChatList, at.top + Math.round(at.view * 0.8)).catch(() => null);
+    await wheelChatList(Math.round(at.view * (0.5 + Math.random() * 0.25)));
+    await humanPause(500, 1200);
   }
-  return null;
+}
+
+/** The list's «Только непрочитанные» filter set as wanted, clicked as a person does; returns how it was */
+async function showUnreadOnly(want) {
+  const label = page.locator('label', { hasText: 'Только непрочитанные' }).first();
+  const was = await label.locator('input[type="checkbox"]').isChecked({ timeout: 10000 }).catch(() => null);
+  if (was !== null && was !== want) {
+    await humanPause(800, 1500);
+    await label.click({ timeout: 5000 }).catch(() => {});
+    await humanPause(1500, 2500);
+  }
+  return was;
+}
+
+/** The chat page opened (once a pass, as a person opens it), its list shown; false behind a captcha */
+async function openChatPage() {
+  await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
+  return waitForCaptcha(page, console.log);
 }
 
 const sources = await loadAnswerSources();
@@ -220,20 +253,17 @@ async function learn(messages) {
   }
 }
 
-/** A person's pause between chats: a few seconds, never the same */
-const humanPause = (fromMs = 3000, toMs = 7000) => sleep(fromMs + Math.random() * (toMs - fromMs));
-
 /**
- * Open a chat as a person does: its cell in the chat list on the left is scrolled to and clicked.
- * A chat not in the list (a link given on the command line) is opened by its address
+ * Open a chat as a person does: its cell in the chat list on the left (on screen) is clicked. A chat
+ * not in the list (a link given on the command line) is opened by its address
  */
-async function openChat(id, top) {
+async function openChat(id) {
   if (page.url().startsWith(chatUrl(id))) {
     return;
   }
-  const cell = await scrollToChat(id, top);
-  if (cell) {
-    await cell.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+  const cell = page.locator(`[data-qa="chatik-open-chat-${id}"]`).first();
+  if (await cell.count().catch(() => 0) > 0) {
+    await cell.hover({ timeout: 5000 }).catch(() => {});
     await humanPause(600, 1500);
     await cell.click({ timeout: 5000 }).catch(() => {});
     if (await page.waitForURL((url) => url.href.startsWith(chatUrl(id)), { timeout: 15000 }).then(() => true, () => false)) {
@@ -247,8 +277,8 @@ async function openChat(id, top) {
 }
 
 /** Prefill the reply to the waiting message; returns the id of the message it answers, or null */
-async function prefillChat(id, depth = 0, top = undefined) {
-  await openChat(id, top);
+async function prefillChat(id, depth = 0) {
+  await openChat(id);
   if (!await waitForCaptcha(page, console.log)) {
     return null;
   }
@@ -357,48 +387,38 @@ async function waitForSend(answeredId) {
  * saved: answers sent before learning was there, or while it did not run, are not lost
  */
 async function learnFromAllChats() {
-  await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-  await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
-  if (!await waitForCaptcha(page, console.log)) {
+  if (!await openChatPage()) {
     return;
   }
-  // The list shows every chat, not only the unread ones; the filter is put back afterwards
-  const unreadOnly = page.locator('label', { hasText: 'Только непрочитанные' }).first();
-  const filtered = await unreadOnly.locator('input[type="checkbox"]').isChecked().catch(() => false);
-  if (filtered) {
-    await unreadOnly.click({ timeout: 5000 }).catch(() => {});
-    await humanPause(1500, 2500);
-  }
-  const all = await loadChatList();
-  // A chat whose last message is the application itself («Отклик на вакансию», with a non-breaking space) has no answer in it
-  const chats = all.filter((chat) => !chat.unread && !/^отклик\s+на\s+вакансию$/i.test(chat.last.trim()));
+  // Every chat, not only the unread ones; the filter is put back afterwards
+  const unreadOnly = await showUnreadOnly(false);
   const savedBefore = sources.qaMap.size;
-  console.log(`📚 Reading ${chats.length} of ${all.length} chat(s) for answers not saved yet (unread chats are left ` +
-    'unread; chats with only the application are not opened)');
-  for (const [index, chat] of chats.entries()) {
-    await openChat(chat.id, chat.top);
+  let opened = 0;
+  console.log('📚 Going down the chat list for answers not saved yet (unread chats are left unread; ' +
+    'chats with only the application, «Отклик на вакансию», are not opened)');
+  await walkChatList(async (chat) => {
+    if (chat.unread || /^отклик\s+на\s+вакансию$/i.test(chat.last.trim())) {
+      return false;
+    }
+    await openChat(chat.id);
     if (!await waitForCaptcha(page, console.log)) {
-      break;
+      return true;
     }
     await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
-    const opened = await page.evaluate(readChat).catch(() => null);
-    if (opened) {
-      await learn(opened.messages);
+    const read = await page.evaluate(readChat).catch(() => null);
+    if (read) {
+      await learn(read.messages);
     }
-    if ((index + 1) % 10 === 0) {
-      console.log(`📚 ${index + 1} of ${chats.length} chats read`);
+    if (++opened % 10 === 0) {
+      console.log(`📚 ${opened} chats read`);
     }
     await humanPause();
+    return false;
+  });
+  if (unreadOnly) {
+    await showUnreadOnly(true);
   }
-  if (filtered) {
-    await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-    const label = page.locator('label', { hasText: 'Только непрочитанные' }).first();
-    await label.waitFor({ timeout: 20000 }).catch(() => {});
-    if (!await label.locator('input[type="checkbox"]').isChecked().catch(() => true)) {
-      await label.click({ timeout: 5000 }).catch(() => {});
-    }
-  }
-  console.log(`📚 Done: ${sources.qaMap.size - savedBefore} new answer(s) saved to qa.lino`);
+  console.log(`📚 Done: ${opened} chats read, ${sources.qaMap.size - savedBefore} new answer(s) saved to qa.lino`);
 }
 
 if (argv.learnAll) {
@@ -437,51 +457,62 @@ if (argv.watch) {
       console.log(`💬 Chat answered, processing unread chats again: ${stuckChat.title}`);
       stuckChat = null;
     }
-    await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-    await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
-    if (!await waitForCaptcha(page, console.log)) {
+    if (!await openChatPage()) {
       await sleep(argv.poll * 1000);
       continue;
     }
-    const chats = argv.auto ? await loadChatList() : await page.evaluate(readChatList);
-    const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) &&
-      (argv.auto ? chat.unread : !argv.chats.includes(chat.id)));
-    argv.chats.length = 0;
-    // Rejections first, all of them: opening one reads it, so it leaves the unread list. The list
-    // is read again after them, as the chats that load in their place may be rejections too
-    const rejections = argv.auto ? waiting.filter(isRejectionCell) : [];
     if (argv.auto) {
-      console.log(waiting.length > 0
-        ? `💬 Unread chats: ${waiting.length}${rejections.length > 0 ? `, ${rejections.length} of them rejections (opened first, so they are read)` : ''}`
-        : '💬 No unread chats');
-    }
-    if (rejections.length > 0) {
-      for (const chat of rejections) {
-        seen.add(seenKey(chat));
-        // Only opened, so it is read: nothing is typed in a rejection
-        await openChat(chat.id, chat.top);
-        if (!await waitForCaptcha(page, console.log)) {
-          break;
+      await showUnreadOnly(true);
+      let rejections = 0;
+      let opened = 0;
+      // Rejections first, going down the list: opening one reads it, so it leaves the unread list.
+      // Only opened: nothing is typed in a rejection
+      await walkChatList(async (chat) => {
+        if (!chat.unread || !isRejectionCell(chat) || seen.has(seenKey(chat))) {
+          return false;
         }
+        seen.add(seenKey(chat));
+        await openChat(chat.id);
+        if (!await waitForCaptcha(page, console.log)) {
+          return true;
+        }
+        rejections += 1;
         console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
         await humanPause();
-      }
-      continue;
-    }
-    for (const chat of waiting) {
-      await humanPause();
-      seen.add(seenKey(chat));
-      const answered = await prefillChat(chat.id, 0, chat.top);
-      if (!answered) {
-        continue;
-      }
-      if (argv.auto) {
-        // Nothing is sent by the tool: stop here with the chat open until the user has answered it
+        return false;
+      });
+      // Then the unread chats from the top; the first that needs the user stops the pass, with that chat open
+      const stopped = await walkChatList(async (chat) => {
+        if (!chat.unread || chat.lastIsMine || isRejectionCell(chat) || seen.has(seenKey(chat))) {
+          return false;
+        }
+        seen.add(seenKey(chat));
+        opened += 1;
+        await humanPause();
+        const answered = await prefillChat(chat.id);
+        if (!answered) {
+          return false;
+        }
+        // Nothing is sent by the tool: the chat stays open until the user has answered it
         console.log(`💬 ${answered.replied ? 'Check the typed reply and send it' : 'Chat needs your reply'}: ${chat.title} ${chatUrl(chat.id)}`);
         stuckChat = { id: chat.id, title: chat.title };
-        break;
+        return true;
+      });
+      if (!stopped) {
+        console.log(`💬 Chats done: ${rejections} rejection(s) read, ${opened} unread chat(s) opened`);
       }
-      await waitForSend(answered.id);
+    } else {
+      const waiting = (await page.evaluate(readChatList)).filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) &&
+        !argv.chats.includes(chat.id));
+      argv.chats.length = 0;
+      for (const chat of waiting) {
+        await humanPause();
+        seen.add(seenKey(chat));
+        const answered = await prefillChat(chat.id);
+        if (answered) {
+          await waitForSend(answered.id);
+        }
+      }
     }
     await sleep(argv.poll * 1000);
   }
