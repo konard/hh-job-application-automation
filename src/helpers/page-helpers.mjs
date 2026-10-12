@@ -151,6 +151,15 @@ export async function dismissOverlays(commander) {
  * @returns {Promise<Object>} fillTextArea's result
  */
 export async function typeLongText(commander, { selector, text, checkEmpty = true, scrollIntoView = false }) {
+  // A part of this very text already in the field (hh.ru keeps the draft of a form left while it
+  // was typed): it is completed, never sent cut off
+  const current = String(await commander.evaluate({ fn: (sel) => document.querySelector(sel)?.value ?? '', args: [selector] })
+    .catch(() => '') ?? '');
+  const same = (value) => value.replace(/\s+/g, ' ').trim();
+  if (current.trim() && same(current) !== same(text) && same(text).startsWith(same(current))) {
+    console.log('✍️  The field holds the start of this text (a draft left while typing): it is completed');
+    return commander.fillTextArea({ selector, text, checkEmpty: false, scrollIntoView, simulateTyping: false });
+  }
   try {
     return await commander.fillTextArea({ selector, text, checkEmpty, scrollIntoView, simulateTyping: true });
   } catch (error) {
