@@ -22,9 +22,12 @@ import { URL_PATTERNS, extractVacancyId } from './hh-selectors.mjs';
  * @param {boolean} options.isOnVacancyPageFromResponse - Whether we came to the vacancy page from vacancy_response
  * @param {string} options.returnUrl - URL to return to (last search page)
  * @param {Function} [options.onApplicationSent] - Called with the vacancy ID before returning; false means it was already handled
+ * @param {Function} [options.onUnavailable] - Called with the vacancy ID of a vacancy hh.ru does not show to this account
  * @returns {Promise<boolean>} True if redirect was performed
  */
-export async function checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromResponse, returnUrl, onApplicationSent = async () => {} }) {
+export async function checkAndRedirectIfNeeded({
+  commander, isOnVacancyPageFromResponse, returnUrl, onApplicationSent = async () => {}, onUnavailable = async () => {},
+}) {
   try {
     const currentUrl = commander.getUrl();
     log.debug(() => `checkAndRedirectIfNeeded: ${currentUrl} (from response: ${isOnVacancyPageFromResponse})`);
@@ -32,6 +35,14 @@ export async function checkAndRedirectIfNeeded({ commander, isOnVacancyPageFromR
     // Only check on vacancy pages when we came from vacancy_response
     if (!isOnVacancyPageFromResponse || !URL_PATTERNS.vacancyPage.test(currentUrl)) {
       return false;
+    }
+
+    // «Вам недоступна эта вакансия»: hh.ru closed it to this account; it is remembered and left
+    if (await commander.evaluate({ fn: () => /Вам недоступна эта вакансия/.test(document.body?.innerText ?? '') })) {
+      await onUnavailable(extractVacancyId(currentUrl));
+      console.log(`Back to the vacancy list: ${returnUrl}`);
+      await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+      return true;
     }
 
     // Redirect if the apply button was clicked OR if response text is on the page

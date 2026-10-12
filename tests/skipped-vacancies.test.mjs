@@ -132,3 +132,9 @@ describe('formatSkippedVacancies', () => {
     assert.match(text, /modal_timeout: .*\n.*3 — 2026-10-10T12:00:00\.000Z \(opened again on the next run\)/);
   });
 });
+
+describe('Unavailable vacancies', () => {
+  test('«Вам недоступна эта вакансия» is never opened again', () => {
+    assert.ok(isSkippedForGood({ reason: 'vacancy_unavailable', attempts: 1 }));
+  });
+});

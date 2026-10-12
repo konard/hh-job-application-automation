@@ -37,6 +37,7 @@ import { createMutex } from './helpers/mutex.mjs';
 export const SKIP_REASONS = {
   external_site: { retry: 'never', text: 'applied on the employer\'s site (bun run prefill-form -- <url>)' },
   resume_not_visible: { retry: 'never', text: 'the resume is not visible to all employers' },
+  vacancy_unavailable: { retry: 'never', text: 'hh.ru shows «Вам недоступна эта вакансия» (closed to this account)' },
   skipped_by_user: { retry: 'never', text: 'skipped by the user (s, or the popup closed without sending)' },
   unanswered_questions: { retry: 'once', text: 'questions without saved answers' },
   questions_deferred: { retry: 'deferred', text: 'waits for answers in deferred-questions.lino' },

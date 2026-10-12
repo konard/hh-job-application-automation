@@ -24,6 +24,7 @@ import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from 
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
 import { pauseMs } from './pacing.mjs';
+import { noteSkip } from './skipped-vacancies.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -314,6 +315,7 @@ export function createOrchestrator({
         // Safety net: redirect back after an application sent from a vacancy page
         if (await checkAndRedirectIfNeeded({
           commander, isOnVacancyPageFromResponse, returnUrl: lastSearchPageUrl, onApplicationSent: afterApplicationSent,
+          onUnavailable: (vacancyId) => noteSkip(skippedVacancies, vacancyId, { reason: 'vacancy_unavailable', url: commander.getUrl() }),
         })) {
           isOnVacancyPageFromResponse = false;
           await waitForPageReady('after redirect');
