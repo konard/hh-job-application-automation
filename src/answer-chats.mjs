@@ -353,7 +353,12 @@ if (argv.watch) {
     if (rejections.length > 0) {
       for (const chat of rejections) {
         seen.add(seenKey(chat));
-        await prefillChat(chat.id, 0, chat.top);
+        // Only opened, so it is read: nothing is typed in a rejection
+        await openChat(chat.id, chat.top);
+        if (!await waitForCaptcha(page, console.log)) {
+          break;
+        }
+        console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
         await humanPause();
       }
       continue;
