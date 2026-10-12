@@ -65,19 +65,24 @@ export function readChat() {
 }
 
 /**
- * Runs in the page: the chat list scrolled to its end, which makes hh.ru load the next chats
- * @returns {number} The chats loaded so far
+ * Runs in the page: the chat list scrolled to a position. The list is virtual: only the chats on
+ * screen are in the page, the others are put in as it is scrolled
+ * @param {number|null} top - Pixels from the list's top; null leaves it where it is
+ * @returns {{top: number, height: number, view: number}|null} Where it is now, null without a list
  */
-export function scrollChatListDown() {
-  const cells = document.querySelectorAll('[data-qa^="chatik-open-chat-"]');
-  let box = cells[cells.length - 1]?.parentElement;
+export function scrollChatList(top) {
+  const cell = document.querySelector('[data-qa^="chatik-open-chat-"]');
+  let box = cell?.parentElement;
   while (box && !(box.scrollHeight > box.clientHeight + 10 && /auto|scroll/.test(window.getComputedStyle(box).overflowY))) {
     box = box.parentElement;
   }
-  if (box) {
-    box.scrollTop = box.scrollHeight;
+  if (!box) {
+    return null;
   }
-  return cells.length;
+  if (top !== null) {
+    box.scrollTop = top;
+  }
+  return { top: box.scrollTop, height: box.scrollHeight, view: box.clientHeight };
 }
 
 /**
@@ -85,7 +90,9 @@ export function scrollChatListDown() {
  * @returns {Array<{id: string, title: string, subtitle: string, lastIsMine: boolean, unread: boolean}>}
  */
 export function readChatList() {
-  return [...document.querySelectorAll('[data-qa^="chatik-open-chat-"]')].map((cell) => {
+  return [...document.querySelectorAll('[data-qa^="chatik-open-chat-"]')].map((cell, index) => {
+    // A row of the virtual list is placed by its offset («translateY(2560px)»): its place in the list
+    const offset = /translateY\((\d+)/.exec(cell.closest('[class*="virtualized-row"]')?.style.transform ?? '');
     const subtitle = cell.querySelector('[data-qa="chat-cell-subtitle"]')?.innerText.trim() ?? '';
     // The line under the company: the last message, or the status («Отказ», «Собеседование»)
     const lines = cell.innerText.split('\n').map((line) => line.trim()).filter(Boolean);
@@ -97,6 +104,7 @@ export function readChatList() {
       last: /^\d+$/.test(last) ? '' : last,
       lastIsMine: Boolean(cell.querySelector('[data-qa^="status-icon"]')),
       unread: Boolean(cell.querySelector('[data-qa*="badge"], [data-qa*="counter"]')),
+      top: offset ? Number(offset[1]) : index,
     };
   });
 }

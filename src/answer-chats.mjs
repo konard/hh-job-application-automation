@@ -22,9 +22,10 @@ import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, scrollChatListDown, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, scrollChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
+import { blockHangingHosts } from './hanging-hosts.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
@@ -82,19 +83,52 @@ const chatUrl = (id) => `https://hh.ru/chat/${id}`;
 /** A chat whose list cell says «Отказ»: the employer's rejection */
 const isRejectionCell = (chat) => /^отказ$/i.test(chat.last ?? '');
 
-/** The whole chat list: hh.ru shows its first chats and loads more as the list is scrolled down */
+/**
+ * The whole chat list, read as it is scrolled down screen by screen (a virtual list: only the
+ * chats on screen are in the page), then scrolled back to its top
+ */
 async function loadChatList() {
-  let loaded = -1;
-  for (let round = 0; round < 50; round += 1) {
-    await page.evaluate(scrollChatListDown).catch(() => 0);
-    await sleep(1500);
-    const now = await page.evaluate(() => document.querySelectorAll('[data-qa^="chatik-open-chat-"]').length).catch(() => 0);
-    if (now === loaded) {
+  const chats = new Map();
+  for (let top = 0; ; ) {
+    const at = await page.evaluate(scrollChatList, top).catch(() => null);
+    await sleep(700);
+    for (const chat of await page.evaluate(readChatList).catch(() => [])) {
+      chats.set(chat.id, chat);
+    }
+    if (!at || at.top + at.view >= at.height - 5) {
       break;
     }
-    loaded = now;
+    top = at.top + Math.round(at.view * 0.8);
   }
-  return page.evaluate(readChatList);
+  await page.evaluate(scrollChatList, 0).catch(() => {});
+  return [...chats.values()].sort((a, b) => a.top - b.top);
+}
+
+/** The chat's cell scrolled into the list's view: from where it was, else screen by screen from the top */
+async function scrollToChat(id, top) {
+  const cell = page.locator(`[data-qa="chatik-open-chat-${id}"]`).first();
+  const shown = () => cell.count().then((count) => count > 0, () => false);
+  if (await shown()) {
+    return cell;
+  }
+  if (top !== undefined) {
+    await page.evaluate(scrollChatList, Math.max(0, top - 160)).catch(() => {});
+    await sleep(700);
+    if (await shown()) {
+      return cell;
+    }
+  }
+  for (let at = await page.evaluate(scrollChatList, 0).catch(() => null); at; ) {
+    await sleep(700);
+    if (await shown()) {
+      return cell;
+    }
+    if (at.top + at.view >= at.height - 5) {
+      break;
+    }
+    at = await page.evaluate(scrollChatList, at.top + Math.round(at.view * 0.8)).catch(() => null);
+  }
+  return null;
 }
 
 const sources = await loadAnswerSources();
@@ -104,6 +138,8 @@ const handledForms = new Set();
 
 const session = await openSlot({ name: 'chat-slot', port: CHAT_SLOT_PORT });
 const { page } = session;
+// Ad and tracker requests that hang kept the chat page loading for a minute
+await blockHangingHosts(page).catch(() => {});
 const copied = await copySession({ fromPort: AUTOMATION_PORT, page, domain: /(^|\.)hh\.ru$/ });
 console.log(copied > 0
   ? `🔑 Logged in with the hh.ru session of the automation browser (${copied} cookies, values not shown)`
@@ -146,12 +182,12 @@ const humanPause = (fromMs = 3000, toMs = 7000) => sleep(fromMs + Math.random() 
  * Open a chat as a person does: its cell in the chat list on the left is scrolled to and clicked.
  * A chat not in the list (a link given on the command line) is opened by its address
  */
-async function openChat(id) {
+async function openChat(id, top) {
   if (page.url().startsWith(chatUrl(id))) {
     return;
   }
-  const cell = page.locator(`[data-qa="chatik-open-chat-${id}"]`).first();
-  if (await cell.count().catch(() => 0) > 0) {
+  const cell = await scrollToChat(id, top);
+  if (cell) {
     await cell.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
     await humanPause(600, 1500);
     await cell.click({ timeout: 5000 }).catch(() => {});
@@ -162,12 +198,12 @@ async function openChat(id) {
     }
   }
   console.log(`🔗 Chat ${id} is not in the chat list: opened by its address`);
-  await page.goto(chatUrl(id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
+  await page.goto(chatUrl(id), { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
 }
 
 /** Prefill the reply to the waiting message; returns the id of the message it answers, or null */
-async function prefillChat(id, depth = 0) {
-  await openChat(id);
+async function prefillChat(id, depth = 0, top = undefined) {
+  await openChat(id, top);
   if (!await waitForCaptcha(page, console.log)) {
     return null;
   }
@@ -286,7 +322,7 @@ if (argv.watch) {
     if (stuckChat) {
       // Read where it was left (the typed reply stays), without the chat list
       if (!page.url().startsWith(chatUrl(stuckChat.id))) {
-        await page.goto(chatUrl(stuckChat.id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
+        await page.goto(chatUrl(stuckChat.id), { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
       }
       const chat = await page.evaluate(readChat).catch(() => null);
       if (!chat || !isChatAnswered(chat)) {
@@ -296,7 +332,7 @@ if (argv.watch) {
       console.log(`💬 Chat answered, processing unread chats again: ${stuckChat.title}`);
       stuckChat = null;
     }
-    await page.goto('https://hh.ru/chat', { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
+    await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
     await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
     if (!await waitForCaptcha(page, console.log)) {
       await sleep(argv.poll * 1000);
@@ -317,7 +353,7 @@ if (argv.watch) {
     if (rejections.length > 0) {
       for (const chat of rejections) {
         seen.add(seenKey(chat));
-        await prefillChat(chat.id);
+        await prefillChat(chat.id, 0, chat.top);
         await humanPause();
       }
       continue;
@@ -325,7 +361,7 @@ if (argv.watch) {
     for (const chat of waiting) {
       await humanPause();
       seen.add(seenKey(chat));
-      const answered = await prefillChat(chat.id);
+      const answered = await prefillChat(chat.id, 0, chat.top);
       if (!answered) {
         continue;
       }
