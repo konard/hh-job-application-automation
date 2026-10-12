@@ -91,6 +91,16 @@ const chatUrl = (id) => `https://hh.ru/chat/${id}`;
 /** A chat whose list cell says «Отказ»: the employer's rejection */
 const isRejectionCell = (chat) => /^отказ$/i.test(chat.last ?? '');
 
+/** At the list's end hh.ru loads the next older chats (about 20, in a few seconds): whether it did */
+async function moreChatsLoaded(height) {
+  for (const started = Date.now(); Date.now() - started < 5000; await sleep(500)) {
+    if ((await page.evaluate(scrollChatList, null).catch(() => null))?.height > height) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * The whole chat list, read as it is scrolled down screen by screen (a virtual list: only the
  * chats on screen are in the page), then scrolled back to its top
@@ -103,7 +113,10 @@ async function loadChatList() {
     for (const chat of await page.evaluate(readChatList).catch(() => [])) {
       chats.set(chat.id, chat);
     }
-    if (!at || at.top + at.view >= at.height - 5) {
+    if (!at) {
+      break;
+    }
+    if (at.top + at.view >= at.height - 5 && !await moreChatsLoaded(at.height)) {
       break;
     }
     top = at.top + Math.round(at.view * 0.8);
