@@ -42,10 +42,13 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
   --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
+  --learn-all            Read every chat already read, slowly (scrolled to and clicked in the list), and save
+                         the answers you sent that are not saved yet (qa.lino, chat-templates.lino); unread
+                         chats are left unread
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, auto: false, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, learnAll: false, auto: false, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -53,6 +56,8 @@ function parseArgs(args) {
       process.exit(0);
     } else if (flag === '--watch') {
       parsed.watch = true;
+    } else if (flag === '--learn-all') {
+      parsed.learnAll = true;
     } else if (flag === '--auto-send') {
       parsed.autoSend = true;
     } else if (flag === '--auto') {
@@ -70,7 +75,7 @@ function parseArgs(args) {
       parsed.chats.push(args[i].match(/(\d{6,})/)?.[1] ?? args[i]);
     }
   }
-  if (parsed.chats.length === 0 && !parsed.watch) {
+  if (parsed.chats.length === 0 && !parsed.watch && !parsed.learnAll) {
     console.log(USAGE);
     process.exit(1);
   }
@@ -332,6 +337,58 @@ async function waitForSend(answeredId) {
   sent = true;
   await watcher.catch(() => {});
   return choice;
+}
+
+/**
+ * Every chat already read, opened one by one as a person does, and what the user answered in it
+ * saved: answers sent before learning was there, or while it did not run, are not lost
+ */
+async function learnFromAllChats() {
+  await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
+  if (!await waitForCaptcha(page, console.log)) {
+    return;
+  }
+  // The list shows every chat, not only the unread ones; the filter is put back afterwards
+  const unreadOnly = page.locator('label', { hasText: 'Только непрочитанные' }).first();
+  const filtered = await unreadOnly.locator('input[type="checkbox"]').isChecked().catch(() => false);
+  if (filtered) {
+    await unreadOnly.click({ timeout: 5000 }).catch(() => {});
+    await humanPause(1500, 2500);
+  }
+  const chats = (await loadChatList()).filter((chat) => !chat.unread);
+  const savedBefore = sources.qaMap.size;
+  console.log(`📚 Reading ${chats.length} chat(s) for answers not saved yet (unread chats are left unread)`);
+  for (const [index, chat] of chats.entries()) {
+    await openChat(chat.id, chat.top);
+    if (!await waitForCaptcha(page, console.log)) {
+      break;
+    }
+    await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
+    const opened = await page.evaluate(readChat).catch(() => null);
+    if (opened) {
+      await learn(opened.messages);
+    }
+    if ((index + 1) % 10 === 0) {
+      console.log(`📚 ${index + 1} of ${chats.length} chats read`);
+    }
+    await humanPause();
+  }
+  if (filtered) {
+    await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    const label = page.locator('label', { hasText: 'Только непрочитанные' }).first();
+    await label.waitFor({ timeout: 20000 }).catch(() => {});
+    if (!await label.locator('input[type="checkbox"]').isChecked().catch(() => true)) {
+      await label.click({ timeout: 5000 }).catch(() => {});
+    }
+  }
+  console.log(`📚 Done: ${sources.qaMap.size - savedBefore} new answer(s) saved to qa.lino`);
+}
+
+if (argv.learnAll) {
+  await learnFromAllChats();
+  await session.release();
+  process.exit(0);
 }
 
 for (const id of argv.chats) {
