@@ -15,6 +15,8 @@
  * - Prefill: both agree, their answer; they disagree, both, as "haiku|luna"
  * - The field is filled only while it is empty and not focused; a picture is read until there is
  *   an answer, at most three times
+ * - Nothing is read while the user is at the captcha: a key press, click, mouse move, scroll or
+ *   focus in the page within USER_IDLE_MS means they solve it themselves, so no AI is asked
  *
  * @module captcha-solver
  */
@@ -48,6 +50,8 @@ const PROMPT = 'I am logged in to my own hh.ru account and it shows me a captcha
   'digits and spaces between words), with no quotes, comments or explanation, also when unsure.';
 /** Reads of one captcha picture when the models give no answer (Haiku sometimes declines) */
 const MAX_ATTEMPTS = 3;
+/** The user's key press, click, mouse move, scroll or focus in the page this recently: they solve it */
+const USER_IDLE_MS = 15000;
 /** The dialog fades in; the picture is taken once it is shown in full */
 const SETTLE_MS = 1000;
 
@@ -196,9 +200,22 @@ export async function solveCaptchaImage(png, { claude = askClaude, codex = askCo
 /**
  * Runs in the page: the visible captcha image and its answer field
  * @param {{imageSelector: string, inputSelector: string}} selectors
- * @returns {{src: string, ready: boolean, value: string, focused: boolean}|null}
+ * @returns {{src: string, ready: boolean, value: string, focused: boolean, userActiveAt: number}|null}
  */
 export function readCaptchaForm({ imageSelector, inputSelector }) {
+  // The user's own activity in the page (the automation touches nothing while a captcha is shown)
+  if (!window.__captchaUserActivity) {
+    window.__captchaUserActivity = { at: 0 };
+    const mark = (event) => {
+      if (event.isTrusted) {
+        window.__captchaUserActivity.at = Date.now();
+      }
+    };
+    for (const type of ['keydown', 'pointerdown', 'pointermove', 'wheel', 'focusin', 'input']) {
+      document.addEventListener(type, mark, { capture: true, passive: true });
+    }
+    window.addEventListener('focus', mark, { capture: true });
+  }
   const isVisible = (element) => element.getClientRects().length > 0 &&
     window.getComputedStyle(element).visibility !== 'hidden';
   const image = [...document.querySelectorAll(imageSelector)].find(isVisible);
@@ -216,6 +233,7 @@ export function readCaptchaForm({ imageSelector, inputSelector }) {
     ready: image.complete && image.naturalWidth > 0 && opacity > 0.99,
     value: input.value,
     focused: document.activeElement === input,
+    userActiveAt: window.__captchaUserActivity.at,
   };
 }
 
@@ -302,12 +320,14 @@ export function findCaptchaSendButton({ inputSelector }) {
  * @param {string|null} [options.saveDir] - Where the captcha pictures are kept for checking (logs/captcha)
  * @param {number} [options.settleMs=1000] - Pause before the picture is taken
  * @param {boolean} [options.sendOnce=true] - Send Haiku's reading of a captcha's first picture once
+ * @param {number} [options.userIdleMs] - The user's activity in the page this recently means they solve it
+ * @param {Function} [options.now=Date.now] - Clock (page time and this process' time are the same machine's)
  * @returns {(commander: Object, episode?: Object) => Promise<void>} Takes the unguarded commander and
  *   the state of this captcha (from waitWhileCaptcha)
  */
 export function createCaptchaPrefill({
   page, solve = solveCaptchaImage, saveDir = path.join(process.cwd(), 'logs', 'captcha'), settleMs = SETTLE_MS,
-  sendOnce = true,
+  sendOnce = true, userIdleMs = USER_IDLE_MS, now = Date.now,
 }) {
   let currentSrc = null;
   let attempts = 0;
@@ -321,6 +341,17 @@ export function createCaptchaPrefill({
     silent: true,
   })).value;
 
+  // The user is at the captcha: they solve it, no AI is asked (told once per picture)
+  let toldActive = null;
+  const userActive = (form) => {
+    const active = form.userActiveAt > 0 && now() - form.userActiveAt < userIdleMs;
+    if (active && toldActive !== form.src) {
+      toldActive = form.src;
+      console.log('🙋 You are at the captcha (typing, clicking or moving the mouse), so no AI reads it');
+    }
+    return active;
+  };
+
   async function prefill(commander, episode) {
     let form = await readForm(commander);
     // A new picture after the send means hh.ru did not accept it
@@ -333,12 +364,12 @@ export function createCaptchaPrefill({
       attempts = 0;
     }
     // A picture is read until there is an answer (at most twice), and never over what the user types
-    if (!form?.ready || attempts >= MAX_ATTEMPTS || form.value || form.focused) {
+    if (!form?.ready || attempts >= MAX_ATTEMPTS || form.value || form.focused || userActive(form)) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, settleMs));
     form = await readForm(commander);
-    if (!form?.ready || form.src !== currentSrc || form.value || form.focused) {
+    if (!form?.ready || form.src !== currentSrc || form.value || form.focused || userActive(form)) {
       return;
     }
     attempts++;

@@ -133,6 +133,26 @@ describe('createCaptchaPrefill', () => {
     assert.deepEqual(commander.clicks, []);
   });
 
+  test('no AI reads the captcha while the user is active in the page, it does once they stop', async () => {
+    const { commander, page } = fakeCaptchaPage();
+    let reads = 0;
+    let clock = 100000;
+    const prefill = createCaptchaPrefill({
+      page, saveDir: null, settleMs: 0, sendOnce: false, now: () => clock,
+      solve: async () => {
+        reads++;
+        return { haiku: 'ab12', luna: 'ab12', model: 'gpt-6-luna', text: 'ab12' };
+      },
+    });
+    commander.form.userActiveAt = clock - 3000;
+    await prefill(commander);
+    assert.equal(reads, 0);
+    assert.deepEqual(commander.fills, []);
+    clock += 20000;
+    await prefill(commander);
+    assert.equal(reads, 1);
+  });
+
   test('Haiku\'s reading is sent once per captcha, then it is only prefilled', async () => {
     const { commander, page } = fakeCaptchaPage({ sendButton: 'form button[type="submit"]' });
     const solve = async () => ({ haiku: 'ab12', luna: 'ab13', model: 'gpt-6-luna', text: 'ab12|ab13' });

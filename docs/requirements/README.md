@@ -161,6 +161,7 @@ Sections:
 | CAP7 | «I hope you don't give a full screenshot to get prefill from models? And you actually give small source image?» | Only the captcha picture, in its original size (250×90, copied through a canvas, no new request), goes to the models; never the page or the screen | Image in `logs/captcha/` is 250×90 | ✅ | f7f8ee8 |
 | CAP8 | «We use low thining at both luna nad haiku?» · «Set both to low by default, and we will see how these will perform.» | Both readers run at low reasoning effort regardless of the user's CLI settings | `READER_EFFORT = 'low'`; `claude --effort low`, `codex -c model_reasoning_effort=low` | ✅ | 88f6a74 |
 | CAP9 | «for captcha we try to submit haiku version once, if works - ok, if not - wait for me, so there is less cases which need me» | On a captcha's first picture only Haiku's reading is typed and sent once (`--captcha-auto-send`, default on); after a new picture the guess is only prefilled and the run waits (= [A6](forms-and-chats.md#a-hhru-application-forms)) | Live: 1 accepted, 2 not accepted then prefilled | ✅ | e1d615b |
+| CAP10 | «double check we don't generate solution for captcha if any activity by user detected near captcha window (like focus, keyboard presses and so on). So if user can do it himself we don't waste AI resources.» | No AI reads the captcha while the user is at it: a key press, click, mouse move, scroll or focus in the page within the last 15 s (or text in the field, or the field focused) means the user solves it | `tests/captcha-solver.test.mjs` | 🧪 | `readCaptchaForm` notes the user's own (trusted) events in the page; the automation touches nothing while a captcha is shown |
 
 ## FLT: filtering and deferring vacancies
 
@@ -381,7 +382,7 @@ of them, so none is lost.
 | TRACE | 4 | 1 | 3 | | | |
 | CONF | 12 | 7 | 4 | | | 1 |
 | QA | 12 | 12 | | | | |
-| CAP | 9 | 8 | | | | 1 |
+| CAP | 10 | 8 | 1 | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
 | FORM (B) | 33 | 14 | 19 | | | |
@@ -389,7 +390,7 @@ of them, so none is lost.
 | EXP | 10 | 4 | 6 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **164** | **113** | **48** | **0** | **0** | **3** |
+| **Total** | **165** | **113** | **49** | **0** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same
