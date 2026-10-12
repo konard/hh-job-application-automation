@@ -32,6 +32,7 @@ import {
   findCoverLetterToggle,
   isButtonEnabled,
   isResponseSubmitted,
+  typeLongText,
 } from './helpers/page-helpers.mjs';
 
 const COVER_LETTER_SELECTORS = [SELECTORS.coverLetterTextareaPopup, SELECTORS.coverLetterTextareaForm];
@@ -362,13 +363,7 @@ export async function handleVacancyResponsePage({
     // The English letter when the vacancy's questions are in English
     const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question));
     if (letter && textareaSelector) {
-      const { filled } = await commander.fillTextArea({
-        selector: textareaSelector,
-        text: letter,
-        checkEmpty: true,
-        scrollIntoView: true,
-        simulateTyping: true,
-      });
+      const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter, scrollIntoView: true });
       console.log(filled
         ? `Prefilled cover letter message into: ${textareaSelector}`
         : 'Cover letter already contains text, skipping prefill');

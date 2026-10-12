@@ -11,7 +11,7 @@ import { noteSkip } from './skipped-vacancies.mjs';
 import { saveMarkedQAPairs, saveQAPairs, setupQAHandling } from './vacancy-response.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
-import { findCoverLetterToggle, isButtonEnabled } from './helpers/page-helpers.mjs';
+import { findCoverLetterToggle, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
@@ -182,13 +182,7 @@ export async function processModalApplication({
   // The English letter when the vacancy's questions are in English
   const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question));
   if (letter) {
-    const { filled, verified, actualValue } = await commander.fillTextArea({
-      selector: textareaSelector,
-      text: letter,
-      checkEmpty: true,
-      scrollIntoView: false,
-      simulateTyping: true,
-    });
+    const { filled, verified, actualValue } = await typeLongText(commander, { selector: textareaSelector, text: letter });
     if (!filled) {
       console.log(`⏭️  ${commander.engine}: textarea already contains text, skipping typing to prevent double entry`);
     } else if (verified) {

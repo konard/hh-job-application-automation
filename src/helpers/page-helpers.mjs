@@ -4,6 +4,7 @@
  * @module helpers/page-helpers
  */
 
+import { isTimeoutError } from 'browser-commander';
 import { SELECTORS } from '../hh-selectors.mjs';
 
 /**
@@ -140,4 +141,23 @@ export async function dismissOverlays(commander) {
     }
   }
   await closeChatPanel(commander);
+}
+
+/**
+ * Type a long text (the cover letter) like a person; a field that takes keys slowly (over the
+ * 30 s an action may take) gets the whole text at once instead, so the run never stops on it
+ * @param {Object} commander
+ * @param {{selector: string, text: string, checkEmpty?: boolean, scrollIntoView?: boolean}} options
+ * @returns {Promise<Object>} fillTextArea's result
+ */
+export async function typeLongText(commander, { selector, text, checkEmpty = true, scrollIntoView = false }) {
+  try {
+    return await commander.fillTextArea({ selector, text, checkEmpty, scrollIntoView, simulateTyping: true });
+  } catch (error) {
+    if (!isTimeoutError(error)) {
+      throw error;
+    }
+    console.log('⚠️  Typing took over 30 s (the field takes keys slowly): the whole text is put in at once');
+    return commander.fillTextArea({ selector, text, checkEmpty: false, scrollIntoView, simulateTyping: false });
+  }
 }
