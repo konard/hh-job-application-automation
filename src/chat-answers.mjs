@@ -69,13 +69,20 @@ export function readChat() {
  * @returns {Array<{id: string, title: string, subtitle: string, lastIsMine: boolean, unread: boolean}>}
  */
 export function readChatList() {
-  return [...document.querySelectorAll('[data-qa^="chatik-open-chat-"]')].map((cell) => ({
-    id: cell.getAttribute('data-qa').replace('chatik-open-chat-', ''),
-    title: cell.querySelector('[data-qa="chat-cell-title"]')?.innerText.trim() ?? '',
-    subtitle: cell.querySelector('[data-qa="chat-cell-subtitle"]')?.innerText.trim() ?? '',
-    lastIsMine: Boolean(cell.querySelector('[data-qa^="status-icon"]')),
-    unread: Boolean(cell.querySelector('[data-qa*="badge"], [data-qa*="counter"]')),
-  }));
+  return [...document.querySelectorAll('[data-qa^="chatik-open-chat-"]')].map((cell) => {
+    const subtitle = cell.querySelector('[data-qa="chat-cell-subtitle"]')?.innerText.trim() ?? '';
+    // The line under the company: the last message, or the status («Отказ», «Собеседование»)
+    const lines = cell.innerText.split('\n').map((line) => line.trim()).filter(Boolean);
+    const last = lines[lines.indexOf(subtitle) + 1] ?? '';
+    return {
+      id: cell.getAttribute('data-qa').replace('chatik-open-chat-', ''),
+      title: cell.querySelector('[data-qa="chat-cell-title"]')?.innerText.trim() ?? '',
+      subtitle,
+      last: /^\d+$/.test(last) ? '' : last,
+      lastIsMine: Boolean(cell.querySelector('[data-qa^="status-icon"]')),
+      unread: Boolean(cell.querySelector('[data-qa*="badge"], [data-qa*="counter"]')),
+    };
+  });
 }
 
 /**

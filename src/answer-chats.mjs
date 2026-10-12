@@ -80,7 +80,7 @@ const MESSAGE_INPUT = 'textarea[data-qa="text-input"]';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const chatUrl = (id) => `https://hh.ru/chat/${id}`;
 /** A chat whose list cell says «Отказ»: the employer's rejection */
-const isRejectionCell = (chat) => /^отказ$/i.test(chat.subtitle.trim());
+const isRejectionCell = (chat) => /^отказ$/i.test(chat.last ?? '');
 
 const sources = await loadAnswerSources();
 // Template replies may hold contact placeholders too
@@ -237,7 +237,7 @@ for (const id of argv.chats) {
 if (argv.watch) {
   // A chat is seen again when its last message changes (the employer wrote again)
   const seen = new Set();
-  const seenKey = (chat) => `${chat.id}\n${chat.subtitle}`;
+  const seenKey = (chat) => `${chat.id}\n${chat.last}`;
   // --auto: the chat left open for the user; nothing else is processed until it is answered
   let stuckChat = null;
   console.log(argv.auto
