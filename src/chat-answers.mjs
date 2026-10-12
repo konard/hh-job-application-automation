@@ -36,10 +36,11 @@ export function readChat() {
   const messages = [...document.querySelectorAll('[data-qa^="chatik-chat-message-"]')]
     .filter((element) => /^chatik-chat-message-\d+$/.test(element.getAttribute('data-qa')))
     .map((element) => {
-      const bubble = element.querySelector('[data-qa="chat-bubble-wrapper"]');
-      const left = element.getBoundingClientRect().left;
+      const bubble = element.querySelector('[data-qa="chat-bubble-wrapper"]')?.getBoundingClientRect();
+      const row = element.getBoundingClientRect();
+      // The user's own bubble is on the right; hh.ru's notices in the middle are not the user's
       const mine = Boolean(element.querySelector('[data-qa^="status-icon"], [data-qa^="chat-bubble-icon"], [class*="message_my"], [class*="chat-bubble_outgoing"]')) ||
-        (bubble ? bubble.getBoundingClientRect().left - left > 40 : false);
+        (bubble ? bubble.left - row.left > 40 && row.right - bubble.right < 40 : false);
       return {
         id: element.getAttribute('data-qa').replace('chatik-chat-message-', ''),
         mine,

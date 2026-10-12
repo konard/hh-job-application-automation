@@ -18,7 +18,7 @@ import path from 'path';
 import { openSlot, copySession } from './browser-slots.mjs';
 import { askUser, enableConfirmations, withdrawPrompt } from './confirmations.mjs';
 import { createQADatabase, findBestMatch } from './qa-database.mjs';
-import { withContacts } from './contacts.mjs';
+import { contractContacts, withContacts } from './contacts.mjs';
 import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
@@ -192,7 +192,8 @@ async function openChatPage() {
 
 const sources = await loadAnswerSources();
 // Template replies may hold contact placeholders too
-const templatesDb = withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), sources.contacts);
+const templatesFile = createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino'));
+const templatesDb = withContacts(templatesFile, sources.contacts);
 const handledForms = new Set();
 const skippedVacancies = createSkippedVacancies(path.join(process.cwd(), 'data', 'skipped-vacancies.lino'));
 const vacancyFilters = createVacancyFilters({
@@ -243,20 +244,23 @@ async function learn(messages) {
   }
   const known = await templatesDb.readQADatabase();
   const examples = new Map([...known].filter(([key]) => !isPattern(key)));
+  // Written to the file as it is stored: its placeholders kept, a new reply's contacts made placeholders
+  const stored = await templatesFile.readQADatabase();
   let learned = false;
   for (const [message, reply] of templates) {
     if (!findBestMatch(message, examples, { threshold: TEMPLATE_THRESHOLD })) {
       examples.set(message, reply);
+      stored.set(message, contractContacts(reply, sources.contacts));
       learned = true;
       console.log(`💾 Learned a template reply (chat-templates.lino): ${message.split('\n')[0]}`);
     }
   }
   if (learned) {
     // Template messages answered the same way are generalized into patterns
-    const updated = withLearnedPatterns(examples);
-    [...updated.keys()].filter((key) => isPattern(key) && !known.has(key))
+    const updated = withLearnedPatterns(stored);
+    [...updated.keys()].filter((key) => isPattern(key) && !stored.has(key))
       .forEach((key) => console.log(`🧩 Learned a template pattern: ${key}`));
-    await templatesDb.writeQADatabase(updated);
+    await templatesFile.writeQADatabase(updated);
   }
 }
 
