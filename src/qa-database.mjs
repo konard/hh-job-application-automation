@@ -168,8 +168,10 @@ export function createQADatabase(filePath) {
     const hasSingleQuotes = str.includes("'");
     const hasParens = str.includes('(') || str.includes(')');
     const hasNewline = str.includes('\n');
+    // Unquoted, repeated or edge spaces are read back as one: «года.  Соотношение»
+    const hasSpacing = /\s\s|^\s|\s$/.test(str);
 
-    const needsQuoting = hasColon || hasDoubleQuotes || hasSingleQuotes || hasParens || hasNewline;
+    const needsQuoting = hasColon || hasDoubleQuotes || hasSingleQuotes || hasParens || hasNewline || hasSpacing;
 
     if (needsQuoting) {
       if (hasDoubleQuotes && !hasSingleQuotes) {

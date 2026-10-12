@@ -10,6 +10,7 @@
 
 import { describe, test, assert } from 'test-anywhere';
 import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
 
 // Import the factory function
@@ -949,5 +950,15 @@ Step 3: Experiment`;
         await fs.writeFile(PRODUCTION_QA_FILE, originalContent, 'utf8');
       }
     });
+  });
+});
+
+describe('Repeated spaces', () => {
+  test('an answer with two spaces in a row is read back as written', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'qa-spaces-'));
+    const db = createQADatabase(path.join(dir, 'qa.lino'));
+    await db.addOrUpdateQA('Вопрос', 'года.  Соотношение');
+    assert.equal((await db.readQADatabase()).get('Вопрос'), 'года.  Соотношение');
+    await fs.rm(dir, { recursive: true, force: true });
   });
 });
