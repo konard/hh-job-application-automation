@@ -269,6 +269,12 @@ if (argv.watch) {
       // Rejections first: opening them reads them, so they leave the unread list
       .sort((a, b) => Number(isRejectionCell(b)) - Number(isRejectionCell(a)));
     argv.chats.length = 0;
+    if (argv.auto) {
+      const rejections = waiting.filter(isRejectionCell).length;
+      console.log(waiting.length > 0
+        ? `💬 Unread chats: ${waiting.length}${rejections > 0 ? `, ${rejections} of them rejections (opened first, so they are read)` : ''}`
+        : '💬 No unread chats');
+    }
     for (const chat of waiting) {
       seen.add(seenKey(chat));
       const answered = await prefillChat(chat.id);
