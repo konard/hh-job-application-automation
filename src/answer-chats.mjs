@@ -13,6 +13,7 @@
  * application among them), one at a time, waiting until the user sends or skips (s) before the next.
  */
 
+import fs from 'fs/promises';
 import path from 'path';
 import { openSlot, copySession } from './browser-slots.mjs';
 import { askUser, enableConfirmations, withdrawPrompt } from './confirmations.mjs';
@@ -26,6 +27,7 @@ import {
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
+import { createHumanInput } from './helpers/human-input.mjs';
 import { createSkippedVacancies, isSkippedForGood, SKIP_REASONS } from './skipped-vacancies.mjs';
 import { createVacancyFilters, describeFilterMatch } from './vacancy-filters.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
@@ -97,15 +99,18 @@ const humanPause = (fromMs = 3000, toMs = 7000) => sleep(fromMs + Math.random() 
 /** Where the chat list is scrolled, and its place on screen; null without a list */
 const listPosition = () => page.evaluate(scrollChatList, null).catch(() => null);
 
-/** The mouse wheel turned over the chat list, as a person scrolls it */
+/** The mouse wheel turned over the chat list, as a person scrolls it (the pointer glides over it first) */
 async function wheelChatList(by) {
   const at = await listPosition();
   if (!at) {
     return null;
   }
-  await page.mouse.move(at.x + at.width * (0.3 + Math.random() * 0.4), at.y + at.view * (0.3 + Math.random() * 0.4), { steps: 5 });
-  await page.mouse.wheel(0, by);
-  await sleep(400 + Math.random() * 400);
+  const pointer = human.position();
+  if (pointer.x < at.x || pointer.x > at.x + at.width || pointer.y < at.y || pointer.y > at.y + at.view) {
+    await human.moveTo(at.x + at.width * (0.3 + Math.random() * 0.4), at.y + at.view * (0.3 + Math.random() * 0.4));
+  }
+  await human.scroll(by);
+  await sleep(250 + Math.random() * 250);
   return listPosition();
 }
 
@@ -172,7 +177,7 @@ async function showUnreadOnly(want) {
   const was = await label.locator('input[type="checkbox"]').isChecked({ timeout: 10000 }).catch(() => null);
   if (was !== null && was !== want) {
     await humanPause(800, 1500);
-    await label.click({ timeout: 5000 }).catch(() => {});
+    await human.click(label);
     await humanPause(1500, 2500);
   }
   return was;
@@ -216,6 +221,8 @@ async function leftAloneBecause(chat) {
 
 const session = await openSlot({ name: 'chat-slot', port: CHAT_SLOT_PORT });
 const { page } = session;
+// The pointer and the wheel move as a person's do, smooth on a screen recording
+const human = createHumanInput(page);
 // Ad and tracker requests that hang kept the chat page loading for a minute
 await blockHangingHosts(page).catch(() => {});
 const copied = await copySession({ fromPort: AUTOMATION_PORT, page, domain: /(^|\.)hh\.ru$/ });
@@ -262,10 +269,7 @@ async function openChat(id) {
     return;
   }
   const cell = page.locator(`[data-qa="chatik-open-chat-${id}"]`).first();
-  if (await cell.count().catch(() => 0) > 0) {
-    await cell.hover({ timeout: 5000 }).catch(() => {});
-    await humanPause(600, 1500);
-    await cell.click({ timeout: 5000 }).catch(() => {});
+  if (await cell.count().catch(() => 0) > 0 && await human.click(cell)) {
     if (await page.waitForURL((url) => url.href.startsWith(chatUrl(id)), { timeout: 15000 }).then(() => true, () => false)) {
       // The chat on the right is replaced after the address
       await sleep(2000);
@@ -393,11 +397,14 @@ async function learnFromAllChats() {
   // Every chat, not only the unread ones; the filter is put back afterwards
   const unreadOnly = await showUnreadOnly(false);
   const savedBefore = sources.qaMap.size;
+  // Chats read before and unchanged since (the same last line) are not opened again
+  const readFile = path.join(process.cwd(), 'logs', 'chats-learned.json');
+  const readBefore = await fs.readFile(readFile, 'utf8').then(JSON.parse, () => ({}));
   let opened = 0;
   console.log('📚 Going down the chat list for answers not saved yet (unread chats are left unread; ' +
     'chats with only the application, «Отклик на вакансию», are not opened)');
   await walkChatList(async (chat) => {
-    if (chat.unread || /^отклик\s+на\s+вакансию$/i.test(chat.last.trim())) {
+    if (chat.unread || /^отклик\s+на\s+вакансию$/i.test(chat.last.trim()) || readBefore[chat.id] === chat.last) {
       return false;
     }
     await openChat(chat.id);
@@ -408,6 +415,9 @@ async function learnFromAllChats() {
     const read = await page.evaluate(readChat).catch(() => null);
     if (read) {
       await learn(read.messages);
+      readBefore[chat.id] = chat.last;
+      await fs.mkdir(path.dirname(readFile), { recursive: true });
+      await fs.writeFile(readFile, JSON.stringify(readBefore));
     }
     if (++opened % 10 === 0) {
       console.log(`📚 ${opened} chats read`);
