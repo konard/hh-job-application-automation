@@ -65,6 +65,22 @@ export function readChat() {
 }
 
 /**
+ * Runs in the page: the chat list scrolled to its end, which makes hh.ru load the next chats
+ * @returns {number} The chats loaded so far
+ */
+export function scrollChatListDown() {
+  const cells = document.querySelectorAll('[data-qa^="chatik-open-chat-"]');
+  let box = cells[cells.length - 1]?.parentElement;
+  while (box && !(box.scrollHeight > box.clientHeight + 10 && /auto|scroll/.test(window.getComputedStyle(box).overflowY))) {
+    box = box.parentElement;
+  }
+  if (box) {
+    box.scrollTop = box.scrollHeight;
+  }
+  return cells.length;
+}
+
+/**
  * Runs in the page: the chats of the list, with whether the last message is the user's own
  * @returns {Array<{id: string, title: string, subtitle: string, lastIsMine: boolean, unread: boolean}>}
  */

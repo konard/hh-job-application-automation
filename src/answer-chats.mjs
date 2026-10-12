@@ -22,7 +22,7 @@ import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, scrollChatListDown, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 
@@ -81,6 +81,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const chatUrl = (id) => `https://hh.ru/chat/${id}`;
 /** A chat whose list cell says «Отказ»: the employer's rejection */
 const isRejectionCell = (chat) => /^отказ$/i.test(chat.last ?? '');
+
+/** The whole chat list: hh.ru shows its first chats and loads more as the list is scrolled down */
+async function loadChatList() {
+  let loaded = -1;
+  for (let round = 0; round < 50; round += 1) {
+    await page.evaluate(scrollChatListDown).catch(() => 0);
+    await sleep(1500);
+    const now = await page.evaluate(() => document.querySelectorAll('[data-qa^="chatik-open-chat-"]').length).catch(() => 0);
+    if (now === loaded) {
+      break;
+    }
+    loaded = now;
+  }
+  return page.evaluate(readChatList);
+}
 
 const sources = await loadAnswerSources();
 // Template replies may hold contact placeholders too
@@ -263,17 +278,24 @@ if (argv.watch) {
       await sleep(argv.poll * 1000);
       continue;
     }
-    const chats = await page.evaluate(readChatList);
+    const chats = argv.auto ? await loadChatList() : await page.evaluate(readChatList);
     const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) &&
-      (argv.auto ? chat.unread : !argv.chats.includes(chat.id)))
-      // Rejections first: opening them reads them, so they leave the unread list
-      .sort((a, b) => Number(isRejectionCell(b)) - Number(isRejectionCell(a)));
+      (argv.auto ? chat.unread : !argv.chats.includes(chat.id)));
     argv.chats.length = 0;
+    // Rejections first, all of them: opening one reads it, so it leaves the unread list. The list
+    // is read again after them, as the chats that load in their place may be rejections too
+    const rejections = argv.auto ? waiting.filter(isRejectionCell) : [];
     if (argv.auto) {
-      const rejections = waiting.filter(isRejectionCell).length;
       console.log(waiting.length > 0
-        ? `💬 Unread chats: ${waiting.length}${rejections > 0 ? `, ${rejections} of them rejections (opened first, so they are read)` : ''}`
+        ? `💬 Unread chats: ${waiting.length}${rejections.length > 0 ? `, ${rejections.length} of them rejections (opened first, so they are read)` : ''}`
         : '💬 No unread chats');
+    }
+    if (rejections.length > 0) {
+      for (const chat of rejections) {
+        seen.add(seenKey(chat));
+        await prefillChat(chat.id);
+      }
+      continue;
     }
     for (const chat of waiting) {
       seen.add(seenKey(chat));
