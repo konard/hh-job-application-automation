@@ -11,7 +11,7 @@
  */
 
 import { makeUrlCondition } from 'browser-commander';
-import { saveQAPairs } from './vacancy-response.mjs';
+import { readQAPairs, savePairs } from './vacancy-response.mjs';
 import { log } from './logging.mjs';
 import { createApplyButtonTracker } from './helpers/session-tracker.mjs';
 import { isResponseSubmitted } from './helpers/page-helpers.mjs';
@@ -19,21 +19,36 @@ import { URL_PATTERNS, extractVacancyIdFromResponseUrl, extractVacancyId } from 
 import { withdrawPrompt } from './confirmations.mjs';
 
 /**
- * Save the answers typed into the full form every 5 s, so what the user answers in the browser
+ * Save the answers typed into the full form as they are typed, so what the user answers in the browser
  * is learned (qa.lino) also when they send it themselves
  * @returns {() => Promise<void>} Stops the saving after a last save
  */
 export function saveFormAnswers({ commander, addOrUpdateQA }) {
-  const save = async (reason) => {
-    const count = await saveQAPairs({ commander, addOrUpdateQA });
+  // Read every second, written once an answer stops changing: the last read is written when
+  // the form is sent, since by then the page is gone (a save after it lost the last words typed)
+  let lastRead = null;
+  let previous = '';
+  const save = async (pairs, reason) => {
+    const count = pairs ? await savePairs(pairs, addOrUpdateQA) : 0;
     if (count > 0) {
       console.log(`Saved ${count} Q&A pair(s) ${reason}`);
     }
   };
-  const interval = setInterval(() => save('(auto-save)').catch(() => {}), 5000);
+  const interval = setInterval(async () => {
+    const pairs = await readQAPairs({ commander }).catch(() => null);
+    if (!pairs) {
+      return;
+    }
+    const now = JSON.stringify(pairs);
+    lastRead = pairs;
+    if (now === previous) {
+      await save(pairs, '(auto-save)').catch(() => {});
+    }
+    previous = now;
+  }, 1000);
   return async () => {
     clearInterval(interval);
-    await save('before navigation').catch((error) => {
+    await save(await readQAPairs({ commander }).catch(() => null) ?? lastRead, 'before navigation').catch((error) => {
       log.debug(() => `⚠️ Error saving Q&A on cleanup: ${error.message}`);
     });
   };

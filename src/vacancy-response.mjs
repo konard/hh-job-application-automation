@@ -52,7 +52,7 @@ const savedAnswers = new Map();
  * Save new or changed Q&A pairs to the database and log them
  * @returns {Promise<number>} Number of saved pairs
  */
-async function savePairs(pairs, addOrUpdateQA) {
+export async function savePairs(pairs, addOrUpdateQA) {
   let saved = 0;
   // One answer per question: two (e.g. a choice and the text of its "Свой вариант" box) would
   // overwrite each other on every save
@@ -130,16 +130,25 @@ export async function saveMarkedQAPairs({ commander, addOrUpdateQA }) {
  * Save Q&A pairs from textareas and radio buttons after user interaction
  */
 export async function saveQAPairs({ commander, addOrUpdateQA }) {
+  const pairs = await readQAPairs({ commander });
+  return pairs ? savePairs(pairs, addOrUpdateQA) : 0;
+}
+
+/**
+ * The form's questions and answers as they are now, or null while the page navigates away
+ * @returns {Promise<Array<{question: string, answer: string|string[]}>|null>}
+ */
+export async function readQAPairs({ commander }) {
   try {
-    return await savePairs(await extractQAPairs({ evaluate: commander.evaluate }), addOrUpdateQA);
+    return await extractQAPairs({ evaluate: commander.evaluate });
   } catch (error) {
     // The page navigated away while reading it; the save before navigation covers it
     if (isNavigationError(error)) {
       log.debug(() => `Q&A save skipped during navigation: ${error.message}`);
     } else {
-      console.error('Error saving Q&A pairs:', error.message);
+      console.error('Error reading Q&A pairs:', error.message);
     }
-    return 0;
+    return null;
   }
 }
 
