@@ -229,6 +229,7 @@ The details and checks are in [forms-and-chats.md, section B](forms-and-chats.md
 | B30 | A page counts as ready after 2 s without requests (browser-commander waits 30 s by default, and hh.ru's anti-bot request repeats every 30 s); ad and tracker requests that hang (time out after ~30 s) are answered at once with an empty pixel, the known hosts from the start and any other non-hh.ru host after its first time out; the HTTP cache is kept | 🧪 |
 | B31 | Salary answers come from two baselines, the net pay a month in rubles and in dollars (contacts.lino «salary_net_rub», «salary_net_usd»), set apart, not converted: answers and profile.lino use placeholders for net and gross; gross is the pay whose net after the progressive personal income tax (13/15/18/20/22%) is the baseline (for dollars, the brackets at the Central Bank rate of the day, the last one cached). Saved questions can be templates («pattern: gross»): every wording of the question takes the template's answer, the most specific template first, before any similar question | 🧪 |
 | B32 | A vacancy hh.ru does not show to this account («Вам недоступна эта вакансия», e.g. after sending its form) is recorded in skipped-vacancies.lino as unavailable, the run goes back to the list, and the vacancy is never opened again | 🧪 |
+| B33 | «once in 2 hour we should open or work in already opened full window chat (https://hh.ru/chat) … automatically click all rejections so they go away, after that click first unread, so we auto process it if there are questions we can process automatically or we just prefill (not 100% match) or do nothing and wait for the user. There is separate browser slot (window) but the same session must be.» `--process-chats` (every `--chats-interval-minutes`, 120 by default) works in the chat slot (port 9340) with the session of the automation browser: rejections are opened first (read, so they leave the unread list), then the unread chats in order; an exact answer is sent (with `--auto-send-exact-answers`; a bot's button that is the saved answer is clicked) and the bot's next question taken; anything else is typed in, and the processor stops on that chat until the user has answered it | 🧪 |
 
 Evidence: ec11d6e, ec58db0; `src/prefill-form.mjs`, `src/form-prefill.mjs`, `src/contacts.mjs`;
 `tests/form-prefill.test.mjs`, `tests/contacts.test.mjs`.
@@ -385,12 +386,12 @@ of them, so none is lost.
 | CAP | 10 | 8 | 1 | | | 1 |
 | FLT | 6 | 2 | 4 | | | |
 | RES | 3 | 3 | | | | |
-| FORM (B) | 33 | 14 | 19 | | | |
+| FORM (B) | 34 | 14 | 20 | | | |
 | CHAT (C) | 15 | 8 | 7 | | | |
 | EXP | 10 | 4 | 6 | | | |
 | SEC | 10 | 9 | 1 | | | |
 | PROC | 15 | 15 | | | | |
-| **Total** | **165** | **113** | **49** | **0** | **0** | **3** |
+| **Total** | **166** | **113** | **50** | **0** | **0** | **3** |
 
 The hh.ru application forms (A1–A8 in forms-and-chats.md) are counted once, under CONF, QA, CAP and FLT:
 A1 and A4 → CONF9, A2 and A3 → CONF8, A5 → QA1, A6 → CAP9, A7 → FLT4, A8 → FLT6. QA11 and B4a are the same

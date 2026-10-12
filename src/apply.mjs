@@ -179,7 +179,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   if (argv.processChats) {
     const intervalSeconds = argv.chatsIntervalMinutes * 60;
     const chatScriptPath = new URL('./answer-chats.mjs', import.meta.url).pathname;
-    chatProcess = spawn(process.execPath, [chatScriptPath, '--auto', `--poll=${intervalSeconds}`], {
+    chatProcess = spawn(process.execPath, [chatScriptPath, '--auto', `--poll=${intervalSeconds}`, ...(argv.autoSendExactAnswers ? ['--auto-send'] : [])], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     chatProcess.stdout.on('data', (data) => process.stdout.write(data));

@@ -59,6 +59,46 @@ export function perfectOption(answer, options) {
   return options.find((option) => normalizeQuestion(option) === wanted) ?? null;
 }
 
+/** The user's own message after the given one appeared */
+const answeredAfter = (chat, messageId) => {
+  const index = chat?.messages.findIndex((message) => message.id === messageId) ?? -1;
+  return index >= 0 && chat.messages.slice(index + 1).some((message) => message.mine);
+};
+
+async function waitForAnswer(frame, messageId, ms) {
+  for (const started = Date.now(); Date.now() - started < ms; await sleep(500)) {
+    if (answeredAfter(await frame.evaluate(readChat).catch(() => null), messageId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Send a perfect answer in a chat (the panel's frame, or the main frame of hh.ru/chat): the bot's
+ * button, or the typed text
+ * @param {Object} frame - Playwright frame showing the chat
+ * @param {string} messageId - The message it answers
+ * @param {{answer: string, option?: string|null}} reply
+ * @returns {Promise<boolean>} True once it shows in the chat
+ */
+export async function sendChatAnswer(frame, messageId, { answer, option }) {
+  if (option) {
+    await frame.getByRole('button', { name: option, exact: true }).last().click({ timeout: 5000 });
+  } else {
+    const input = frame.locator(INPUT).first();
+    await input.fill(answer);
+    await sleep(500);
+    const sendButton = frame.locator('button[data-qa*="send"]').first();
+    if (await sendButton.isVisible().catch(() => false)) {
+      await sendButton.click({ timeout: 5000 });
+    } else {
+      await input.press('Enter');
+    }
+  }
+  return waitForAnswer(frame, messageId, 8000);
+}
+
 /**
  * @param {Object} options
  * @param {Object} options.page - Playwright page of the vacancy list
@@ -94,20 +134,6 @@ export function createInstantChat({
     return null;
   }
 
-  /** The user's own message after the given one appeared */
-  const answeredAfter = (chat, messageId) => {
-    const index = chat?.messages.findIndex((message) => message.id === messageId) ?? -1;
-    return index >= 0 && chat.messages.slice(index + 1).some((message) => message.mine);
-  };
-
-  async function waitForAnswer(frame, messageId, ms) {
-    for (const started = Date.now(); Date.now() - started < ms; await sleep(500)) {
-      if (answeredAfter(await frame.evaluate(readChat).catch(() => null), messageId)) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   /** Questions the user answered in the chat go to qa.lino */
   async function learn(chat) {
@@ -118,24 +144,6 @@ export function createInstantChat({
         log(`💾 Learned from the chat (qa.lino): ${question}`);
       }
     }
-  }
-
-  /** Send a perfect answer: the bot's button, or the typed text; true once it shows in the chat */
-  async function send(frame, messageId, { answer, option }) {
-    if (option) {
-      await frame.getByRole('button', { name: option, exact: true }).last().click({ timeout: 5000 });
-    } else {
-      const input = frame.locator(INPUT).first();
-      await input.fill(answer);
-      await sleep(500);
-      const sendButton = frame.locator('button[data-qa*="send"]').first();
-      if (await sendButton.isVisible().catch(() => false)) {
-        await sendButton.click({ timeout: 5000 });
-      } else {
-        await input.press('Enter');
-      }
-    }
-    return waitForAnswer(frame, messageId, 8000);
   }
 
   /** Wait until the user has answered the message in the panel, or typed y/s to move on */
@@ -199,7 +207,7 @@ export function createInstantChat({
       const perfect = Boolean(reply?.perfect) && (options.length === 0 || option !== null);
       log(`💬 ${last.title || 'Chat'}: ${asked}${options.length > 0 ? ` [${options.join(' / ')}]` : ''}`);
       if (perfect && autoSend) {
-        if (await send(frame, last.id, { answer: reply.answer, option }).catch(() => false)) {
+        if (await sendChatAnswer(frame, last.id, { answer: reply.answer, option }).catch(() => false)) {
           log(`✅ Answered (perfect match, ${reply.source}): ${option ?? reply.answer}`);
           quietSince = Date.now();
           waitMs = nextMessageMs;

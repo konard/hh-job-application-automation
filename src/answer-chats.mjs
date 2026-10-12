@@ -24,6 +24,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import {
   TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
+import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
@@ -32,13 +33,15 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
                          sent are handled; at the first one that needs a message (a reply typed or drafted
                          for you to check, or none found) it stops with that chat open and waits until you
                          have answered it
+  --auto-send            Send an exact answer (the saved question word for word, or a bot's button that is the saved
+                         answer); everything else is only typed in for you (apply passes --auto-send-exact-answers)
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
   --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, auto: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, auto: false, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -46,6 +49,8 @@ function parseArgs(args) {
       process.exit(0);
     } else if (flag === '--watch') {
       parsed.watch = true;
+    } else if (flag === '--auto-send') {
+      parsed.autoSend = true;
     } else if (flag === '--auto') {
       parsed.auto = true;
       parsed.watch = true; // --auto implies watch mode
@@ -74,6 +79,8 @@ const AUTOMATION_PORT = 9322;
 const MESSAGE_INPUT = 'textarea[data-qa="text-input"]';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const chatUrl = (id) => `https://hh.ru/chat/${id}`;
+/** A chat whose list cell says «Отказ»: the employer's rejection */
+const isRejectionCell = (chat) => /^отказ$/i.test(chat.subtitle.trim());
 
 const sources = await loadAnswerSources();
 // Template replies may hold contact placeholders too
@@ -118,7 +125,7 @@ async function learn(messages) {
 }
 
 /** Prefill the reply to the waiting message; returns the id of the message it answers, or null */
-async function prefillChat(id) {
+async function prefillChat(id, depth = 0) {
   if (!page.url().startsWith(chatUrl(id))) {
     await page.goto(chatUrl(id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
   }
@@ -173,6 +180,21 @@ async function prefillChat(id) {
   if (!reply) {
     console.log('❓ No saved or drafted reply: answer it yourself');
     return { id: last.id, replied: false, title: chat.vacancy };
+  }
+  // An exact answer is sent (a bot's button when it offers one), and the bot's next question taken
+  const options = await page.evaluate(readQuickReplies).catch(() => []);
+  const option = options.length > 0 ? perfectOption(reply.answer, options) : null;
+  if (argv.autoSend && reply.perfect && (options.length === 0 || option) && depth < 20) {
+    if (await sendChatAnswer(page.mainFrame(), last.id, { answer: reply.answer, option }).catch(() => false)) {
+      console.log(`✅ Answered (exact match, ${reply.source}): ${option ?? reply.answer}`);
+      await page.waitForFunction((id) => {
+        const messages = [...document.querySelectorAll('[data-qa^="chatik-chat-message-"]')];
+        return messages.length > 0 && !messages[messages.length - 1].getAttribute('data-qa').endsWith(id);
+      }, last.id, { timeout: 15000 }).catch(() => {});
+      await sleep(3000);
+      return prefillChat(id, depth + 1);
+    }
+    console.log('⚠️  The answer did not show in the chat: typed in for you instead');
   }
   const input = page.locator(MESSAGE_INPUT).first();
   if ((await input.inputValue().catch(() => '')).trim()) {
@@ -243,7 +265,9 @@ if (argv.watch) {
     }
     const chats = await page.evaluate(readChatList);
     const waiting = chats.filter((chat) => !chat.lastIsMine && !seen.has(seenKey(chat)) &&
-      (argv.auto ? chat.unread : !argv.chats.includes(chat.id)));
+      (argv.auto ? chat.unread : !argv.chats.includes(chat.id)))
+      // Rejections first: opening them reads them, so they leave the unread list
+      .sort((a, b) => Number(isRejectionCell(b)) - Number(isRejectionCell(a)));
     argv.chats.length = 0;
     for (const chat of waiting) {
       seen.add(seenKey(chat));
