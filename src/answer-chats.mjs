@@ -370,8 +370,8 @@ async function learnFromAllChats() {
     await humanPause(1500, 2500);
   }
   const all = await loadChatList();
-  // A chat whose last message is the application itself has no answer in it
-  const chats = all.filter((chat) => !chat.unread && !(chat.lastIsMine && chat.last === 'Отклик на вакансию'));
+  // A chat whose last message is the application itself («Отклик на вакансию», with a non-breaking space) has no answer in it
+  const chats = all.filter((chat) => !chat.unread && !/^отклик\s+на\s+вакансию$/i.test(chat.last.trim()));
   const savedBefore = sources.qaMap.size;
   console.log(`📚 Reading ${chats.length} of ${all.length} chat(s) for answers not saved yet (unread chats are left ` +
     'unread; chats with only the application are not opened)');
