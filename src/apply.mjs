@@ -180,10 +180,9 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     const intervalSeconds = argv.chatsIntervalMinutes * 60;
     const chatScriptPath = new URL('./answer-chats.mjs', import.meta.url).pathname;
     chatProcess = spawn(process.execPath, [chatScriptPath, '--auto', `--poll=${intervalSeconds}`, ...(argv.autoSendExactAnswers ? ['--auto-send'] : [])], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // Its own output straight into this log: through a pipe it came only when it exited
+      stdio: ['ignore', 'inherit', 'inherit'],
     });
-    chatProcess.stdout.on('data', (data) => process.stdout.write(data));
-    chatProcess.stderr.on('data', (data) => process.stderr.write(data));
     chatProcess.on('exit', (code) => {
       chatProcess = null;
       if (code !== 0 && !shuttingDown) {
