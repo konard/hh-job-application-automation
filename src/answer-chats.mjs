@@ -139,11 +139,34 @@ async function learn(messages) {
   }
 }
 
+/** A person's pause between chats: a few seconds, never the same */
+const humanPause = (fromMs = 3000, toMs = 7000) => sleep(fromMs + Math.random() * (toMs - fromMs));
+
+/**
+ * Open a chat as a person does: its cell in the chat list on the left is scrolled to and clicked.
+ * A chat not in the list (a link given on the command line) is opened by its address
+ */
+async function openChat(id) {
+  if (page.url().startsWith(chatUrl(id))) {
+    return;
+  }
+  const cell = page.locator(`[data-qa="chatik-open-chat-${id}"]`).first();
+  if (await cell.count().catch(() => 0) > 0) {
+    await cell.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+    await humanPause(600, 1500);
+    await cell.click({ timeout: 5000 }).catch(() => {});
+    if (await page.waitForURL((url) => url.href.startsWith(chatUrl(id)), { timeout: 15000 }).then(() => true, () => false)) {
+      // The chat on the right is replaced after the address
+      await sleep(2000);
+      return;
+    }
+  }
+  await page.goto(chatUrl(id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
+}
+
 /** Prefill the reply to the waiting message; returns the id of the message it answers, or null */
 async function prefillChat(id, depth = 0) {
-  if (!page.url().startsWith(chatUrl(id))) {
-    await page.goto(chatUrl(id), { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
-  }
+  await openChat(id);
   if (!await waitForCaptcha(page, console.log)) {
     return null;
   }
@@ -294,10 +317,12 @@ if (argv.watch) {
       for (const chat of rejections) {
         seen.add(seenKey(chat));
         await prefillChat(chat.id);
+        await humanPause();
       }
       continue;
     }
     for (const chat of waiting) {
+      await humanPause();
       seen.add(seenKey(chat));
       const answered = await prefillChat(chat.id);
       if (!answered) {
