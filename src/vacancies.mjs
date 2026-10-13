@@ -815,11 +815,19 @@ export async function findAndProcessVacancyButton({
     });
   } catch (error) {
     // A wait for a popup element fails once hh.ru has switched to the full form
-    if (!(isTimeoutError(error) || isNavigationError(error)) || !isFullFormOpened(commander)) {
+    if (isFullFormOpened(commander) && (isTimeoutError(error) || isNavigationError(error))) {
+      log.debug(() => `Popup step interrupted by the full form: ${error.message.split('\n')[0]}`);
+      submitResult = FULL_FORM_OPENED;
+    } else if (isTimeoutError(error)) {
+      // A field or button that did not respond in time costs this vacancy (tried once more on a later
+      // run), not the whole run
+      console.log(`⚠️  The application popup did not respond in time: ${error.message.split('\n')[0]}`);
+      await noteSkip(skippedVacancies, vacancyId, { reason: 'timeout', title });
+      await closeModalIfPresent({ commander });
+      return { status: 'modal_processing_failed', reason: 'timeout', vacancyId };
+    } else {
       throw error;
     }
-    log.debug(() => `Popup step interrupted by the full form: ${error.message.split('\n')[0]}`);
-    submitResult = FULL_FORM_OPENED;
   }
   if (submitResult.reason === FULL_FORM_OPENED.reason) {
     console.log('📝 hh.ru replaced the popup with the full application form:', commander.getUrl());
