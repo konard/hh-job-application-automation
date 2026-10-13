@@ -206,8 +206,12 @@ answer is missing:
 bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 ```
 
-To also process unread hh.ru chats automatically alongside the application loop, add
-`--process-chats`. The chat processor runs in the separate chat browser slot (port 9340, never
+Alongside the application loop, unread rejections («Отказ») in hh.ru chats are opened every 2
+hours in the separate chat browser slot (port 9340), so they leave the unread chats; nothing is
+typed in them. Turn it off with `--no-clear-rejections`.
+
+To also answer unread hh.ru chats automatically, add `--process-chats` (the rejections are always
+cleared first). The chat processor runs in the separate chat browser slot (port 9340, never
 the application browser) and checks for unread messages every 2 hours (change with
 `--chats-interval-minutes`). Chats with a known reply or no reply needed are handled quietly;
 when a chat cannot be handled it is left open in the chat slot with any available draft, and

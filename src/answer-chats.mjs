@@ -35,10 +35,13 @@ import { extractVacancyId } from './hh-selectors.mjs';
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
   --watch                Go through the chats waiting for an answer, one at a time, and keep watching
-  --auto                 Unread chats only, without prompts (apply --process-chats): chats that need nothing
+  --auto                 Unread chats only, without prompts (apply --process-chats): the rejections are cleared
+                         first, then chats that need nothing
                          sent are handled; at the first one that needs a message (a reply typed or drafted
                          for you to check, or none found) it stops with that chat open and waits until you
                          have answered it
+  --clear-rejections     Only open the unread rejections («Отказ»), from the chat list, so they leave the unread
+                         chats; nothing is typed in them (apply runs it by default every 2 hours)
   --auto-send            Send an exact answer (the saved question word for word, or a bot's button that is the saved
                          answer); everything else is only typed in for you (apply passes --auto-send-exact-answers)
   --no-draft             Do not draft unknown answers with local Claude Code
@@ -50,7 +53,7 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, learnAll: false, auto: false, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, learnAll: false, auto: false, clearRejections: false, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -62,6 +65,9 @@ function parseArgs(args) {
       parsed.learnAll = true;
     } else if (flag === '--auto-send') {
       parsed.autoSend = true;
+    } else if (flag === '--clear-rejections') {
+      parsed.clearRejections = true;
+      parsed.watch = true;
     } else if (flag === '--auto') {
       parsed.auto = true;
       parsed.watch = true; // --auto implies watch mode
@@ -435,6 +441,29 @@ async function learnFromAllChats() {
   console.log(`📚 Done: ${opened} chats read, ${sources.qaMap.size - savedBefore} new answer(s) saved to qa.lino`);
 }
 
+/**
+ * The unread rejections opened one by one, going down the list: opening one reads it, so it leaves
+ * the unread chats. Nothing is typed in a rejection
+ * @returns {Promise<number|null>} How many were read; null behind a captcha
+ */
+async function clearRejections() {
+  let rejections = 0;
+  const stopped = await walkChatList(async (chat) => {
+    if (!chat.unread || !isRejectionCell(chat)) {
+      return false;
+    }
+    await openChat(chat.id);
+    if (!await waitForCaptcha(page, console.log)) {
+      return true;
+    }
+    rejections += 1;
+    console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
+    await humanPause();
+    return false;
+  });
+  return stopped ? null : rejections;
+}
+
 if (argv.learnAll) {
   await learnFromAllChats();
   await session.release();
@@ -455,8 +484,8 @@ if (argv.watch) {
   // --auto: the chat left open for the user; nothing else is processed until it is answered
   let stuckChat = null;
   console.log(argv.auto
-    ? `💬 Processing unread chats every ${argv.poll} s`
-    : `👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
+    ? `💬 Processing unread chats every ${argv.poll} s (rejections first)`
+    : argv.clearRejections ? `📭 Clearing unread rejections every ${argv.poll} s` : `👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
   for (;;) {
     if (stuckChat) {
       // Read where it was left (the typed reply stays), without the chat list
@@ -475,26 +504,21 @@ if (argv.watch) {
       await sleep(argv.poll * 1000);
       continue;
     }
-    if (argv.auto) {
+    if (argv.clearRejections && !argv.auto) {
       await showUnreadOnly(true);
-      let rejections = 0;
+      const rejections = await clearRejections();
+      if (rejections !== null) {
+        console.log(`📭 Rejections cleared: ${rejections} read; next check in ${Math.round(argv.poll / 60)} min`);
+      }
+    } else if (argv.auto) {
+      await showUnreadOnly(true);
       let opened = 0;
-      // Rejections first, going down the list: opening one reads it, so it leaves the unread list.
-      // Only opened: nothing is typed in a rejection
-      await walkChatList(async (chat) => {
-        if (!chat.unread || !isRejectionCell(chat) || seen.has(seenKey(chat))) {
-          return false;
-        }
-        seen.add(seenKey(chat));
-        await openChat(chat.id);
-        if (!await waitForCaptcha(page, console.log)) {
-          return true;
-        }
-        rejections += 1;
-        console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
-        await humanPause();
-        return false;
-      });
+      // Rejections first, always before any chat is answered
+      const rejections = await clearRejections();
+      if (rejections === null) {
+        await sleep(argv.poll * 1000);
+        continue;
+      }
       // Then the unread chats from the top; the first that needs the user stops the pass, with that chat open
       const stopped = await walkChatList(async (chat) => {
         if (!chat.unread || chat.lastIsMine || isRejectionCell(chat) || seen.has(seenKey(chat))) {

@@ -16,6 +16,14 @@ const configOf = (...args) => {
   }
 };
 
+describe('apply --clear-rejections', () => {
+  test('is on by default, every 2 hours, and can be turned off', () => {
+    assert.equal(configOf().clearRejections, true);
+    assert.equal(configOf().chatsIntervalMinutes, 120);
+    assert.equal(configOf('--no-clear-rejections').clearRejections, false);
+  });
+});
+
 describe('apply --process-chats', () => {
   test('is off by default and checks every 2 hours when on', () => {
     assert.equal(configOf().processChats, false);

@@ -176,10 +176,12 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),
   });
 
-  if (argv.processChats) {
+  if (argv.processChats || argv.clearRejections) {
     const intervalSeconds = argv.chatsIntervalMinutes * 60;
     const chatScriptPath = new URL('./answer-chats.mjs', import.meta.url).pathname;
-    chatProcess = spawn(process.execPath, [chatScriptPath, '--auto', `--poll=${intervalSeconds}`, ...(argv.autoSendExactAnswers ? ['--auto-send'] : [])], {
+    // Answering clears the rejections first; without it the rejections alone are cleared
+    const mode = argv.processChats ? ['--auto', ...(argv.autoSendExactAnswers ? ['--auto-send'] : [])] : ['--clear-rejections'];
+    chatProcess = spawn(process.execPath, [chatScriptPath, ...mode, `--poll=${intervalSeconds}`], {
       // Its own output straight into this log: through a pipe it came only when it exited
       stdio: ['ignore', 'inherit', 'inherit'],
     });
@@ -189,7 +191,9 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
         console.log(`⚠️  Chat processor exited with code ${code}`);
       }
     });
-    console.log(`💬 Chat processor started (checking unread chats every ${argv.chatsIntervalMinutes} min)`);
+    console.log(argv.processChats
+      ? `💬 Chat processor started (rejections cleared, then unread chats answered, every ${argv.chatsIntervalMinutes} min)`
+      : `📭 Rejection clearing started (unread rejections opened every ${argv.chatsIntervalMinutes} min)`);
   }
 
   await orchestrator.start();

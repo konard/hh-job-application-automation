@@ -185,14 +185,19 @@ export function createConfig() {
           description: 'Skip vacancies that require additional questionnaire fields beyond the cover letter (kept in data/skipped-vacancies.lino)',
           default: getenv('IGNORE_VACANCIES_WITH_QUESTIONNAIRE', false),
         })
+        .option('clear-rejections', {
+          type: 'boolean',
+          description: 'Open unread rejections («Отказ») in the chat browser slot (port 9340) alongside the application loop, so they leave the unread chats; nothing is typed in them (--no-clear-rejections to turn it off)',
+          default: getenv('CLEAR_REJECTIONS', true),
+        })
         .option('process-chats', {
           type: 'boolean',
-          description: 'Start the unread message processor alongside the application loop in the chat browser slot (port 9340)',
+          description: 'Also answer unread chats alongside the application loop in the chat browser slot (port 9340), always after the rejections are cleared',
           default: getenv('PROCESS_CHATS', false),
         })
         .option('chats-interval-minutes', {
           type: 'number',
-          description: 'With --process-chats: how often unread chats are checked (minutes)',
+          description: 'How often the rejections are cleared and, with --process-chats, unread chats answered (minutes)',
           default: getenv('CHATS_INTERVAL_MINUTES', 120),
         })
         .help(),
