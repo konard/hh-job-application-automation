@@ -167,6 +167,29 @@ export async function typeLongText(commander, { selector, text, checkEmpty = tru
       throw error;
     }
     console.log('⚠️  Typing took over 30 s (the field takes keys slowly): the whole text is put in at once');
-    return commander.fillTextArea({ selector, text, checkEmpty: false, scrollIntoView, simulateTyping: false });
   }
+  try {
+    return await commander.fillTextArea({ selector, text, checkEmpty: false, scrollIntoView, simulateTyping: false });
+  } catch (error) {
+    if (!isTimeoutError(error)) {
+      throw error;
+    }
+  }
+  // A page too slow even for that (low memory): the text is set in the field as the page's own
+  // input would, so the form takes it
+  console.log('⚠️  The field did not take the text in time: it is set directly');
+  const actualValue = await commander.evaluate({
+    fn: (sel, value) => {
+      const field = document.querySelector(sel);
+      if (!field) {
+        return null;
+      }
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value').set.call(field, value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+      return field.value;
+    },
+    args: [selector, text],
+  });
+  return { filled: actualValue !== null, verified: actualValue === text, actualValue };
 }

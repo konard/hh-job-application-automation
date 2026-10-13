@@ -30,6 +30,19 @@ describe('typeLongText', () => {
     assert.deepEqual(calls.map(({ simulateTyping, checkEmpty }) => [simulateTyping, checkEmpty]), [[true, true], [false, false]]);
   });
 
+  test('set directly when the page is too slow even for putting it in at once', async () => {
+    const timeout = Object.assign(new Error('waitFor: Timeout 5000ms exceeded.'), { name: 'TimeoutError' });
+    let evaluated = 0;
+    const commander = {
+      evaluate: async ({ args }) => (evaluated++ === 0 ? '' : args[1]),
+      fillTextArea: async () => {
+        throw timeout;
+      },
+    };
+    const result = await typeLongText(commander, { selector: 'textarea', text: 'Здравствуйте' });
+    assert.deepEqual(result, { filled: true, verified: true, actualValue: 'Здравствуйте' });
+  });
+
   test('a draft holding the start of the text is completed, not left cut off', async () => {
     const calls = [];
     const commander = {
