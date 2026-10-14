@@ -177,16 +177,22 @@ async function walkChatList(visit) {
   }
 }
 
-/** The list's «Только непрочитанные» filter set as wanted, clicked as a person does; returns how it was */
+/** The list's «Только непрочитанные» checkbox (a hidden copy of its label is in the page too) */
+const unreadOnlyBox = () => page.locator('input[data-qa="chatik-checkbox-only-unread"]').first();
+
+/**
+ * The list's «Только непрочитанные» filter set as wanted, its label clicked as a person does
+ * @returns {Promise<{was: boolean|null, is: boolean|null}>} How it was, and how it is now
+ */
 async function showUnreadOnly(want) {
-  const label = page.locator('label', { hasText: 'Только непрочитанные' }).first();
-  const was = await label.locator('input[type="checkbox"]').isChecked({ timeout: 10000 }).catch(() => null);
+  const box = unreadOnlyBox();
+  const was = await box.isChecked({ timeout: 10000 }).catch(() => null);
   if (was !== null && was !== want) {
     await humanPause(800, 1500);
-    await human.click(label);
+    await human.click(box.locator('xpath=ancestor::label[1]'));
     await humanPause(1500, 2500);
   }
-  return was;
+  return { was, is: await box.isChecked({ timeout: 5000 }).catch(() => null) };
 }
 
 /** The chat page opened (once a pass, as a person opens it), its list shown; false behind a captcha */
@@ -405,7 +411,7 @@ async function learnFromAllChats() {
     return;
   }
   // Every chat, not only the unread ones; the filter is put back afterwards
-  const unreadOnly = await showUnreadOnly(false);
+  const { was: unreadOnly } = await showUnreadOnly(false);
   const savedBefore = sources.qaMap.size;
   // Chats read before and unchanged since (the same last line) are not opened again
   const readFile = path.join(process.cwd(), 'logs', 'chats-learned.json');
@@ -504,14 +510,15 @@ if (argv.watch) {
       await sleep(argv.poll * 1000);
       continue;
     }
-    if (argv.clearRejections && !argv.auto) {
-      await showUnreadOnly(true);
+    // Only the unread chats are gone through: without the filter the whole list would be scrolled
+    if ((argv.auto || argv.clearRejections) && (await showUnreadOnly(true)).is !== true) {
+      console.log('⚠️  The «Только непрочитанные» filter could not be set: the chats are left for the next check');
+    } else if (argv.clearRejections && !argv.auto) {
       const rejections = await clearRejections();
       if (rejections !== null) {
         console.log(`📭 Rejections cleared: ${rejections} read; next check in ${Math.round(argv.poll / 60)} min`);
       }
     } else if (argv.auto) {
-      await showUnreadOnly(true);
       let opened = 0;
       // Rejections first, always before any chat is answered
       const rejections = await clearRejections();
