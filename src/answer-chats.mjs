@@ -275,6 +275,8 @@ console.log(copied > 0
   : '⚠️  The automation browser is not running: log in to hh.ru in the chat slot if needed');
 enableConfirmations({ steps: [], onStop: () => process.exit(0), input: process.stdin });
 
+const THIRD_PARTY_CONTACT = /\+?\d[\d\s()-]{8,}\d|t\.me\/|@[A-Za-z]\w{3,}/;
+
 /** Save what the user has answered in the chat: questions to qa.lino, template messages to chat-templates.lino */
 async function learn(messages) {
   const { questions, templates } = learnedPairs(messages);
@@ -291,6 +293,10 @@ async function learn(messages) {
   const stored = await templatesFile.readQADatabase();
   let learned = false;
   for (const [message, reply] of templates) {
+    // A message with someone's phone or Telegram link is theirs, not a template (and stays out of git)
+    if (THIRD_PARTY_CONTACT.test(message)) {
+      continue;
+    }
     if (!findBestMatch(message, examples, { threshold: TEMPLATE_THRESHOLD })) {
       examples.set(message, reply);
       stored.set(message, contractContacts(reply, sources.contacts));

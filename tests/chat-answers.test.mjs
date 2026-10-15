@@ -183,3 +183,19 @@ describe('reminders', () => {
     assert.deepEqual(questions, [['Какой самый нагруженный проект у вас был?', '150 млн туров, поиск до 50 мс.']]);
   });
 });
+
+describe('requests without a question mark', () => {
+  test('are learned as questions, without the acknowledgement before them', () => {
+    const { questions, templates: learned } = learnedPairs([
+      { mine: false, title: 'ИИ-помощник', text: 'Хорошо, учту ваш опыт. Теперь расскажите, пожалуйста, о вашем опыте работы с платёжными интеграциями.' },
+      { mine: true, title: '', text: 'Т-Банк, ЮKassa.' },
+      { mine: false, title: 'Анна', text: 'Проживаете в РФ или РБ' },
+      { mine: true, title: '', text: 'Нет' },
+    ]);
+    assert.deepEqual(questions, [
+      ['Расскажите, пожалуйста, о вашем опыте работы с платёжными интеграциями.', 'Т-Банк, ЮKassa.'],
+      ['Проживаете в РФ или РБ', 'Нет'],
+    ]);
+    assert.deepEqual(learned, []);
+  });
+});

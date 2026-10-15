@@ -185,7 +185,7 @@ export function summaryPairs(text) {
 export const isSummary = (text) => ASSISTANT_SUMMARY.test(String(text).trim()) || summaryPairs(text).length > 0;
 
 const ACKNOWLEDGEMENT = /^(понял[аи]?|поняла|ясно|хорошо|отлично|супер|здорово|спасибо|благодарю|принято|ok|ок)(?!\p{L})[^.!?]*[.!]\s+/iu;
-const LEAD_IN = /^(?:хорошо|отлично|понял[аи]?|поняла|ясно|спасибо|ок|ok)(?:\s*[,!.]\s*(?:а\s+)?|\s+а\s+)|^а\s+(?=\p{L})/iu;
+const LEAD_IN = /^(?:хорошо|отлично|понял[аи]?|поняла|ясно|спасибо|ок|ok)(?:\s*[,!.]\s*(?:а\s+)?|\s+а\s+)|^(?:а|теперь)\s+(?=\p{L})/iu;
 // «Расскажите, пожалуйста,» before the question itself («был ли…», «в каких проектах…»)
 const POLITE = /^(?:скажите|подскажите|расскажите|уточните)\s*,?\s*(?:пожалуйста\s*,?\s*)?(?=\p{L}+\s+ли(?!\p{L})|(?:в\s+)?(?:как|сколько|где|когда|почему|зачем|что|чем|кто))/iu;
 
@@ -222,6 +222,12 @@ export function isRejection(message) {
 const sameText = (a, b) => !isPattern(b) && normalizeQuestion(a) === normalizeQuestion(b);
 
 export const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
+
+/** A request for the user's facts without a question mark: «Расскажите о вашем опыте с Kafka.», «Проживаете в РФ» */
+const REQUEST = /(?:^|[.!:]\s+)(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите)(?!\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\p{L})/iu;
+
+/** Whether a message asks the user something: a question, or a request for facts about them */
+export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(text).trim());
 
 /**
  * The reply to a waiting message, when it is known
@@ -262,7 +268,7 @@ export function knownReply(message, { templates, qaMap }) {
       matched: template.question,
     };
   }
-  if (isQuestion(core)) {
+  if (asksSomething(core) || asksSomething(questionCore(core))) {
     const asked = questionCore(core);
     const saved = findBestMatch(asked, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
     if (saved) {
@@ -436,7 +442,9 @@ export function learnedPairs(messages) {
       return;
     }
     const core = templateCore(asked.text, { sender: asked.title });
-    (isQuestion(core) ? questions : templates).push([isQuestion(core) ? questionCore(core) : core, message.text]);
+    const question = questionCore(core);
+    (asksSomething(core) || asksSomething(question) ? questions : templates)
+      .push([asksSomething(core) || asksSomething(question) ? question : core, message.text]);
   });
   return { questions, templates };
 }
