@@ -25,6 +25,8 @@ import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
 import { pauseMs } from './pacing.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
+import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-attach.mjs';
+import { coverLetterFor } from './cover-letter.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -49,6 +51,7 @@ export function createOrchestrator({
   answerInstantChat = async () => {},
 }) {
   let START_URL = argv.url;
+  const MESSAGE = argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message;
   const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
 
   let pageClosedByUser = false;
@@ -114,6 +117,7 @@ export function createOrchestrator({
       await skippedVacancies?.forget(vacancyId)
         .catch((error) => console.error('Error updating skipped-vacancies.lino:', error.message));
     }
+    await attachLetterOnVacancyPage(vacancyId);
     await checkpoint('application-sent');
     scheduleNextApplication('Application sent');
     // The questions in its chat (a recruiter bot asks at once) come before the next vacancy
@@ -123,6 +127,46 @@ export function createOrchestrator({
     followUp = null;
     await onApplicationSent();
     return true;
+  }
+
+  /**
+   * The vacancy page after a sent form offers to attach the letter when it went without it
+   * («Приложить сопроводительное письмо»): it is attached there before going back to the list
+   */
+  async function attachLetterOnVacancyPage(vacancyId) {
+    if (!vacancyId || extractVacancyId(commander.getUrl()) !== vacancyId ||
+      await commander.count({ selector: LETTER_SELECTORS.pageButton }).catch(() => 0) === 0) {
+      return;
+    }
+    console.log(`⚠️  The application to vacancy ${vacancyId} went without the cover letter: attaching it`);
+    const result = await sendLetterByOffer(commander, LETTER_SELECTORS.pageButton, coverLetterFor(MESSAGE, []))
+      .catch((error) => ({ attached: false, reason: error.message.split('\n')[0] }));
+    if (result.attached) {
+      console.log('✉️  Cover letter attached to the application (the vacancy page)');
+    } else {
+      console.log(`❌ The cover letter could not be attached to vacancy ${vacancyId} (${result.reason}): attach it by hand`);
+      await noteSkip(skippedVacancies, vacancyId, { reason: 'letter_not_attached', url: `https://hh.ru/vacancy/${vacancyId}` });
+    }
+  }
+
+  /**
+   * Letters that could not be attached on an earlier run: tried again on the vacancy page, a few a run
+   */
+  async function attachPendingLetters() {
+    const ids = (await skippedVacancies?.lettersToAttach?.().catch(() => [])) ?? [];
+    for (const vacancyId of ids.slice(0, 3)) {
+      console.log(`✉️  Vacancy ${vacancyId} was sent without the cover letter: attaching it on the vacancy page`);
+      const result = await attachLetter({ commander, vacancyId, letter: coverLetterFor(MESSAGE, []), returnUrl: START_URL });
+      if (result.attached) {
+        console.log(`✉️  Cover letter attached to vacancy ${vacancyId} (${result.via})`);
+        await skippedVacancies.clear(vacancyId);
+      } else if (result.noOffer) {
+        console.log(`✉️  Vacancy ${vacancyId} no longer offers to attach a letter (attached already)`);
+        await skippedVacancies.clear(vacancyId);
+      } else {
+        console.log(`❌ The cover letter still could not be attached to vacancy ${vacancyId} (${result.reason}): attach it by hand at https://hh.ru/vacancy/${vacancyId}`);
+      }
+    }
   }
 
   // Set when an application was not confirmed in an unattended run: the main loop stops on it
@@ -175,7 +219,7 @@ export function createOrchestrator({
   };
   const runVacancyResponseHandler = () => handleVacancyResponsePage({
     commander,
-    MESSAGE: argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message,
+    MESSAGE,
     readQADatabase: qaDB.readQADatabase,
     addOrUpdateQA: qaDB.addOrUpdateQA,
     // A form with a non-exact answer is sent after the user's `y` (decideSend); unattended only with this flag
@@ -289,6 +333,7 @@ export function createOrchestrator({
       });
       process.on('exit', cleanupTriggers);
 
+      await attachPendingLetters();
       await this.runMainLoop();
     },
 
@@ -335,7 +380,7 @@ export function createOrchestrator({
 
         const result = await findAndProcessVacancyButton({
           commander,
-          MESSAGE: argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message,
+          MESSAGE,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
           deferredQuestions,
           readQADatabase: qaDB.readQADatabase,

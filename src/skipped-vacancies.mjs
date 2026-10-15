@@ -49,6 +49,7 @@ export const SKIP_REASONS = {
   button_disabled: { retry: 'once', text: 'the send button stayed disabled' },
   click_failed: { retry: 'once', text: 'the send button could not be clicked' },
   timeout: { retry: 'once', text: 'a timeout on the response form' },
+  letter_not_attached: { retry: 'never', text: 'sent, but the cover letter could not be attached (attach it on the vacancy page)' },
 };
 
 /** Fields of an entry, in the order they are written */
@@ -189,10 +190,18 @@ export function createSkippedVacancies(filePath, { now = () => new Date() } = {}
     record,
 
     /**
-     * A vacancy that has been applied to is no longer skipped
+     * A vacancy that has been applied to is no longer skipped; one still waiting for its letter stays
      * @param {string|number} vacancyId
      */
-    forget: (vacancyId) => drop((id) => id === String(vacancyId)),
+    forget: (vacancyId) => drop((id, entry) => id === String(vacancyId) && entry.reason !== 'letter_not_attached'),
+
+    /**
+     * Applications sent without the cover letter, which could not be attached yet
+     * @returns {Promise<string[]>} Their vacancy IDs
+     */
+    async lettersToAttach() {
+      return [...await read()].filter(([, entry]) => entry.reason === 'letter_not_attached').map(([id]) => id);
+    },
 
     /**
      * Remove the entries of a reason, or one vacancy, so they are opened again

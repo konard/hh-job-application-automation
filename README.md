@@ -299,6 +299,22 @@ Every filtered vacancy is logged with the rule (`🚫 Vacancy … filtered out b
 (question "кв.мм": …)`) and kept in `data/filtered-vacancies.lino` with its title and the time, so
 it is not opened again. Add a line to the rules when you see a vacancy that should have been skipped.
 
+### Applications Sent at Once, and the Cover Letter
+
+hh.ru sometimes sends the application at the click on «Откликнуться», with no popup: the card says
+«Вы откликнулись» / «Ваш отклик отправлен работодателю». This is taken as a sent application at
+once (no waiting for a popup), and the cover letter is attached right away:
+
+1. by the card's «Приложить письмо» on the list (no page is opened);
+2. else by «Приложить сопроводительное письмо» on the vacancy page, then back to the list;
+3. else the vacancy is kept in `data/skipped-vacancies.lino` as `letter_not_attached` with its link,
+   tried again at the start of the next runs (a few a run) until it is attached or hh.ru no longer
+   offers it.
+
+The letter counts as delivered once its popup has closed and hh.ru no longer offers to attach it.
+The same check runs after every application from the list and after a full form: a letter that did
+not go with the application is attached the same way.
+
 ### Skipped Vacancies
 
 No vacancy is skipped silently. Every other skip is logged and kept in

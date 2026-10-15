@@ -18,6 +18,7 @@ import { createSkippedVacancies } from '../src/skipped-vacancies.mjs';
 import { createVacancyFilters } from '../src/vacancy-filters.mjs';
 import { disableConfirmations } from '../src/confirmations.mjs';
 import { SELECTORS } from '../src/hh-selectors.mjs';
+import { LETTER_SELECTORS } from '../src/letter-attach.mjs';
 
 const SEARCH_URL = 'https://hh.ru/search/vacancy?resume=1';
 
@@ -125,6 +126,96 @@ describe('vacancy list', () => {
     assert.equal((await skippedVacancies.read()).get('139000003').reason, 'modal_timeout');
     assert.equal((await skippedVacancies.skippedVacancyIds()).size, 0);
     assert.equal(isVacancyProcessed('139000003'), true);
+  });
+
+  /**
+   * The list where the click sends the application at once: the card says so and offers
+   * «Приложить письмо»; the letter popup takes the letter (or not, when it is broken)
+   */
+  function sentAtOnceList({ vacancyId, letterPopup = true, vacancyPageOffer = false }) {
+    const list = fakeList({ vacancyId, card: ['Head of Product', 'Acme'] });
+    const offer = `[data-letter-offer="${vacancyId}"]`;
+    const state = Object.assign(list.state, { popupOpen: false, letter: '', sent: false, gotos: [], url: SEARCH_URL });
+    return Object.assign(list, {
+      getUrl: () => state.url,
+      evaluate: async ({ args }) => (args?.[0] === vacancyId ? { applied: true, offer: state.sent ? null : offer } : state.letter),
+      count: async ({ selector }) => {
+        if (selector === LETTER_SELECTORS.textarea) {
+          return state.popupOpen ? 1 : 0;
+        }
+        if (selector === offer) {
+          return state.sent ? 0 : 1;
+        }
+        if (selector === LETTER_SELECTORS.pageButton) {
+          return vacancyPageOffer && state.url.includes('/vacancy/') && !state.sent ? 1 : 0;
+        }
+        return 0;
+      },
+      clickButton: async (options) => {
+        state.clicks.push(options.selector);
+        if ((options.selector === offer || options.selector === LETTER_SELECTORS.pageButton) && letterPopup) {
+          state.popupOpen = true;
+        }
+        if (options.selector === LETTER_SELECTORS.submit && state.letter) {
+          Object.assign(state, { popupOpen: false, sent: true });
+        }
+      },
+      fillTextArea: async ({ text }) => {
+        state.letter = text;
+        return { filled: true, verified: true, actualValue: text };
+      },
+      goto: async ({ url }) => {
+        state.gotos.push(url);
+        state.url = url;
+      },
+    });
+  }
+
+  const runWithLetter = (commander, stores) => findAndProcessVacancyButton({
+    commander, ...stores, MESSAGE: 'Здравствуйте! Мой опыт…', START_URL: SEARCH_URL, pageClosedByUser: () => false,
+    waitForUrlCondition: async () => {},
+  });
+
+  test('an application sent at the click is counted at once, and its letter attached in the card', async () => {
+    clearProcessedVacancies();
+    const { skippedVacancies, vacancyFilters } = await stores();
+    const list = sentAtOnceList({ vacancyId: '139000004' });
+    const result = await runWithLetter(list, { skippedVacancies, vacancyFilters });
+    assert.equal(result.status, 'success');
+    assert.equal(list.state.letter, 'Здравствуйте! Мой опыт…');
+    assert.equal(list.state.sent, true);
+    assert.deepEqual(list.state.gotos, []);
+    assert.equal((await skippedVacancies.read()).size, 0);
+  });
+
+  test('a letter the card cannot take is attached on the vacancy page, then back to the list', async () => {
+    clearProcessedVacancies();
+    const { skippedVacancies, vacancyFilters } = await stores();
+    const list = sentAtOnceList({ vacancyId: '139000005', letterPopup: false, vacancyPageOffer: true });
+    // The card's popup does not open; the vacancy page's does
+    const click = list.clickButton;
+    list.clickButton = async (options) => {
+      await click(options);
+      if (options.selector === LETTER_SELECTORS.pageButton) {
+        list.state.popupOpen = true;
+      }
+    };
+    const result = await runWithLetter(list, { skippedVacancies, vacancyFilters });
+    assert.equal(result.status, 'success');
+    assert.equal(list.state.sent, true);
+    assert.deepEqual(list.state.gotos, ['https://hh.ru/vacancy/139000005', SEARCH_URL]);
+  });
+
+  test('a letter that cannot be attached at all is kept in skipped-vacancies.lino and kept after the application is counted', async () => {
+    clearProcessedVacancies();
+    const { skippedVacancies, vacancyFilters } = await stores();
+    const list = sentAtOnceList({ vacancyId: '139000006', letterPopup: false });
+    const result = await runWithLetter(list, { skippedVacancies, vacancyFilters });
+    assert.equal(result.status, 'success');
+    assert.equal((await skippedVacancies.read()).get('139000006').reason, 'letter_not_attached');
+    await skippedVacancies.forget('139000006');
+    assert.deepEqual(await skippedVacancies.lettersToAttach(), ['139000006']);
+    assert.equal((await skippedVacancies.skippedVacancyIds()).has('139000006'), true);
   });
 });
 

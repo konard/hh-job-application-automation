@@ -15,6 +15,7 @@ import { findCoverLetterToggle, isButtonEnabled, typeLongText } from './helpers/
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
+import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 
 /**
@@ -667,17 +668,30 @@ async function hasLimitError({ commander }) {
 }
 
 /**
- * Wait for application modal to appear and check for limit errors
- * @returns {Promise<{appeared: boolean, limitError?: boolean, directApplication?: boolean, url?: string, status?: string}>}
+ * Wait for application modal to appear and check for limit errors. hh.ru may also send the
+ * application at the click itself (no popup): the card then says so at once, and there is no wait
+ * @returns {Promise<{appeared: boolean, sentAtOnce?: boolean, offer?: string|null, limitError?: boolean, directApplication?: boolean, url?: string, status?: string}>}
  */
-async function waitForApplicationModal({ commander }) {
-  let appeared = true;
-  try {
-    await commander.waitForSelector({ selector: SELECTORS.applicationForm, visible: true, timeout: 10000 });
-  } catch {
-    // Direct application modals don't have the standard application form
-    log.debug(() => '🔍 Standard modal form not found, checking for direct application modal...');
-    appeared = false;
+async function waitForApplicationModal({ commander, vacancyId = null }) {
+  let appeared = false;
+  // About 10 s
+  for (let tries = 0; tries < 33; tries++) {
+    if (await commander.count({ selector: SELECTORS.applicationForm }).catch(() => 0) > 0) {
+      appeared = true;
+      break;
+    }
+    const card = await cardAfterClick(commander, vacancyId);
+    if (card.applied) {
+      return { appeared: false, sentAtOnce: true, offer: card.offer, status: 'sent_at_once' };
+    }
+    if (await commander.count({ selector: SELECTORS.directApplicationCancelButton }).catch(() => 0) > 0 ||
+      await hasLimitError({ commander })) {
+      break;
+    }
+    await commander.wait({ ms: 300, reason: 'application popup' });
+  }
+  if (appeared) {
+    await commander.waitForSelector({ selector: SELECTORS.applicationForm, visible: true, timeout: 5000 }).catch(() => {});
   }
 
   const direct = await checkAndCloseDirectApplicationModal({ commander });
@@ -778,7 +792,13 @@ export async function findAndProcessVacancyButton({
     return { status: navigationResult.status, vacancyId };
   }
 
-  const modalResult = await waitForApplicationModal({ commander });
+  const modalResult = await waitForApplicationModal({ commander, vacancyId });
+  if (modalResult.sentAtOnce) {
+    // Sent at the click, without the letter: it is attached now
+    console.log(`✅ hh.ru sent the application to vacancy ${vacancyId} at once (no popup)`);
+    await attachLetterIfOffered({ commander, vacancyId, title, MESSAGE, skippedVacancies, offer: modalResult.offer, returnUrl: currentPageUrl });
+    return { status: 'success', vacancyId };
+  }
   if (modalResult.directApplication) {
     await noteSkip(skippedVacancies, vacancyId, {
       reason: 'external_site',
@@ -845,8 +865,28 @@ export async function findAndProcessVacancyButton({
   if (await hasLimitError({ commander })) {
     return { status: 'limit_error_after_submit', vacancyId };
   }
+  // A letter that did not go with the application: the card offers to attach it
+  const after = await cardAfterClick(commander, vacancyId);
+  if (after.offer) {
+    console.log(`⚠️  The application to vacancy ${vacancyId} went without the cover letter`);
+    await attachLetterIfOffered({ commander, vacancyId, title, MESSAGE, skippedVacancies, offer: after.offer, returnUrl: currentPageUrl });
+  }
 
   return { status: 'success', vacancyId };
+}
+
+/**
+ * Attach the cover letter to an application sent without it (letter-attach.mjs: the card, else
+ * the vacancy page); when nothing works, the vacancy is kept in skipped-vacancies.lino and said so
+ */
+async function attachLetterIfOffered({ commander, vacancyId, title, MESSAGE, skippedVacancies, offer, returnUrl }) {
+  const result = await attachLetter({ commander, vacancyId, letter: coverLetterFor(MESSAGE, []), offer, returnUrl });
+  if (result.attached) {
+    console.log(`✉️  Cover letter attached to the application (${result.via})`);
+    return;
+  }
+  console.log(`❌ The cover letter could not be attached to vacancy ${vacancyId} (${result.reason}): attach it by hand at https://hh.ru/vacancy/${vacancyId}`);
+  await noteSkip(skippedVacancies, vacancyId, { reason: 'letter_not_attached', title, url: `https://hh.ru/vacancy/${vacancyId}` });
 }
 
 /**
