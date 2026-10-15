@@ -16,6 +16,7 @@
 
 import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isPattern, matchesPattern, normalizeQuestion, patternWords, stringSimilarity } from './qa-database.mjs';
 import { answerText } from './qa.mjs';
+import { answersInContexts, showsContext } from './answer-contexts.mjs';
 
 /** A template message is the same text in other words; its saved reply needs a close match */
 export const TEMPLATE_THRESHOLD = 0.6;
@@ -277,6 +278,46 @@ export function knownReply(message, { templates, qaMap }) {
   }
   return null;
 }
+
+/**
+ * knownReply with the saved answers in the contexts of the chat (answer-contexts.mjs): a salary in
+ * the currency of the vacancy. The vacancy's own page is read only when the chat does not tell and
+ * the reply would differ between contexts
+ * @param {Object} message - {title, text}
+ * @param {Object} sources
+ * @param {Function} sources.readTemplates - withContacts' readQADatabase of chat-templates.lino
+ * @param {Function} sources.readQADatabase - withContacts' readQADatabase of qa.lino
+ * @param {Array} sources.contexts - parseAnswerContexts
+ * @param {string[]} [sources.known] - What the chat tells, most telling first: the vacancy's card,
+ *   the employer's messages
+ * @param {() => Promise<string[]>} [sources.vacancyTexts] - The vacancy page: its pay, title, description
+ * @returns {Promise<Object|null>} As knownReply
+ */
+export async function knownReplyInContexts(message, { readTemplates, readQADatabase, contexts, known = [], vacancyTexts }) {
+  const templates = answersInContexts(readTemplates, contexts);
+  const qaMaps = answersInContexts(readQADatabase, contexts);
+  const replyIn = async (texts) => knownReply(message, {
+    templates: await templates(message.text, texts), qaMap: await qaMaps(message.text, texts),
+  });
+  const reply = await replyIn(known);
+  if (!reply || reply.noReply || !vacancyTexts || showsContext(contexts, [message.text, ...known])) {
+    return reply;
+  }
+  const others = await Promise.all(contexts.filter(({ words }) => words.length > 0).map(({ words }) => replyIn([words[0]])));
+  if (others.every((other) => other?.answer === reply.answer)) {
+    return reply;
+  }
+  const vacancy = await vacancyTexts().catch(() => []);
+  return vacancy.length > 0 ? replyIn([...vacancy, ...known]) : reply;
+}
+
+/**
+ * What a chat tells about its vacancy, most telling first: the employer's messages, newest first,
+ * then the vacancy's name (the user's own messages may hold an answer in another context)
+ * @param {{vacancy?: string, messages: Array<{mine: boolean, text: string}>}} chat
+ * @returns {string[]}
+ */
+export const chatContextTexts = (chat) => [...chat.messages.filter((message) => !message.mine).map((message) => message.text).reverse(), chat.vacancy ?? ''];
 
 export { PATTERN_PREFIX, isPattern, matchesPattern };
 

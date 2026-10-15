@@ -18,7 +18,7 @@ import {
   answerFits,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
-import { chooseContexts, loadAnswerContexts } from './answer-contexts.mjs';
+import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
@@ -82,17 +82,10 @@ export async function savePairs(pairs, addOrUpdateQA) {
 async function answersInContext({ commander, readQADatabase, context = '' }) {
   const qaMap = await readQADatabase();
   const pageQuestions = await extractPageQuestions({ evaluate: commander.evaluate });
-  const known = [context, ...pageQuestions.map(({ question }) => question)].join('\n');
-  const contexts = await loadAnswerContexts();
-  const maps = new Map();
-  const answerFor = async (formQuestion, savedQuestion) => {
-    const chosen = chooseContexts(contexts, formQuestion, known);
-    const key = chosen.map(({ group, name }) => `${group}: ${name}`).join('\n');
-    if (!maps.has(key)) {
-      maps.set(key, await readQADatabase({ contexts: chosen }));
-    }
-    return maps.get(key).get(savedQuestion) ?? qaMap.get(savedQuestion);
-  };
+  const known = [...[context].flat(), ...pageQuestions.map(({ question }) => question)];
+  const inContexts = answersInContexts(readQADatabase, await loadAnswerContexts());
+  const answerFor = async (formQuestion, savedQuestion) =>
+    (await inContexts(formQuestion, known)).get(savedQuestion) ?? qaMap.get(savedQuestion);
   return { qaMap, pageQuestions, answerFor };
 }
 
@@ -114,7 +107,7 @@ export async function savedAnswersInContext({ commander, readQADatabase, context
 /**
  * Setup Q&A auto-fill and auto-save for all textareas and radio buttons on the page
  * @param {Object} options
- * @param {string} [options.context] - The vacancy's card and description, for the answers' contexts (answer-contexts.mjs)
+ * @param {string|string[]} [options.context] - The vacancy's card and description, most telling first, for the answers' contexts (answer-contexts.mjs)
  */
 export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context = '' }) {
   try {
@@ -362,7 +355,7 @@ export async function handleVacancyResponsePage({
     const form = await readFormForFilters(commander);
     title = form.vacancy;
     // What the salary answers' currency is told by: the card, the description and the form's text
-    const salaryContext = [vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? '', form.page].join('\n');
+    const salaryContext = [vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? '', form.page];
 
     // Direct application vacancies are applied on the employer's site - skip them
     const direct = await checkAndCloseDirectApplicationModal({ commander });

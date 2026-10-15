@@ -13,10 +13,11 @@
  * @module instant-chat
  */
 
-import { isQuestion, knownReply, learnedPairs, pendingMessages, readChat } from './chat-answers.mjs';
+import { chatContextTexts, isQuestion, knownReplyInContexts, learnedPairs, pendingMessages, readChat } from './chat-answers.mjs';
 import { normalizeQuestion } from './qa-database.mjs';
 import { askUser, isInteractive, withdrawPrompt } from './confirmations.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
+import { loadAnswerContexts } from './answer-contexts.mjs';
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
@@ -107,12 +108,14 @@ export async function sendChatAnswer(frame, messageId, { answer, option }) {
  * @param {Function} options.readTemplates - data/chat-templates.lino with contacts filled in
  * @param {boolean} options.autoSend - Send perfect matches (--auto-send-exact-answers)
  * @param {Function} options.closePanel - Closes the chat panel
+ * @param {(vacancyId: string|null) => string[]} [options.vacancyContext] - The vacancy's card and
+ *   description, for the answers' contexts (answer-contexts.mjs)
  * @param {number} [options.firstMessageMs] - How long the first message of a bot is waited for
  * @param {number} [options.nextMessageMs] - How long the next question is waited for after an answer
  * @returns {(vacancyId: string|null) => Promise<void>}
  */
 export function createInstantChat({
-  page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, closePanel,
+  page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, closePanel, vacancyContext = () => [],
   firstMessageMs = 20000, nextMessageMs = 15000, log = console.log,
 }) {
   /**
@@ -192,7 +195,10 @@ export function createInstantChat({
       handled = last.id;
       await frame.evaluate(scrollToLastMessage).catch(() => {});
       const options = await frame.evaluate(readQuickReplies).catch(() => []);
-      const reply = knownReply(last, { templates: await readTemplates(), qaMap: await readQADatabase() });
+      // A salary in the vacancy's currency: its card and description (read before the application) tell
+      const reply = await knownReplyInContexts(last, {
+        readTemplates, readQADatabase, contexts: await loadAnswerContexts(), known: [...vacancyContext(vacancyId), ...chatContextTexts(chat)],
+      });
       const asked = last.text.replace(/\s+/g, ' ').slice(0, 160);
       if (reply?.noReply) {
         log(`💬 ${last.title || 'Chat'}: ${asked} (no reply needed)`);

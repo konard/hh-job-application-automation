@@ -376,8 +376,12 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   group) lists the words that show it and the placeholders it gives other values. A salary saved
   as `{{salary_net}}` is typed in dollars when the question, the vacancy card, its description or
   the form's other questions speak of dollars («$», «USD», «в валюте»), and in rubles otherwise,
-  whichever currency it was saved in. The question's own words decide first, then the vacancy's,
-  then the group's `(default)` context.
+  whichever currency it was saved in. The question's own words decide first, then the vacancy's
+  (the card with its pay first, then the description and the form's other questions), then the
+  group's `(default)` context. This works everywhere answers are typed: hh.ru forms and popups,
+  the chat panel after an application, chats (`answer-chats`: the employer's messages, else the
+  vacancy page, read only when the reply depends on it) and forms prefilled in slots. Sums you type
+  («$6000», «6000 USDT», «450 000 ₽») are saved as placeholders, so they follow the vacancy too.
 - The report (every question, its source and answer) is printed and saved to `logs/forms/`.
 - `bun run formalize-qa` checks how [Formal AI](https://github.com/link-assistant/formal-ai)
   (its JavaScript version, nothing to compile; cloned into `~/.hh-automation/formal-ai`)

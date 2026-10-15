@@ -142,9 +142,11 @@ export function pickOptions(options, saved) {
  * @param {Object} sources
  * @param {Object} sources.profile
  * @param {Map<string, string|string[]>} sources.qaMap
+ * @param {(title: string) => Map} [sources.qaMapFor] - The saved answers in the contexts of a
+ *   question (answer-contexts.mjs), e.g. a salary in the vacancy's currency
  * @returns {Array<Object>} The fields with {answer|choices, source, note} or {open: true}
  */
-export function planAnswers(fields, { profile, qaMap, company = '' }) {
+export function planAnswers(fields, { profile, qaMap, qaMapFor = () => qaMap, company = '' }) {
   return fields.map((field) => {
     // The employer's own poll (rating.hh.ru) asks to find the company; the ratings are the user's
     if (company && field.kind === 'text' && /компани|работодател|organization|company/i.test(field.title)) {
@@ -162,7 +164,7 @@ export function planAnswers(fields, { profile, qaMap, company = '' }) {
         return { ...field, answer: contact.answer, source: 'profile', note: contact.missing.length ? `no ${contact.missing.join(', ')} in the profile` : '' };
       }
     }
-    let match = findBestMatch(field.title, qaMap);
+    let match = findBestMatch(field.title, qaMapFor(field.title));
     // A question asking for a link takes only a saved answer with a link
     if (match && /ссылк|\blink\b|\burl\b/i.test(field.title) && !/https?:\/\/|www\.|\w\.(ru|com|io|org|me)\b/i.test(answerText(match.answer))) {
       match = null;

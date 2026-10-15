@@ -3,8 +3,10 @@
  * paid in dollars, in rubles otherwise, whichever currency the answer was saved in
  */
 import { describe, test, assert } from 'test-anywhere';
-import { chooseContexts, hasWord, loadAnswerContexts, parseAnswerContexts } from '../src/answer-contexts.mjs';
-import { contactsInContexts, expandContacts, withContacts } from '../src/contacts.mjs';
+import { answersInContexts, chooseContexts, hasWord, loadAnswerContexts, parseAnswerContexts, showsContext } from '../src/answer-contexts.mjs';
+import { contactsInContexts, contractContacts, expandContacts, withContacts } from '../src/contacts.mjs';
+import { knownReplyInContexts } from '../src/chat-answers.mjs';
+import { planAnswers } from '../src/form-prefill.mjs';
 
 const contexts = await loadAnswerContexts();
 const currency = (question, known) => chooseContexts(contexts, question, known).find(({ group }) => group === 'currency')?.name;
@@ -50,6 +52,55 @@ describe('The currency of an answer (data/answer-contexts.lino)', () => {
     const qa = withContacts(db, values);
     assert.equal((await qa.readQADatabase()).get('Ваша вилка ЗП?'), 'От 450 000 ₽ в месяц на руки.');
     assert.equal((await qa.readQADatabase({ contexts: chooseContexts(contexts, 'Ваша вилка ЗП?', vacancy) })).get('Ваша вилка ЗП?'), 'От $6 000 в месяц на руки.');
+  });
+});
+
+describe('Context-aware answers everywhere', () => {
+  const qa = withContacts({ readQADatabase: async () => new Map([
+    ['Ваши зарплатные ожидания мин - комфорт?', 'От {{salary_net_usd}} на руки или эквивалент.'],
+    ['Готовы к офису?', 'Нет'],
+  ]) }, values);
+  const card = 'Full-Stack разработчик PHP/Laravel + React\nот 250 000 ₽ на руки\nООО Дата Технолоджи';
+
+  test('the most telling text decides: the card\'s pay before the description', () => {
+    assert.equal(currency('Ваша вилка?', [card, 'Интеграции с платёжными API в USD']), 'rub');
+    assert.equal(currency('Ваша вилка?', ['Удалённая работа', 'Оплата в USD']), 'usd');
+    assert.equal(showsContext(contexts, ['Удалённая работа']), false);
+    assert.equal(showsContext(contexts, ['от 3 000 $']), true);
+  });
+
+  test('an answer saved in dollars is typed in rubles for a vacancy paid in rubles', async () => {
+    const inContexts = answersInContexts(qa.readQADatabase, contexts);
+    assert.equal((await inContexts('Ваши зарплатные ожидания мин - комфорт?', [card])).get('Ваши зарплатные ожидания мин - комфорт?'),
+      'От 450 000 ₽ на руки или эквивалент.');
+    assert.equal((await inContexts('Ваши зарплатные ожидания мин - комфорт?', ['от 3 000 $'])).get('Ваши зарплатные ожидания мин - комфорт?'),
+      'От $6 000 на руки или эквивалент.');
+  });
+
+  test('a salary written as USDT is saved as the dollar placeholder', () => {
+    assert.equal(contractContacts('От 6000 USDT на руки или эквивалент.', { salary_net_usd: '6000' }), 'От {{salary_net_usd}} на руки или эквивалент.');
+  });
+
+  test('chats: the chat tells the currency, else the vacancy page, read only when the reply depends on it', async () => {
+    const sources = { readTemplates: async () => new Map(), readQADatabase: qa.readQADatabase, contexts };
+    const asked = { title: 'Бот', text: 'Ваши зарплатные ожидания мин - комфорт?' };
+    let read = 0;
+    const vacancyTexts = async () => { read++; return ['от 5 000 $']; };
+    assert.equal((await knownReplyInContexts(asked, { ...sources, known: ['Зарплата в рублях'], vacancyTexts })).answer, 'От 450 000 ₽ на руки или эквивалент.');
+    assert.equal(read, 0);
+    assert.equal((await knownReplyInContexts(asked, { ...sources, known: ['Здравствуйте!'], vacancyTexts })).answer, 'От $6 000 на руки или эквивалент.');
+    assert.equal(read, 1);
+    await knownReplyInContexts({ title: 'Бот', text: 'Готовы к офису?' }, { ...sources, known: [], vacancyTexts });
+    assert.equal(read, 1);
+    assert.equal((await knownReplyInContexts(asked, { ...sources, known: [] })).answer, 'От 450 000 ₽ на руки или эквивалент.');
+  });
+
+  test('forms prefilled in slots take the answers of each question\'s contexts', async () => {
+    const inContexts = answersInContexts(qa.readQADatabase, contexts);
+    const fields = [{ id: '1', kind: 'text', title: 'Ваши зарплатные ожидания мин - комфорт?' }];
+    const map = await inContexts(fields[0].title, ['от 3 000 $']);
+    const [planned] = planAnswers(fields, { profile: {}, qaMap: await qa.readQADatabase(), qaMapFor: () => map });
+    assert.equal(planned.answer, 'От $6 000 на руки или эквивалент.');
   });
 });
 

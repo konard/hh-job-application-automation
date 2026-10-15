@@ -22,8 +22,10 @@ import { contractContacts, withContacts } from './contacts.mjs';
 import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
+import { loadAnswerContexts } from './answer-contexts.mjs';
+import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, knownReply, learnedPairs, pendingMessages, readChat, readChatList, scrollChatList, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, chatContextTexts, knownReplyInContexts, learnedPairs, pendingMessages, readChat, readChatList, scrollChatList, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
@@ -229,6 +231,17 @@ const sources = await loadAnswerSources();
 const templatesFile = createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino'));
 const templatesDb = withContacts(templatesFile, sources.contacts);
 const handledForms = new Set();
+const vacancyPages = new Map();
+/** The vacancy page's pay, title and description, read once a run */
+async function vacancyTexts(url) {
+  if (!url) {
+    return [];
+  }
+  if (!vacancyPages.has(url)) {
+    vacancyPages.set(url, fetchVacancy(url).then((vacancy) => (vacancy ? [vacancy.salary, vacancy.title, vacancy.description] : [])));
+  }
+  return vacancyPages.get(url);
+}
 const skippedVacancies = createSkippedVacancies(path.join(process.cwd(), 'data', 'skipped-vacancies.lino'));
 const vacancyFilters = createVacancyFilters({
   rulesPath: path.join(process.cwd(), 'data', 'vacancy-filters.lino'),
@@ -375,8 +388,10 @@ async function prefillChat(id, depth = 0) {
       .catch((error) => console.log(`⚠️  Questionnaire prefill failed: ${error.message}`));
   }
 
-  let reply = knownReply(last, sources.templates ? { templates: sources.templates, qaMap: sources.qaMap } : {
-    templates: await templatesDb.readQADatabase(), qaMap: sources.qaMap,
+  // A salary in the vacancy's currency: the chat tells, else the vacancy page (read only when it matters)
+  let reply = await knownReplyInContexts(last, {
+    readTemplates: templatesDb.readQADatabase, readQADatabase: sources.qaDatabase.readQADatabase,
+    contexts: await loadAnswerContexts(), known: chatContextTexts(chat), vacancyTexts: () => vacancyTexts(chat.vacancyUrl),
   });
   if (!reply && argv.draft) {
     console.log('🤖 Drafting the reply with local Claude Code from the resume and qa.lino...');

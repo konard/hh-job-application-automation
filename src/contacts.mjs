@@ -64,7 +64,7 @@ function contactPattern(key, value) {
   if (key.startsWith('salary_') && digits) {
     const amount = digits.replace(/\B(?=(\d{3})+$)/g, '[\\s\\u00a0]?');
     return key.endsWith('_usd')
-      ? new RegExp(`\\$\\s?${amount}(?!\\d)|(?<!\\d)${amount}\\s?(?:\\$|USD(?!\\p{L})|долл\\p{L}*)`, 'gu')
+      ? new RegExp(`\\$\\s?${amount}(?!\\d)|(?<!\\d)${amount}\\s?(?:\\$|USDT?(?!\\p{L})|долл\\p{L}*)`, 'gu')
       : new RegExp(`(?<!\\d)${amount}\\s?(?:₽|руб\\p{L}*\\.?|р\\.)`, 'gu');
   }
   return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');

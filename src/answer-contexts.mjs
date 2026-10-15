@@ -12,8 +12,9 @@
  *     "{{salary_net_usd}}: {{salary_net}}"
  *
  * In each group the context is the one the question itself shows (only one of them), else the
- * first, in the file's order, that the vacancy shows (its card, description, the form's other
- * questions), else the default. A word made of letters is found at the start of a word, and as a
+ * one the vacancy shows: its texts are looked at in order (the card with its pay first, then the
+ * description, the form's other questions, the employer's messages), and in a text the first
+ * context in the file's order counts; else the default. A word made of letters is found at the start of a word, and as a
  * whole word when it is up to 3 letters («usd» is not «usdt», «руб.» is not «рубрика»). The
  * contacts take the chosen contexts' values in contacts.mjs (contactsInContexts).
  *
@@ -70,19 +71,49 @@ export function parseAnswerContexts(entries) {
  * The context of each group for a question
  * @param {Array} contexts - parseAnswerContexts
  * @param {string} question
- * @param {string} [known] - The vacancy: its card, description, the form's other questions
+ * @param {string|string[]} [known] - The vacancy, the texts that tell most first: its card,
+ *   description, the form's other questions
  * @returns {Array} One context per group that has one
  */
 export function chooseContexts(contexts, question, known = '') {
   const shows = (context, text) => context.words.some((word) => hasWord(word, text));
+  const texts = [known].flat().filter(Boolean);
   return [...new Set(contexts.map(({ group }) => group))].flatMap((group) => {
     const candidates = contexts.filter((context) => context.group === group);
     const own = candidates.filter((context) => shows(context, question));
     const chosen = (own.length === 1 ? own[0] : null) ??
-      candidates.find((context) => shows(context, known)) ??
+      texts.map((text) => candidates.find((context) => shows(context, text))).find(Boolean) ??
       candidates.find((context) => context.isDefault);
     return chosen ? [chosen] : [];
   });
+}
+
+/**
+ * Whether the texts show a context of any group: when none does, the vacancy itself may tell
+ * @param {Array} contexts - parseAnswerContexts
+ * @param {string|string[]} texts
+ * @returns {boolean}
+ */
+export function showsContext(contexts, texts) {
+  return [texts].flat().some((text) => contexts.some(({ words }) => words.some((word) => hasWord(word, text))));
+}
+
+/**
+ * The saved answers in the contexts of a question, read once for each set of contexts
+ * @param {Function} readQADatabase - withContacts' (contacts.mjs): takes {contexts}
+ * @param {Array} contexts - parseAnswerContexts
+ * @returns {(question: string, known?: string|string[]) => Promise<Map>}
+ */
+export function answersInContexts(readQADatabase, contexts) {
+  const maps = new Map();
+  return (question, known) => {
+    const chosen = chooseContexts(contexts, question, known);
+    const key = chosen.map(({ group, name }) => `${group}: ${name}`).join('\n');
+    if (!maps.has(key)) {
+      maps.set(key, readQADatabase({ contexts: chosen }));
+    }
+    return maps.get(key);
+  };
 }
 
 /**

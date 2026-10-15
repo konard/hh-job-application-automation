@@ -15,6 +15,7 @@ import { isBrowserRunning } from './browser-session.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { startFormWatch } from './form-answers.mjs';
 import { createQADatabase } from './qa-database.mjs';
+import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy, isPayQuestion, payGuidance, statesPay } from './vacancy-context.mjs';
 import {
   askClaude, draftPrompt, loadProfile, pickOptions, plainText, planAnswers, readFormFields, readFormIntro, relatedAnswers, TO_CHECK,
@@ -82,7 +83,7 @@ async function fill(field) {
   await control.fill(date ? `${date[3]}-${date[2]}-${date[1]}` : field.answer);
 }
 
-async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepOpenHours, company, vacancyUrl }) {
+async function prefillSlot(url, slot, { qaMap, qaDatabase, profile, resume }, { draft, keepOpenHours, company, vacancyUrl }) {
   const log = (message) => console.log(`[slot ${slot}] ${message}`);
   const port = 9330 + slot;
   const session = await openSlot({ name: `form-slot-${slot}`, port, keepOpenHours });
@@ -118,9 +119,13 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
   // The text above the first question: a pay it states is the form's own offer
   form.description = form.fields.length ? await form.fields[0].frame.evaluate(readFormIntro, form.fields[0].title).catch(() => '') : '';
   log(`📝 "${form.title}": ${form.fields.length} question(s)${frames.some(({ frame }) => frame !== page.mainFrame()) ? ' (in a frame)' : ''}`);
-  const planned = planAnswers(form.fields, { profile, qaMap, company });
   // The vacancy of the form: a pay question is answered against its pay, not with a saved sum
   const vacancy = await fetchVacancy(vacancyUrl ?? await formVacancy(url));
+  // The saved answers in the contexts of each question (answer-contexts.mjs): a salary in the vacancy's currency
+  const known = [vacancy?.salary, form.description, vacancy?.title, vacancy?.description, form.title, ...form.fields.map((field) => field.title)];
+  const inContexts = qaDatabase ? answersInContexts(qaDatabase.readQADatabase, await loadAnswerContexts()) : null;
+  const maps = new Map(inContexts ? await Promise.all(form.fields.map(async (field) => [field.title, await inContexts(field.title, known)])) : []);
+  const planned = planAnswers(form.fields, { profile, qaMap, qaMapFor: (title) => maps.get(title) ?? qaMap, company });
   if (vacancy?.salary || statesPay(form.description)) {
     planned.filter((field) => isPayQuestion(field.title) && field.kind !== 'file' && field.source !== 'company from the chat')
       .forEach((field) => Object.assign(field, { open: true, answer: undefined, choices: undefined, source: undefined }));
@@ -150,7 +155,7 @@ async function prefillSlot(url, slot, { qaMap, profile, resume }, { draft, keepO
     }
     await Promise.all(open.map(async (field) => {
       const pay = isPayQuestion(field.title) ? payGuidance({ vacancy, profile, intro: form.description }) : '';
-      const drafted = await askClaude(draftPrompt({ form, field, resume, related: relatedAnswers(field.title, qaMap), vacancy, pay }));
+      const drafted = await askClaude(draftPrompt({ form, field, resume, related: relatedAnswers(field.title, maps.get(field.title) ?? qaMap), vacancy, pay }));
       if (!drafted) {
         return;
       }

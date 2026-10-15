@@ -207,7 +207,7 @@ export async function processModalApplication({
   }
 
   // What the salary answers' currency is told by: the card, the description and the popup's questions
-  const context = [vacancy, vacancyFilters?.description?.(vacancyId) ?? ''].join('\n');
+  const context = [vacancy, vacancyFilters?.description?.(vacancyId) ?? ''];
   // The saved answers before this popup: answers saved while it is open never count as exact
   const savedBefore = hasQuestions && readQADatabase
     ? await savedAnswersInContext({ commander, readQADatabase, context })

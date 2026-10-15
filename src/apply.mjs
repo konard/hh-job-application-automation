@@ -171,6 +171,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
       readTemplates: withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), contacts).readQADatabase,
       autoSend: argv.autoSendExactAnswers,
       closePanel: () => closeChatPanel(commander),
+      vacancyContext: (vacancyId) => [vacancyFilters.card?.(vacancyId) ?? '', vacancyFilters.description?.(vacancyId) ?? ''],
     }) : undefined,
     onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),
