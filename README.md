@@ -379,6 +379,12 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   whichever currency it was saved in. The question's own words decide first, then the vacancy's,
   then the group's `(default)` context.
 - The report (every question, its source and answer) is printed and saved to `logs/forms/`.
+- `bun run formalize-qa` checks how [Formal AI](https://github.com/link-assistant/formal-ai)
+  (its JavaScript version, nothing to compile; cloned into `~/.hh-automation/formal-ai`)
+  formalizes every saved question and answer: the kinds of mistakes are counted with examples,
+  every result goes to `logs/formalize-qa.json`. Answers are not matched through it until it can
+  formalize them ([#1222](https://github.com/link-assistant/formal-ai/issues/1222),
+  [#1223](https://github.com/link-assistant/formal-ai/issues/1223)).
 
 See [the requirements](docs/requirements/forms-and-chats.md) for what is done and what is planned,
 and [the full list of requirements](docs/requirements/README.md) for everything else.
