@@ -1,0 +1,15 @@
+"currency: usd"
+  $
+  usd
+  доллар
+  dollar
+  в валюте
+  "{{salary_net}}: {{salary_net_usd}}"
+  "{{salary_gross}}: {{salary_gross_usd}}"
+"currency: rub (default)"
+  ₽
+  rub
+  руб.
+  рубл
+  "{{salary_net_usd}}: {{salary_net}}"
+  "{{salary_gross_usd}}: {{salary_gross}}"

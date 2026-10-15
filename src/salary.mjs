@@ -76,48 +76,6 @@ export function salaryValues({ netRub = 0, netUsd = 0, usdRate = null }) {
   return values;
 }
 
-/** Pay in dollars: «$», «USD», «доллар», «выплаты в валюте» */
-const USD = /\$|(?<!\p{L})usd(?!\p{L})|доллар|dollar|в\s+валюте/iu;
-/** Pay in rubles: «₽», «RUB», «в рублях», «руб.» */
-const RUB = /₽|(?<!\p{L})rub(?!\p{L})|(?<!\p{L})руб(?:л|\.|(?!\p{L}))/iu;
-
-/**
- * The currency a salary answer is given in: the one the question itself names, else dollars when
- * anything about the vacancy (its card, description, the form's other questions) speaks of
- * dollars, else rubles
- * @param {string} question
- * @param {string} [context] - The vacancy's card, description and form text
- * @returns {'usd'|'rub'}
- */
-export function salaryCurrency(question, context = '') {
-  const [usd, rub] = [USD.test(question), RUB.test(question)];
-  if (usd !== rub) {
-    return usd ? 'usd' : 'rub';
-  }
-  return USD.test(context) ? 'usd' : 'rub';
-}
-
-/** The ruble placeholders and their dollar counterparts */
-const CURRENCY_PAIRS = [['salary_net', 'salary_net_usd'], ['salary_gross', 'salary_gross_usd']];
-
-/**
- * The salary values in one currency: in dollars {{salary_net}} is the dollar sum too, in rubles
- * {{salary_net_usd}} the ruble sum; a sum missing in that currency keeps the saved one
- * @param {Object} values - Contacts with the salary values (salaryValues)
- * @param {'usd'|'rub'} currency
- * @returns {Object}
- */
-export function inCurrency(values, currency) {
-  const result = { ...values };
-  for (const [rub, usd] of CURRENCY_PAIRS) {
-    const [to, from] = currency === 'usd' ? [rub, usd] : [usd, rub];
-    if (values[from] !== undefined) {
-      result[to] = values[from];
-    }
-  }
-  return result;
-}
-
 /**
  * Rubles per dollar: the Central Bank's rate of the day, else the last one read
  * @param {{fetchImpl?: Function, cacheFile?: string}} [options]

@@ -10,7 +10,7 @@
  */
 
 import { createQADatabase } from './qa-database.mjs';
-import { inCurrency, salaryValues, usdRate } from './salary.mjs';
+import { salaryValues, usdRate } from './salary.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
 const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd'];
@@ -82,6 +82,26 @@ export function contractContacts(text, contacts) {
     .reduce((result, key) => result.replace(contactPattern(key, contacts[key]), `{{${key}}}`), String(text));
 }
 
+/**
+ * The contacts with the placeholders of the chosen contexts; a value whose own placeholders have
+ * no value (no dollar sum) keeps the contact as it was
+ * @param {Object} contacts
+ * @param {Array} chosen - chooseContexts (answer-contexts.mjs)
+ * @returns {Object}
+ */
+export function contactsInContexts(contacts, chosen) {
+  const result = { ...contacts };
+  for (const { values } of chosen) {
+    for (const [key, template] of Object.entries(values)) {
+      const value = expandContacts(template, contacts);
+      if (!/\{\{\w+\}\}/.test(value)) {
+        result[key] = value;
+      }
+    }
+  }
+  return result;
+}
+
 const expandAnswer = (answer, contacts) => (Array.isArray(answer)
   ? answer.map((item) => expandContacts(item, contacts))
   : expandContacts(answer, contacts));
@@ -96,11 +116,12 @@ export function withContacts(db, contacts) {
   return {
     ...db,
     /**
-     * @param {{currency?: 'usd'|'rub'}} [options] - Salaries in this currency, whichever the answer was saved in
+     * @param {{contexts?: Array}} [options] - The answers in these contexts (answer-contexts.mjs):
+     *   e.g. salaries in dollars, whichever currency the answer was saved in
      */
-    async readQADatabase({ currency } = {}) {
+    async readQADatabase({ contexts } = {}) {
       const raw = await db.readQADatabase();
-      const values = currency ? inCurrency(contacts, currency) : contacts;
+      const values = contexts ? contactsInContexts(contacts, contexts) : contacts;
       // An answer with a placeholder that has no value (e.g. no dollar rate) is not typed as is
       return new Map([...raw].map(([question, answer]) => [question, expandAnswer(answer, values)])
         .filter(([, answer]) => ![answer].flat().some((item) => /\{\{\w+\}\}/.test(item))));

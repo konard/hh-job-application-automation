@@ -18,7 +18,7 @@ import {
   answerFits,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
-import { salaryCurrency } from './salary.mjs';
+import { chooseContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
@@ -74,17 +74,25 @@ export async function savePairs(pairs, addOrUpdateQA) {
 }
 
 /**
- * The saved answers in both currencies, and the currency each question of the form takes
- * (salaryCurrency: the question itself, else the vacancy's card, description and the form's questions)
- * @returns {Promise<{qaMap: Map, pageQuestions: Array, answerFor: (formQuestion: string, savedQuestion: string) => *}>}
+ * The saved answers, and each in the contexts of the form's question (answer-contexts.mjs: the
+ * question itself, else the vacancy's card, description and the form's questions), e.g. a salary
+ * in dollars for a vacancy paid in dollars
+ * @returns {Promise<{qaMap: Map, pageQuestions: Array, answerFor: (formQuestion: string, savedQuestion: string) => Promise<*>}>}
  */
 async function answersInContext({ commander, readQADatabase, context = '' }) {
   const qaMap = await readQADatabase();
   const pageQuestions = await extractPageQuestions({ evaluate: commander.evaluate });
   const known = [context, ...pageQuestions.map(({ question }) => question)].join('\n');
-  const byCurrency = { usd: await readQADatabase({ currency: 'usd' }), rub: await readQADatabase({ currency: 'rub' }) };
-  const answerFor = (formQuestion, savedQuestion) => byCurrency[salaryCurrency(formQuestion, known)].get(savedQuestion) ??
-    qaMap.get(savedQuestion);
+  const contexts = await loadAnswerContexts();
+  const maps = new Map();
+  const answerFor = async (formQuestion, savedQuestion) => {
+    const chosen = chooseContexts(contexts, formQuestion, known);
+    const key = chosen.map(({ group, name }) => `${group}: ${name}`).join('\n');
+    if (!maps.has(key)) {
+      maps.set(key, await readQADatabase({ contexts: chosen }));
+    }
+    return maps.get(key).get(savedQuestion) ?? qaMap.get(savedQuestion);
+  };
   return { qaMap, pageQuestions, answerFor };
 }
 
@@ -97,7 +105,7 @@ export async function savedAnswersInContext({ commander, readQADatabase, context
   const { qaMap, pageQuestions, answerFor } = await answersInContext({ commander, readQADatabase, context });
   for (const { question } of pageQuestions) {
     if (qaMap.has(question)) {
-      qaMap.set(question, answerFor(question, question));
+      qaMap.set(question, await answerFor(question, question));
     }
   }
   return qaMap;
@@ -106,7 +114,7 @@ export async function savedAnswersInContext({ commander, readQADatabase, context
 /**
  * Setup Q&A auto-fill and auto-save for all textareas and radio buttons on the page
  * @param {Object} options
- * @param {string} [options.context] - The vacancy's card and description: in dollars when they speak of dollars
+ * @param {string} [options.context] - The vacancy's card and description, for the answers' contexts (answer-contexts.mjs)
  */
 export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context = '' }) {
   try {
@@ -126,7 +134,7 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
       if (match && item.type === 'textarea' && !answerFits(item.question, match.answer)) {
         console.log(`[QA] "${item.question}": the saved answer of "${match.question}" (${match.answer}) does not answer it, left empty`);
       } else if (match) {
-        const answer = answerFor(item.question, match.question);
+        const answer = await answerFor(item.question, match.question);
         questionToAnswer.set(item.question, { ...item, answer, matchScore: match.score });
         console.log(`[QA] Fuzzy match for "${item.question}" (score: ${match.score.toFixed(3)})`);
         console.log(`[QA] Matched to: "${match.question}"`);
