@@ -47,7 +47,8 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
   --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
-  --learn-all            Read every chat already read, slowly (scrolled to and clicked in the list), and save
+  --learn-all            Read every chat already read, slowly (scrolled to and clicked in the list), in a window
+                         of its own (port 9341), and save
                          the answers you sent that are not saved yet (qa.lino, chat-templates.lino); unread
                          chats are left unread
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
@@ -92,6 +93,8 @@ function parseArgs(args) {
 
 const argv = parseArgs(process.argv.slice(2));
 const CHAT_SLOT_PORT = 9340;
+// --learn-all reads the chat history in a window of its own, apart from the chat window the user answers in
+const CHAT_HISTORY_PORT = 9341;
 const AUTOMATION_PORT = 9322;
 const MESSAGE_INPUT = 'textarea[data-qa="text-input"]';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -177,22 +180,37 @@ async function walkChatList(visit) {
   }
 }
 
-/** The list's «Только непрочитанные» checkbox (a hidden copy of its label is in the page too) */
+/**
+ * The list's «Только непрочитанные» filter. The page holds two copies of it, one label in the
+ * other: the outer one (without a data-qa) is the filter the list follows. A click on the checkbox
+ * sets the inner copy first, the outer one from then on (a click on the label's text sets neither)
+ */
 const unreadOnlyBox = () => page.locator('input[data-qa="chatik-checkbox-only-unread"]').first();
+const UNREAD_ONLY_INPUTS = 'label:has-text("Только непрочитанные") input[type="checkbox"]';
+
+/** @returns {Promise<boolean|null>} Whether the filter is set; null without it on the page */
+async function unreadOnlyIsSet(timeout) {
+  if (!await unreadOnlyBox().waitFor({ state: 'attached', timeout }).then(() => true, () => false)) {
+    return null;
+  }
+  return page.locator(UNREAD_ONLY_INPUTS).evaluateAll((inputs) => (inputs.find((input) => !input.dataset.qa) ?? inputs[0])?.checked ?? null)
+    .catch(() => null);
+}
 
 /**
- * The list's «Только непрочитанные» filter set as wanted, its label clicked as a person does
+ * The list's «Только непрочитанные» filter set as wanted, its checkbox clicked as a person does
  * @returns {Promise<{was: boolean|null, is: boolean|null}>} How it was, and how it is now
  */
 async function showUnreadOnly(want) {
-  const box = unreadOnlyBox();
-  const was = await box.isChecked({ timeout: 10000 }).catch(() => null);
-  if (was !== null && was !== want) {
+  const was = await unreadOnlyIsSet(10000);
+  let is = was;
+  for (let clicks = 0; is !== null && is !== want && clicks < 3; clicks += 1) {
     await humanPause(800, 1500);
-    await human.click(box.locator('xpath=ancestor::label[1]'));
+    await human.click(unreadOnlyBox());
     await humanPause(1500, 2500);
+    is = await unreadOnlyIsSet(5000);
   }
-  return { was, is: await box.isChecked({ timeout: 5000 }).catch(() => null) };
+  return { was, is };
 }
 
 /** The chat page opened (once a pass, as a person opens it), its list shown; false behind a captcha */
@@ -241,7 +259,9 @@ let page;
 let human;
 /** The chat slot's tab, opened again when its window was closed between checks */
 async function openChatTab() {
-  session = await openSlot({ name: 'chat-slot', port: CHAT_SLOT_PORT });
+  session = await openSlot(argv.learnAll
+    ? { name: 'chat-history-slot', port: CHAT_HISTORY_PORT }
+    : { name: 'chat-slot', port: CHAT_SLOT_PORT });
   ({ page } = session);
   // The pointer and the wheel move as a person's do, smooth on a screen recording
   human = createHumanInput(page);
@@ -494,7 +514,40 @@ for (const id of argv.chats) {
   }
 }
 
+/**
+ * What the user answers in the chat window is learned as they send it: the open chat is read from
+ * the page every few seconds (no request to hh.ru) and learned when its last message changes
+ */
+function learnAsTheUserAnswers() {
+  let last = '';
+  const timer = setInterval(async () => {
+    if (page.isClosed() || !/\/chat\/\d+/.test(page.url())) {
+      return;
+    }
+    const chat = await page.evaluate(readChat).catch(() => null);
+    const key = `${chat?.id}\n${chat?.messages?.at(-1)?.id}`;
+    if (chat?.messages?.length && key !== last) {
+      last = key;
+      await learn(chat.messages).catch((error) => console.log(`⚠️  Not learned from the chat: ${error.message}`));
+    }
+  }, 5000);
+  timer.unref();
+}
+
+/** Where the chat window was at the last check: the user moving in it since, or typing, delays the next pass */
+let seenUrl = null;
+async function userIsInTheWindow() {
+  const typing = await page.locator('textarea[data-qa="text-input"]').first().inputValue({ timeout: 1000 })
+    .then((value) => value.trim().length > 0, () => false);
+  const moved = seenUrl !== null && !page.isClosed() && page.url() !== seenUrl;
+  seenUrl = page.isClosed() ? null : page.url();
+  return typing || moved;
+}
+
 if (argv.watch) {
+  if (argv.learn) {
+    learnAsTheUserAnswers();
+  }
   // A chat is seen again when its last message changes (the employer wrote again)
   const seen = new Set();
   const seenKey = (chat) => `${chat.id}\n${chat.last}`;
@@ -516,6 +569,12 @@ if (argv.watch) {
       }
       console.log(`💬 Chat answered, processing unread chats again: ${stuckChat.title}`);
       stuckChat = null;
+    }
+    // The window is the user's while they use it: the pass waits for them
+    if (await userIsInTheWindow()) {
+      console.log('⏸️  The chat window is in use: the chat check waits 5 min');
+      await sleep(300 * 1000);
+      continue;
     }
     if (!await openChatPage()) {
       await sleep(argv.poll * 1000);
@@ -570,6 +629,7 @@ if (argv.watch) {
         }
       }
     }
+    seenUrl = page.isClosed() ? null : page.url();
     await sleep(argv.poll * 1000);
   }
 }
