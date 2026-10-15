@@ -3,7 +3,7 @@
  * paid in dollars, in rubles otherwise, whichever currency the answer was saved in
  */
 import { describe, test, assert } from 'test-anywhere';
-import { answersInContexts, chooseContexts, hasWord, loadAnswerContexts, parseAnswerContexts, showsContext } from '../src/answer-contexts.mjs';
+import { answersInContexts, chooseContexts, hasWord, loadAnswerContexts, parseAnswerContexts, sameButSums, showsContext } from '../src/answer-contexts.mjs';
 import { contactsInContexts, contractContacts, expandContacts, withContacts } from '../src/contacts.mjs';
 import { knownReplyInContexts } from '../src/chat-answers.mjs';
 import { planAnswers } from '../src/form-prefill.mjs';
@@ -75,6 +75,13 @@ describe('Context-aware answers everywhere', () => {
       'От 450 000 ₽ на руки или эквивалент.');
     assert.equal((await inContexts('Ваши зарплатные ожидания мин - комфорт?', ['от 3 000 $'])).get('Ваши зарплатные ожидания мин - комфорт?'),
       'От $6 000 на руки или эквивалент.');
+  });
+
+  test('an answer typed before in another currency is told by its words', () => {
+    assert.equal(sameButSums('От 6000 USDT на руки или эквивалент.', 'От 450 000 ₽ на руки или эквивалент.'), true);
+    assert.equal(sameButSums('От 350 тыс. рублей могу рассмотреть.', 'От $6 000 могу рассмотреть.'), true);
+    assert.equal(sameButSums('От 6000 USDT на руки.', 'От 450 000 ₽ в месяц на руки.'), false);
+    assert.equal(sameButSums('Да', 'Да'), false);
   });
 
   test('a salary written as USDT is saved as the dollar placeholder', () => {

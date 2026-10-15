@@ -16,9 +16,10 @@ import {
   setupAutoSaveListeners,
   collectMarkedQAPairs,
   answerFits,
+  answerText,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
-import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
+import { answersInContexts, loadAnswerContexts, sameButSums } from './answer-contexts.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
@@ -138,6 +139,19 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
     // Each fill operation is sequential to prevent concurrent typing
     for (const [question, data] of questionToAnswer) {
       try {
+        // hh.ru keeps the form's text: an answer typed before with a sum in another currency is typed again
+        const typed = data.type === 'textarea' ? data.currentValue ?? '' : '';
+        if (typed && typed !== answerText(data.answer).trim() && sameButSums(typed, answerText(data.answer))) {
+          await commander.evaluate({
+            fn: (selector) => {
+              const textarea = document.querySelector(selector);
+              Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(textarea, '');
+              textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            },
+            args: [data.selector],
+          });
+          console.log(`[QA] "${question}": «${typed}» was typed before in another context, typed again`);
+        }
         await fillers[data.type]?.({ commander, questionData: data, verbose });
         if (data.type === 'textarea') {
           await commander.wait({ ms: 2000, reason: 'stability delay between textarea fills' });

@@ -116,6 +116,21 @@ export function answersInContexts(readQADatabase, contexts) {
   };
 }
 
+/** A sum of money as people write it: «$6 000», «6000 USDT», «450 000 ₽», «350 тыс. рублей», «210к» */
+const SUM = /[$€₽]\s?\d[\d\s\u00a0.,]*\d|\d(?:[\d\s\u00a0.,]*\d)?\s?(?:[$€₽]|(?:тыс\.?\s?)?(?:usdt?|usd|eur|rub|руб\p{L}*\.?|р\.|долл\p{L}*|евро)|тыс\.?|[kк])(?!\p{L})/giu;
+
+/**
+ * Whether two answers are the same but for their sums: an answer typed before in another context
+ * («От 6000 USDT на руки или эквивалент.» for «От 450 000 ₽ на руки или эквивалент.»)
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+export function sameButSums(a, b) {
+  const bare = (text) => String(text ?? '').replace(SUM, '{{sum}}').replace(/\s+/g, ' ').trim().toLowerCase();
+  return new RegExp(SUM.source, 'iu').test(String(a)) && bare(a) === bare(b);
+}
+
 /**
  * @param {string} [filePath]
  * @returns {Promise<Array>} parseAnswerContexts; none without the file
