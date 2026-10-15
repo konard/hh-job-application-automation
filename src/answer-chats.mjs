@@ -197,6 +197,10 @@ async function showUnreadOnly(want) {
 
 /** The chat page opened (once a pass, as a person opens it), its list shown; false behind a captcha */
 async function openChatPage() {
+  if (page.isClosed()) {
+    console.log('🪟 The chat window was closed: opening it again');
+    await openChatTab();
+  }
   await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
   await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
   return waitForCaptcha(page, console.log);
@@ -232,12 +236,19 @@ async function leftAloneBecause(chat) {
   return match ? `filtered out: ${describeFilterMatch(match)}` : null;
 }
 
-const session = await openSlot({ name: 'chat-slot', port: CHAT_SLOT_PORT });
-const { page } = session;
-// The pointer and the wheel move as a person's do, smooth on a screen recording
-const human = createHumanInput(page);
-// Ad and tracker requests that hang kept the chat page loading for a minute
-await blockHangingHosts(page).catch(() => {});
+let session;
+let page;
+let human;
+/** The chat slot's tab, opened again when its window was closed between checks */
+async function openChatTab() {
+  session = await openSlot({ name: 'chat-slot', port: CHAT_SLOT_PORT });
+  ({ page } = session);
+  // The pointer and the wheel move as a person's do, smooth on a screen recording
+  human = createHumanInput(page);
+  // Ad and tracker requests that hang kept the chat page loading for a minute
+  await blockHangingHosts(page).catch(() => {});
+}
+await openChatTab();
 const copied = await copySession({ fromPort: AUTOMATION_PORT, page, domain: /(^|\.)hh\.ru$/ });
 console.log(copied > 0
   ? `🔑 Logged in with the hh.ru session of the automation browser (${copied} cookies, values not shown)`
