@@ -8,7 +8,7 @@ import { allAnswersExact, countUnansweredQuestions, extractPageQuestions, listOp
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
-import { saveMarkedQAPairs, saveQAPairs, setupQAHandling } from './vacancy-response.mjs';
+import { saveMarkedQAPairs, saveQAPairs, savedAnswersInContext, setupQAHandling } from './vacancy-response.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { findCoverLetterToggle, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
@@ -206,11 +206,15 @@ export async function processModalApplication({
     return skip('questionnaire_ignored');
   }
 
+  // What the salary answers' currency is told by: the card, the description and the popup's questions
+  const context = [vacancy, vacancyFilters?.description?.(vacancyId) ?? ''].join('\n');
   // The saved answers before this popup: answers saved while it is open never count as exact
-  const savedBefore = hasQuestions && readQADatabase ? await readQADatabase() : new Map();
+  const savedBefore = hasQuestions && readQADatabase
+    ? await savedAnswersInContext({ commander, readQADatabase, context })
+    : new Map();
   // The same autofill (similar saved questions) and saving of the user's answers as the full form
   if (hasQuestions && readQADatabase && addOrUpdateQA) {
-    await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
+    await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context });
   }
   // The answers the user typed; every answer of the popup only once it is sent
   const saveTyped = () => (addOrUpdateQA ? saveMarkedQAPairs({ commander, addOrUpdateQA }) : 0);
@@ -745,6 +749,7 @@ export async function findAndProcessVacancyButton({
   const descriptionRead = Boolean(vacancyFilters && vacancyId && await vacancyFilters.needsDescription?.(card));
   const description = descriptionRead ? await readVacancyDescription({ commander, vacancyId }) : '';
   vacancyFilters?.keepDescription?.(vacancyId, description);
+  vacancyFilters?.keepCard?.(vacancyId, card);
   // Checked before the click, so a vacancy filtered out by its card costs no request
   const filterMatch = await vacancyFilters?.match({ vacancy: card, description });
   if (filterMatch) {

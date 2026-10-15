@@ -312,6 +312,21 @@ export async function countUnansweredQuestions(options = {}) {
  */
 export const answerText = (answer) => [answer].flat().join('\n');
 
+/** A question that asks where, what, how many…: «да» or «нет» does not answer it */
+const OPEN_QUESTION = /^(?:где|откуда|куда|когда|какой|какая|какое|какие|каких|каким|какую|сколько|почему|зачем|кто|чем|what|where|when|why|how|which|who)(?!\p{L})/iu;
+const YES_NO = /^(?:да|нет|yes|no)[.!]?$/i;
+
+/**
+ * Whether a saved answer of a similar question fits this one: a bare «да»/«нет» of a yes/no
+ * question («Вы находитесь в РФ?») is no answer to an open one («Где вы находитесь?»)
+ * @param {string} question
+ * @param {string|string[]} answer
+ * @returns {boolean}
+ */
+export function answerFits(question, answer) {
+  return !(OPEN_QUESTION.test(String(question).trim()) && YES_NO.test(answerText(answer).trim()));
+}
+
 export async function fillTextareaQuestion({ commander, questionData }) {
   // checkEmpty makes fillTextArea skip textareas that already have content
   const result = await commander.fillTextArea({

@@ -10,7 +10,7 @@
  */
 
 import { createQADatabase } from './qa-database.mjs';
-import { salaryValues, usdRate } from './salary.mjs';
+import { inCurrency, salaryValues, usdRate } from './salary.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
 const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd'];
@@ -95,10 +95,14 @@ const expandAnswer = (answer, contacts) => (Array.isArray(answer)
 export function withContacts(db, contacts) {
   return {
     ...db,
-    async readQADatabase() {
+    /**
+     * @param {{currency?: 'usd'|'rub'}} [options] - Salaries in this currency, whichever the answer was saved in
+     */
+    async readQADatabase({ currency } = {}) {
       const raw = await db.readQADatabase();
+      const values = currency ? inCurrency(contacts, currency) : contacts;
       // An answer with a placeholder that has no value (e.g. no dollar rate) is not typed as is
-      return new Map([...raw].map(([question, answer]) => [question, expandAnswer(answer, contacts)])
+      return new Map([...raw].map(([question, answer]) => [question, expandAnswer(answer, values)])
         .filter(([, answer]) => ![answer].flat().some((item) => /\{\{\w+\}\}/.test(item))));
     },
     async addOrUpdateQA(question, answer) {

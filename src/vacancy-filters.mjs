@@ -149,6 +149,8 @@ export function createVacancyFilters({ rulesPath, filteredPath, now = () => new 
   const exclusive = createMutex();
   // Descriptions read in this run, so the response form of the vacancy uses them too
   const descriptions = new Map();
+  // Cards of the vacancies opened in this run, for the currency of salary answers in their forms
+  const cards = new Map();
 
   /** @returns {Promise<Object<string, string[]>>} Patterns by kind */
   async function rules() {
@@ -195,6 +197,23 @@ export function createVacancyFilters({ rulesPath, filteredPath, now = () => new 
      * @returns {string} The description read in this run, or ''
      */
     description: (vacancyId) => descriptions.get(String(vacancyId)) ?? '',
+
+    /**
+     * Keep the card text of a vacancy opened in this run
+     * @param {string} vacancyId
+     * @param {string} card
+     */
+    keepCard(vacancyId, card) {
+      if (vacancyId && card) {
+        cards.set(String(vacancyId), card);
+      }
+    },
+
+    /**
+     * @param {string} vacancyId
+     * @returns {string} The card text kept in this run, or ''
+     */
+    card: (vacancyId) => cards.get(String(vacancyId)) ?? '',
 
     /**
      * Keep the vacancy with the rule that filtered it out, its title and the time

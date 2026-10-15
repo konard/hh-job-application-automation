@@ -15,8 +15,10 @@ import {
   allAnswersExact,
   setupAutoSaveListeners,
   collectMarkedQAPairs,
+  answerFits,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
+import { salaryCurrency } from './salary.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
@@ -72,12 +74,43 @@ export async function savePairs(pairs, addOrUpdateQA) {
 }
 
 /**
- * Setup Q&A auto-fill and auto-save for all textareas and radio buttons on the page
+ * The saved answers in both currencies, and the currency each question of the form takes
+ * (salaryCurrency: the question itself, else the vacancy's card, description and the form's questions)
+ * @returns {Promise<{qaMap: Map, pageQuestions: Array, answerFor: (formQuestion: string, savedQuestion: string) => *}>}
  */
-export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose }) {
+async function answersInContext({ commander, readQADatabase, context = '' }) {
+  const qaMap = await readQADatabase();
+  const pageQuestions = await extractPageQuestions({ evaluate: commander.evaluate });
+  const known = [context, ...pageQuestions.map(({ question }) => question)].join('\n');
+  const byCurrency = { usd: await readQADatabase({ currency: 'usd' }), rub: await readQADatabase({ currency: 'rub' }) };
+  const answerFor = (formQuestion, savedQuestion) => byCurrency[salaryCurrency(formQuestion, known)].get(savedQuestion) ??
+    qaMap.get(savedQuestion);
+  return { qaMap, pageQuestions, answerFor };
+}
+
+/**
+ * The saved answers, the form's own questions with their salaries in the currency of this form:
+ * what its answers are compared with to count as exact
+ * @returns {Promise<Map>}
+ */
+export async function savedAnswersInContext({ commander, readQADatabase, context = '' }) {
+  const { qaMap, pageQuestions, answerFor } = await answersInContext({ commander, readQADatabase, context });
+  for (const { question } of pageQuestions) {
+    if (qaMap.has(question)) {
+      qaMap.set(question, answerFor(question, question));
+    }
+  }
+  return qaMap;
+}
+
+/**
+ * Setup Q&A auto-fill and auto-save for all textareas and radio buttons on the page
+ * @param {Object} options
+ * @param {string} [options.context] - The vacancy's card and description: in dollars when they speak of dollars
+ */
+export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context = '' }) {
   try {
-    const qaMap = await readQADatabase();
-    const pageQuestions = await extractPageQuestions({ evaluate: commander.evaluate });
+    const { qaMap, pageQuestions, answerFor } = await answersInContext({ commander, readQADatabase, context });
     const questionToAnswer = new Map();
     const seenSelectors = new Set();
 
@@ -90,11 +123,14 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
       seenSelectors.add(item.selector);
 
       const match = findBestMatch(item.question, qaMap);
-      if (match) {
-        questionToAnswer.set(item.question, { ...item, answer: match.answer, matchScore: match.score });
+      if (match && item.type === 'textarea' && !answerFits(item.question, match.answer)) {
+        console.log(`[QA] "${item.question}": the saved answer of "${match.question}" (${match.answer}) does not answer it, left empty`);
+      } else if (match) {
+        const answer = answerFor(item.question, match.question);
+        questionToAnswer.set(item.question, { ...item, answer, matchScore: match.score });
         console.log(`[QA] Fuzzy match for "${item.question}" (score: ${match.score.toFixed(3)})`);
         console.log(`[QA] Matched to: "${match.question}"`);
-        console.log(`[QA] Answer: "${match.answer}"`);
+        console.log(`[QA] Answer: "${answer}"`);
       }
     }
 
@@ -317,6 +353,8 @@ export async function handleVacancyResponsePage({
 
     const form = await readFormForFilters(commander);
     title = form.vacancy;
+    // What the salary answers' currency is told by: the card, the description and the form's text
+    const salaryContext = [vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? '', form.page].join('\n');
 
     // Direct application vacancies are applied on the employer's site - skip them
     const direct = await checkAndCloseDirectApplicationModal({ commander });
@@ -372,7 +410,7 @@ export async function handleVacancyResponsePage({
     if (submitWithoutTestSelector) {
       console.log('Using special "Откликнуться без теста" flow');
       // Questions outside the test (e.g. the salary) still take their saved answers
-      await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
+      await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext });
       await commander.clickButton({ selector: submitWithoutTestSelector, scrollIntoView: true, smoothScroll: true });
       console.log('Clicked "Откликнуться без теста" button');
       await commander.wait({ ms: 2000, reason: 'submit without test to complete' });
@@ -385,9 +423,9 @@ export async function handleVacancyResponsePage({
     // The saved answers as they were before this form: the periodic auto-save (page-triggers.mjs)
     // writes the autofilled answers of similar questions under this form's wording, which must
     // not make them count as exact
-    const savedBefore = await readQADatabase();
+    const savedBefore = await savedAnswersInContext({ commander, readQADatabase, context: salaryContext });
     // Auto-fill answers from database, then give user time to review them
-    await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose });
+    await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext });
     // Sent without asking only when autofill alone answered everything with saved answers of the
     // very same questions; checked again before sending, in case an answer was changed meanwhile
     const answersExact = async () => allAnswersExact(
