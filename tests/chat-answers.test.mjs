@@ -172,3 +172,14 @@ describe('hh.ru AI assistant chats', () => {
     assert.equal(questionCore('Ок, а где вы находитесь?'), 'Где вы находитесь?');
   });
 });
+
+describe('reminders', () => {
+  test('the answer after a reminder is the answer to the question before it', () => {
+    const { questions } = learnedPairs([
+      { mine: false, title: 'Анна', text: 'Какой самый нагруженный проект у вас был?' },
+      { mine: false, title: 'Анна', text: 'Здравствуйте. К сожалению, не дождалась вашего ответа. Мы можем продолжить наше общение по вакансии?' },
+      { mine: true, title: '', text: '150 млн туров, поиск до 50 мс.' },
+    ]);
+    assert.deepEqual(questions, [['Какой самый нагруженный проект у вас был?', '150 млн туров, поиск до 50 мс.']]);
+  });
+});

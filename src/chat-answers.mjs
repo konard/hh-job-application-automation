@@ -397,6 +397,10 @@ export function withLearnedPatterns(templates) {
   return new Map([...examples, ...learnPatterns(new Map(examples))]);
 }
 
+/** An employer's reminder of a question not answered yet */
+const REMINDER = /не дождал(?:ась|ся|ись) (?:вашего )?ответа|можем продолжить (?:наше )?общение|^вы (?:ещё |еще )?здесь\?/i;
+export const isReminder = (text) => REMINDER.test(String(text));
+
 /** hh.ru's own notices shown on the user's side of a chat: not the user's answers */
 const HH_NOTICE = /^ответьте на приглашение, даже если оно вам не интересно/i;
 
@@ -419,8 +423,13 @@ export function learnedPairs(messages) {
     if (message.title === APPLICATION_TITLE || HH_NOTICE.test(message.text) || isQuestion(message.text)) {
       return;
     }
-    const asked = messages[index - 1];
-    if (!asked || asked.mine) {
+    // A reminder («не дождалась вашего ответа») is not what the user answers: the question before it is
+    let before = index - 1;
+    while (before > 0 && !messages[before].mine && isReminder(messages[before].text)) {
+      before -= 1;
+    }
+    const asked = messages[before];
+    if (!asked || asked.mine || isReminder(asked.text)) {
       return;
     }
     if (isSummary(asked.text)) {
