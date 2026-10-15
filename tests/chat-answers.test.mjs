@@ -4,7 +4,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   formLinks, isPattern, isRejection, knownReply, learnedPairs, learnPatterns, matchesPattern, pendingMessages, PATTERN_PREFIX,
-  NO_REPLY, REJECTION_KEY, summaryPairs, templateCore, withLearnedPatterns,
+  NO_REPLY, REJECTION_KEY, questionCore, summaryPairs, templateCore, withLearnedPatterns,
 } from '../src/chat-answers.mjs';
 
 const templates = new Map([
@@ -131,5 +131,44 @@ describe('recruiter bot summaries and messages without a reply', () => {
     const reply = knownReply({ title: 'Робот-рекрутер', text: closing }, { templates: withClosing, qaMap });
     assert.equal(reply?.noReply, true);
     assert.equal(reply?.answer, '');
+  });
+});
+
+describe('hh.ru AI assistant chats', () => {
+  const messages = [
+    { mine: false, title: 'ИИ-помощник', text: 'Расскажите, пожалуйста, был ли у вас опыт работы с Node.js?' },
+    { mine: true, title: '', text: 'Да.' },
+    { mine: false, title: 'ИИ-помощник', text: 'Хорошо, а расскажите, пожалуйста, в каких проектах или задачах вы использовали Node.js?' },
+    { mine: true, title: '', text: 'В Kaiten и Deep.Foundation.' },
+    { mine: false, title: 'ИИ-помощник', text: 'Понял, спасибо за подробности. А есть ли у вас опыт работы с NestJS?' },
+    { mine: true, title: '', text: 'Нет.' },
+    { mine: false, title: 'ИИ-помощник', text: 'В разговоре с кандидатом я узнал:\n- Работали ли вы с Node.js? Ответ:\n- Да.\n- Есть ли у вас опыт использования NestJS? Ответ:\n- Нет.\n\nВопросы к работодателю, на которые помощник не смог ответить:\nВопросов не было' },
+  ];
+
+  test('the questions are learned without the acknowledgement of the last answer, and from the summary', () => {
+    assert.deepEqual(learnedPairs(messages).questions, [
+      ['Был ли у вас опыт работы с Node.js?', 'Да.'],
+      ['В каких проектах или задачах вы использовали Node.js?', 'В Kaiten и Deep.Foundation.'],
+      ['Есть ли у вас опыт работы с NestJS?', 'Нет.'],
+      ['Работали ли вы с Node.js?', 'Да.'],
+      ['Есть ли у вас опыт использования NestJS?', 'Нет.'],
+    ]);
+  });
+
+  test('a question asked again in other words is answered word for word', () => {
+    const learned = new Map(learnedPairs(messages).questions);
+    const reply = knownReply({ title: 'ИИ-помощник', text: 'Спасибо! А был ли у вас опыт работы с Node.js?' }, { templates, qaMap: learned });
+    assert.equal(reply?.answer, 'Да.');
+    assert.equal(reply?.perfect, true);
+  });
+
+  test('the summary needs no reply', () => {
+    assert.equal(knownReply(messages.at(-1), { templates, qaMap: new Map() })?.noReply, true);
+  });
+
+  test('only acknowledgements and polite openers are taken off a question', () => {
+    assert.equal(questionCore('Хорошо понимаете английский?'), 'Хорошо понимаете английский?');
+    assert.equal(questionCore('Расскажите о вашем опыте работы с Go?'), 'Расскажите о вашем опыте работы с Go?');
+    assert.equal(questionCore('Ок, а где вы находитесь?'), 'Где вы находитесь?');
   });
 });

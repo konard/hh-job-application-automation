@@ -440,6 +440,15 @@ browser. For the message waiting for an answer the reply is typed into the messa
 `--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
 quick replies are never clicked.
 
+While the chat window is open (`--watch`, and the rejection checks of `apply`), what you answer in it
+is learned as you send it: the open chat is read from the page every few seconds, without requests to
+hh.ru. A bot's question is saved without its acknowledgement of your last answer («Понял, спасибо. А
+есть ли у вас опыт с NestJS?» is saved as «Есть ли у вас опыт с NestJS?»), so it is answered word for
+word next time, whatever the bot says first; hh.ru's AI assistant's summary («В разговоре с
+кандидатом я узнал: …») is learned too and needs no reply. A check waits while you are typing or
+moving around in that window. `bun run answer-chats -- --learn-all` reads the chats you answered
+before, slowly, in a window of its own (port 9341).
+
 ### Sync Work Experience with LinkedIn
 
 ```bash

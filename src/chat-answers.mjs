@@ -38,9 +38,12 @@ export function readChat() {
     .map((element) => {
       const bubble = element.querySelector('[data-qa="chat-bubble-wrapper"]')?.getBoundingClientRect();
       const row = element.getBoundingClientRect();
-      // The user's own bubble is on the right; hh.ru's notices in the middle are not the user's
-      const mine = Boolean(element.querySelector('[data-qa^="status-icon"], [data-qa^="chat-bubble-icon"], [class*="message_my"], [class*="chat-bubble_outgoing"]')) ||
-        (bubble ? bubble.left - row.left > 40 && row.right - bubble.right < 40 : false);
+      // The user's own bubble is on the right; hh.ru's notices in the middle are not the user's. The
+      // employer's bubbles have an icon too (chat-bubble-icon-hidden, an eye), so icons decide only
+      // when the page is not laid out
+      const mine = bubble?.width > 0
+        ? bubble.left - row.left > 40 && row.right - bubble.right < 40
+        : Boolean(element.querySelector('[data-qa^="status-icon"], [data-qa^="chat-bubble-icon"]:not([data-qa="chat-bubble-icon-hidden"]), [class*="message_my"], [class*="chat-bubble_outgoing"]'));
       return {
         id: element.getAttribute('data-qa').replace('chatik-chat-message-', ''),
         mine,
@@ -156,15 +159,50 @@ export function templateCore(text, { sender = '' } = {}) {
 /** The reply of a template that needs none (a bot's «Ваши ответы отправлены работодателю») */
 export const NO_REPLY = '[без ответа]';
 
+/** hh.ru's AI assistant's summary: «В разговоре с кандидатом я узнал:» */
+const ASSISTANT_SUMMARY = /^в разговоре с кандидатом (я )?узнал/i;
+
 /**
- * The questions and answers of a recruiter bot's summary: each line «Вопрос?: Ответ»
+ * The questions and answers of a recruiter bot's summary: each line «Вопрос?: Ответ», or the AI
+ * assistant's «- Вопрос? Ответ:» with the answer on the next line «- Да.»
  * @param {string} text
  * @returns {Array<[string, string]>} Empty when the message is not such a summary
  */
 export function summaryPairs(text) {
   const lines = String(text).split('\n').map((line) => line.trim()).filter(Boolean);
+  if (ASSISTANT_SUMMARY.test(lines[0] ?? '')) {
+    return lines.flatMap((line, index) => {
+      const [, question, answer] = line.match(/^[-–•]?\s*(.+\?)\s*Ответ:\s*(.*)$/i) ?? [];
+      const given = (answer || (lines[index + 1] ?? '').match(/^[-–•]\s*(.+)$/)?.[1] || '').trim();
+      return question && given ? [[question.trim(), given]] : [];
+    });
+  }
   const pairs = lines.map((line) => line.match(/^(.+\?)\s*:\s+(.+)$/)).filter(Boolean).map(([, question, answer]) => [question.trim(), answer.trim()]);
   return pairs.length > 0 && pairs.length === lines.length ? pairs : [];
+}
+
+/** Whether a message is a bot's summary of the answers given: not a question to the user */
+export const isSummary = (text) => ASSISTANT_SUMMARY.test(String(text).trim()) || summaryPairs(text).length > 0;
+
+const ACKNOWLEDGEMENT = /^(понял[аи]?|поняла|ясно|хорошо|отлично|супер|здорово|спасибо|благодарю|принято|ok|ок)(?!\p{L})[^.!?]*[.!]\s+/iu;
+const LEAD_IN = /^(?:хорошо|отлично|понял[аи]?|поняла|ясно|спасибо|ок|ok)(?:\s*[,!.]\s*(?:а\s+)?|\s+а\s+)|^а\s+(?=\p{L})/iu;
+// «Расскажите, пожалуйста,» before the question itself («был ли…», «в каких проектах…»)
+const POLITE = /^(?:скажите|подскажите|расскажите|уточните)\s*,?\s*(?:пожалуйста\s*,?\s*)?(?=\p{L}+\s+ли(?!\p{L})|(?:в\s+)?(?:как|сколько|где|когда|почему|зачем|что|чем|кто))/iu;
+
+/**
+ * A bot's question without its acknowledgement of the last answer: «Понял, спасибо за подробности.
+ * А есть ли у вас опыт работы с NestJS?» is «Есть ли у вас опыт работы с NestJS?», «Расскажите,
+ * пожалуйста, был ли…» is «Был ли…»
+ * @param {string} text
+ * @returns {string}
+ */
+export function questionCore(text) {
+  let core = String(text).trim();
+  for (let previous = ''; previous !== core;) {
+    previous = core;
+    core = core.replace(ACKNOWLEDGEMENT, '').replace(LEAD_IN, '').replace(POLITE, '').trim();
+  }
+  return core && core !== String(text).trim() ? core[0].toUpperCase() + core.slice(1) : String(text).trim();
 }
 
 /** Key of the reply to a rejection in data/chat-templates.lino (asking for the reason) */
@@ -196,7 +234,7 @@ export const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(te
  */
 export function knownReply(message, { templates, qaMap }) {
   // A bot's summary of the answers given is not a question to the user
-  if (summaryPairs(message.text).length > 0) {
+  if (isSummary(message.text)) {
     return { answer: '', noReply: true, perfect: true, source: 'summary of the answers given', matched: '' };
   }
   // A rejection gets the saved question about its reason, whatever its wording
@@ -225,9 +263,10 @@ export function knownReply(message, { templates, qaMap }) {
     };
   }
   if (isQuestion(core)) {
-    const saved = findBestMatch(core, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
+    const asked = questionCore(core);
+    const saved = findBestMatch(asked, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
     if (saved) {
-      return { answer: answerText(saved.answer), perfect: sameText(core, saved.question), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
+      return { answer: answerText(saved.answer), perfect: sameText(asked, saved.question) || sameText(core, saved.question), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
     }
   }
   return null;
@@ -384,8 +423,11 @@ export function learnedPairs(messages) {
     if (!asked || asked.mine) {
       return;
     }
+    if (isSummary(asked.text)) {
+      return;
+    }
     const core = templateCore(asked.text, { sender: asked.title });
-    (isQuestion(core) ? questions : templates).push([core, message.text]);
+    (isQuestion(core) ? questions : templates).push([isQuestion(core) ? questionCore(core) : core, message.text]);
   });
   return { questions, templates };
 }
