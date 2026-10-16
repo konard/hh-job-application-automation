@@ -14,6 +14,7 @@ import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './help
 import { findCoverLetterToggle, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
+import { recordEvent } from './stats.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
 import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
@@ -24,6 +25,7 @@ import { askUser, decideSend, isInteractive, waitForUser } from './confirmations
  */
 export async function handleLimitError({ commander, START_URL }) {
   console.log('⚠️  Limit reached: 200 applications in 24 hours');
+  recordEvent('limit_reached');
   console.log('💤 Waiting 1 hour before retrying...');
 
   await closeModalIfPresent({ commander });
@@ -883,6 +885,7 @@ async function attachLetterIfOffered({ commander, vacancyId, title, MESSAGE, ski
   const result = await attachLetter({ commander, vacancyId, letter: coverLetterFor(MESSAGE, []), offer, returnUrl });
   if (result.attached) {
     console.log(`✉️  Cover letter attached to the application (${result.via})`);
+    recordEvent('letter_attached', { vacancyId, via: result.via });
     return;
   }
   console.log(`❌ The cover letter could not be attached to vacancy ${vacancyId} (${result.reason}): attach it by hand at https://hh.ru/vacancy/${vacancyId}`);

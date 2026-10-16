@@ -10,6 +10,7 @@
  */
 
 import { log } from './logging.mjs';
+import { recordEvent } from './stats.mjs';
 
 /** Texts of the hh.ru captcha dialog and captcha page */
 export const CAPTCHA_TEXTS = ['Пройдите капчу', 'введите текст с картинки', 'что вы не робот'];
@@ -111,6 +112,8 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha } = {}
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
     console.log(`✅ Captcha solved after ${Math.round((Date.now() - started) / 1000)} s, continuing`);
+    // Solved by AI: its reading was sent and hh.ru showed no new picture after it
+    recordEvent('captcha', { ms: Date.now() - started, ai: Boolean(episode.sent && !episode.reported) });
     return true;
   })().finally(() => {
     waiting = null;

@@ -23,7 +23,8 @@ import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
-import { pauseMs } from './pacing.mjs';
+import { nextVacancyAt } from './pacing.mjs';
+import { recordEvent } from './stats.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-attach.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
@@ -87,6 +88,10 @@ export function createOrchestrator({
   const sentVacancyIds = new Set();
   // The next application waits until then, so the load on hh.ru stays low
   let nextApplicationAt = 0;
+  // When work on the vacancy began (the first vacancy looked at once the pause was over): the
+  // pause counts from then, so a long form does not add a whole pause on top
+  let workStartedAt = null;
+  let lastWorkStartedAt = null;
   // The chat of the application just sent, answered before anything else happens on the page
   let followUp = null;
 
@@ -95,9 +100,12 @@ export function createOrchestrator({
    * @param {string} reason - What was just done, for the log
    */
   function scheduleNextApplication(reason) {
-    const totalWaitMs = pauseMs({ intervalMs: BUTTON_CLICK_INTERVAL });
-    nextApplicationAt = Math.max(nextApplicationAt, Date.now() + totalWaitMs);
-    console.log(`⏳ ${reason}; next vacancy in ${totalWaitMs / 1000} seconds`);
+    // A vacancy opened, then its application sent: one piece of work
+    lastWorkStartedAt = workStartedAt ?? lastWorkStartedAt ?? Date.now();
+    workStartedAt = null;
+    nextApplicationAt = Math.max(nextApplicationAt, nextVacancyAt({ startedAt: lastWorkStartedAt, intervalMs: BUTTON_CLICK_INTERVAL }));
+    const took = Math.round((Date.now() - lastWorkStartedAt) / 1000);
+    console.log(`⏳ ${reason} (${took} s of work); next vacancy in ${Math.round((nextApplicationAt - Date.now()) / 1000)} seconds`);
   }
 
   /**
@@ -120,6 +128,7 @@ export function createOrchestrator({
     await attachLetterOnVacancyPage(vacancyId);
     await checkpoint('application-sent');
     scheduleNextApplication('Application sent');
+    recordEvent('application_sent', { vacancyId, ms: Date.now() - lastWorkStartedAt });
     // The questions in its chat (a recruiter bot asks at once) come before the next vacancy
     followUp = answerInstantChat(vacancyId)
       .catch((error) => console.log(`⚠️  Answering the chat after the application failed: ${error.message}`));
@@ -143,6 +152,7 @@ export function createOrchestrator({
       .catch((error) => ({ attached: false, reason: error.message.split('\n')[0] }));
     if (result.attached) {
       console.log('✉️  Cover letter attached to the application (the vacancy page)');
+      recordEvent('letter_attached', { vacancyId, via: 'the vacancy page' });
     } else {
       console.log(`❌ The cover letter could not be attached to vacancy ${vacancyId} (${result.reason}): attach it by hand`);
       await noteSkip(skippedVacancies, vacancyId, { reason: 'letter_not_attached', url: `https://hh.ru/vacancy/${vacancyId}` });
@@ -159,6 +169,7 @@ export function createOrchestrator({
       const result = await attachLetter({ commander, vacancyId, letter: coverLetterFor(MESSAGE, []), returnUrl: START_URL });
       if (result.attached) {
         console.log(`✉️  Cover letter attached to vacancy ${vacancyId} (${result.via})`);
+        recordEvent('letter_attached', { vacancyId, via: result.via });
         await skippedVacancies.clear(vacancyId);
       } else if (result.noOffer) {
         console.log(`✉️  Vacancy ${vacancyId} no longer offers to attach a letter (attached already)`);
@@ -250,6 +261,8 @@ export function createOrchestrator({
       await waitForPageReady('not on target page');
       return true;
     case 'no_buttons_found': {
+      // Waiting for a list is no work on a vacancy
+      workStartedAt = null;
       const waitResult = await waitForButtonsAfterNavigation({ commander, pageClosedByUser: getPageClosedByUser });
       if (waitResult.status === 'navigation_detected') {
         console.log('Navigation detected, waiting for new page to be fully loaded...');
@@ -372,6 +385,7 @@ export function createOrchestrator({
           continue;
         }
 
+        workStartedAt ??= Date.now();
         await commander.wait({ ms: 500, reason: 'settle before processing vacancy buttons' });
         await dismissOverlays(commander);
         if (commander.shouldAbort()) {

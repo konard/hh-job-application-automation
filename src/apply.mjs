@@ -30,6 +30,7 @@ import { expandContacts, loadContacts, withContacts } from './contacts.mjs';
 import { createInstantChat } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
 import { closeChatPanel } from './helpers/page-helpers.mjs';
+import { todayLine } from './stats.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 
@@ -134,6 +135,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   if (argv.maxApplications > 0) {
     console.log(`🧪 Stopping after ${argv.maxApplications} application(s)`);
   }
+  console.log(todayLine());
   let applicationsSent = 0;
 
   // browser-commander waits for 30 s without requests by default before a click counts the page as

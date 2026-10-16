@@ -33,6 +33,7 @@ import { createHumanInput } from './helpers/human-input.mjs';
 import { createSkippedVacancies, isSkippedForGood, SKIP_REASONS } from './skipped-vacancies.mjs';
 import { createVacancyFilters, describeFilterMatch } from './vacancy-filters.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
+import { recordEvent } from './stats.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
@@ -532,6 +533,7 @@ async function clearRejections() {
     }
     rejections += 1;
     console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
+    recordEvent('rejection_read', { chatId: chat.id, live: false });
     await humanPause();
     return false;
   });
@@ -617,6 +619,7 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
         }
         moves += 1;
         console.log(`📭 Chat ${rejection.id} (${rejection.title}): rejection read (it showed in the chat window)`);
+        recordEvent('rejection_read', { chatId: rejection.id, live: true });
         await humanPause(2000, 4000);
       }
     } catch (error) {

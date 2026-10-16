@@ -29,6 +29,7 @@
 import fs from 'fs/promises';
 import { createQADatabase } from './qa-database.mjs';
 import { createMutex } from './helpers/mutex.mjs';
+import { recordEvent } from './stats.mjs';
 
 /**
  * Reasons of a skip and whether the vacancy is opened again
@@ -278,6 +279,7 @@ function retryNote(entry) {
  */
 export async function noteSkip(skippedVacancies, vacancyId, skip) {
   const text = SKIP_REASONS[skip.reason]?.text ?? skip.reason;
+  recordEvent('vacancy_skipped', { vacancyId, reason: skip.reason });
   try {
     const entry = await skippedVacancies?.record(vacancyId, skip);
     console.log(`⏭️  Vacancy ${vacancyId ?? '(no ID)'} skipped: ${text}` +

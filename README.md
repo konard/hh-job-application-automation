@@ -558,6 +558,13 @@ because it holds personal data:
   the run waits for you (or stops in unattended runs) instead of opening the next vacancy.
 - **Pauses**: after every opened vacancy, sent or not, the next one waits the same even
   pause (default 4-5 minutes), so hh.ru sees few requests and 200 applications a day still fit.
+  The pause counts from the start of work on the vacancy, so an application takes 4-5 minutes in
+  all, under 7: a long form or a captcha is not followed by a whole pause, only by 30-60 s.
+- **Stats**: `bun run stats` (`-- --days <n>`, 14 by default) shows each day: applications, per
+  hour, the time of work on one (typical and longest), how many took over 7 minutes with the pause,
+  captchas (how many AI solved), skipped vacancies, rejections read (how many as they came) and
+  letters attached later. A run prints today's line when it starts. The events are kept in
+  `logs/stats.jsonl` (not in git).
 - **Chat panel**: hh.ru opens the employer chat after an application; the run closes it.
 
 ### Ignore Questionnaire Vacancies
