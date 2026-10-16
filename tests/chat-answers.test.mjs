@@ -234,3 +234,47 @@ describe('Rejections read as they show in the chat window', () => {
     delete globalThis.document;
   });
 });
+
+describe('A bot offering the answers given before', async () => {
+  const { compareReusedAnswers, describeReuse, isReuseOffer, reuseOption } = await import('../src/chat-answers.mjs');
+  const offer = (list) => [
+    { id: '1', mine: true, title: 'Отклик на вакансию', text: 'Здравствуйте' },
+    { id: '2', mine: false, title: '', text: 'Похоже, вы отвечали на часть вопросов:' },
+    { id: '3', mine: false, title: '', text: list },
+    { id: '4', mine: false, title: '', text: 'Используем эти ответы?' },
+  ];
+  const saved = new Map([
+    ['Are you currently located in Russia or Belarus?', 'Нет'],
+    ['How would you rate your English level?', 'B2 or higher'],
+  ]);
+  const answersFor = async () => saved;
+  const options = ['Да. Используем те же ответы', 'Нет. Отвечу заново'];
+
+  test('the offer is found and is not answered from the saved answers or learned', () => {
+    assert.equal(isReuseOffer('Используем эти ответы?'), true);
+    assert.equal(isReuseOffer('Какие ответы вы используете?'), false);
+    assert.equal(knownReply({ text: 'Используем эти ответы?' }, { templates: new Map(), qaMap: new Map([['Используем эти ответы?', 'Да']]) }), null);
+    const chat = [...offer('Are you currently located in Russia or Belarus?: No'), { id: '5', mine: true, title: '', text: 'Да. Используем те же ответы' }];
+    assert.deepEqual(learnedPairs(chat).questions.map(([question]) => question), ['Are you currently located in Russia or Belarus?']);
+  });
+
+  test('every answer the saved one («No» is «Нет»): «Да»', async () => {
+    const compared = await compareReusedAnswers(offer('Are you currently located in Russia or Belarus?: No\nHow would you rate your English level?: B2 or higher'), answersFor);
+    assert.equal(compared.decision, 'yes');
+    assert.equal(reuseOption(compared.decision, options), 'Да. Используем те же ответы');
+  });
+
+  test('an answer that differs: «Нет», and the log says which', async () => {
+    const compared = await compareReusedAnswers(offer('Are you currently located in Russia or Belarus?: Yes\nHow would you rate your English level?: B2 or higher'), answersFor);
+    assert.equal(compared.decision, 'no');
+    assert.equal(reuseOption(compared.decision, options), 'Нет. Отвечу заново');
+    assert.match(describeReuse(compared), /✗ Are you currently located in Russia or Belarus\?: Yes \(saved: Нет\)/);
+  });
+
+  test('a question not saved word for word: the user decides', async () => {
+    const compared = await compareReusedAnswers(offer('Are you currently located in Russia or Belarus?: No\nDo you have a team?: Yes'), answersFor);
+    assert.equal(compared.decision, null);
+    assert.equal(reuseOption(compared.decision, options), null);
+    assert.match(describeReuse(compared), /\? Do you have a team\?: Yes \(not saved\)/);
+  });
+});

@@ -215,6 +215,75 @@ export function summaryPairs(text) {
 /** Whether a message is a bot's summary of the answers given: not a question to the user */
 export const isSummary = (text) => ASSISTANT_SUMMARY.test(String(text).trim()) || summaryPairs(text).length > 0;
 
+/**
+ * A recruiter bot offering the answers given to it before (another vacancy of the employer):
+ * «Похоже, вы отвечали на часть вопросов:», the list «Вопрос?: Ответ», then «Используем эти
+ * ответы?» with the buttons «Да. Используем те же ответы» and «Нет. Отвечу заново»
+ */
+const REUSE_OFFER = /^(?:используем|использовать|использовать ли) (?:эти|те же|ваши) ответы\s*\??$/i;
+export const isReuseOffer = (text) => REUSE_OFFER.test(String(text).trim());
+
+const YES_NO = new Map([['да', 'yes'], ['yes', 'yes'], ['нет', 'no'], ['no', 'no']]);
+/** The same answer, apart from case and punctuation, «No» and «Нет» alike */
+const sameAnswer = (a, b) => {
+  const [x, y] = [a, b].map((text) => normalizeQuestion(answerText(text)).replace(/[.!]+$/, ''));
+  return x === y || (YES_NO.has(x) && YES_NO.get(x) === YES_NO.get(y));
+};
+
+/**
+ * The earlier answers a bot offers to reuse, each compared with the saved answer of the very same
+ * question
+ * @param {Array<{mine: boolean, text: string}>} messages - readChat's, the offer among the last ones
+ * @param {(question: string) => Promise<Map>} answersFor - The saved answers for a question, in the chat's contexts
+ * @returns {Promise<{pairs: Array<{question: string, given: string, saved: string|null, matched: string|null, same: boolean|null}>,
+ *   decision: 'yes'|'no'|null}>} same: null when the question is not saved word for word (matched: the
+ *   closest one, for the user); decision: yes when every answer is the saved one, no when one differs,
+ *   null when one is not saved (the user decides)
+ */
+export async function compareReusedAnswers(messages, answersFor) {
+  const offer = messages.findLastIndex((message) => !message.mine && isReuseOffer(message.text));
+  const lastMine = messages.slice(0, Math.max(offer, 0)).map((message) => message.mine).lastIndexOf(true);
+  const list = messages.slice(lastMine + 1, Math.max(offer, 0)).reverse().find((message) => !message.mine && summaryPairs(message.text).length > 0);
+  const pairs = await Promise.all(summaryPairs(list?.text ?? '').map(async ([question, given]) => {
+    const match = findBestMatch(question, await answersFor(question), { threshold: CHAT_QUESTION_THRESHOLD });
+    const exact = Boolean(match) && sameText(question, match.question);
+    return { question, given, saved: match ? answerText(match.answer) : null, matched: match?.question ?? null, same: exact ? sameAnswer(given, match.answer) : null };
+  }));
+  const decision = pairs.length === 0 ? null
+    : pairs.some(({ same }) => same === false) ? 'no'
+      : pairs.every(({ same }) => same === true) ? 'yes' : null;
+  return { pairs, decision };
+}
+
+/**
+ * The bot's button for the decision: «Да. Используем те же ответы» or «Нет. Отвечу заново»
+ * @param {'yes'|'no'|null} decision
+ * @param {string[]} options
+ * @returns {string|null}
+ */
+export const reuseOption = (decision, options) => (decision
+  ? options.find((option) => (decision === 'yes' ? /^(да|yes)(?!\p{L})/iu : /^(нет|no)(?!\p{L})/iu).test(option.trim())) ?? null
+  : null);
+
+/**
+ * @param {Awaited<ReturnType<typeof compareReusedAnswers>>} compared
+ * @returns {string} The comparison for the log, one line a question
+ */
+export function describeReuse({ pairs, decision }) {
+  const verdict = { yes: 'all are your saved answers: «Да» fits', no: 'some differ from your saved answers: «Нет» fits' }[decision] ??
+    'not every question is saved: you decide';
+  return [
+    `🔁 The bot offers your earlier answers (${pairs.length}): ${verdict}`,
+    ...pairs.map(({ question, given, saved, matched, same }) => {
+      const mark = same === true ? '✓' : same === false ? '✗' : '?';
+      const note = same === false ? ` (saved: ${saved})`
+        : same === null && matched ? ` (closest saved: «${matched.slice(0, 80)}» → ${String(saved).slice(0, 80)})`
+          : same === null ? ' (not saved)' : '';
+      return `   ${mark} ${question.slice(0, 120)}: ${given}${note}`;
+    }),
+  ].join('\n');
+}
+
 const ACKNOWLEDGEMENT = /^(понял[аи]?|поняла|ясно|хорошо|отлично|супер|здорово|спасибо|благодарю|принято|ok|ок)(?!\p{L})[^.!?]*[.!]\s+/iu;
 const LEAD_IN = /^(?:хорошо|отлично|понял[аи]?|поняла|ясно|спасибо|ок|ok)(?:\s*[,!.]\s*(?:а\s+)?|\s+а\s+)|^(?:а|теперь)\s+(?=\p{L})/iu;
 // «Расскажите, пожалуйста,» before the question itself («был ли…», «в каких проектах…»)
@@ -270,6 +339,10 @@ export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(t
  *   perfect: the saved question or template is the message itself (or a template is contained in it word for word)
  */
 export function knownReply(message, { templates, qaMap }) {
+  // The offer to reuse earlier answers is decided by comparing them (compareReusedAnswers)
+  if (isReuseOffer(message.text)) {
+    return null;
+  }
   // A bot's summary of the answers given is not a question to the user
   if (isSummary(message.text)) {
     return { answer: '', noReply: true, perfect: true, source: 'summary of the answers given', matched: '' };
@@ -509,7 +582,8 @@ export function learnedPairs(messages) {
     if (!asked || asked.mine || isReminder(asked.text)) {
       return;
     }
-    if (isSummary(asked.text)) {
+    // The choice whether to reuse earlier answers depends on them: not a saved answer
+    if (isSummary(asked.text) || isReuseOffer(asked.text)) {
       return;
     }
     const core = templateCore(asked.text, { sender: asked.title });

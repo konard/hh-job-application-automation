@@ -8,16 +8,19 @@
  * - anything else is prefilled when an answer is close, the chat is scrolled to its last message,
  *   and the run waits until the user has answered it (s/y moves on without it)
  * - what the user answers is learned (qa.lino), so the same question is perfect next time
+ * - a bot's offer to reuse the answers given before («Используем эти ответы?») is compared with
+ *   the saved answers; the user chooses, or with autoReuse «Да» is clicked when all are the saved
+ *   ones and «Нет» when one differs
  * - when the bot has nothing more to ask, the panel is closed and the run goes on
  *
  * @module instant-chat
  */
 
-import { chatContextTexts, isQuestion, knownReplyInContexts, learnedPairs, pendingMessages, readChat } from './chat-answers.mjs';
+import { chatContextTexts, compareReusedAnswers, describeReuse, isQuestion, isReuseOffer, knownReplyInContexts, learnedPairs, pendingMessages, readChat, reuseOption } from './chat-answers.mjs';
 import { normalizeQuestion } from './qa-database.mjs';
 import { askUser, isInteractive, withdrawPrompt } from './confirmations.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
-import { loadAnswerContexts } from './answer-contexts.mjs';
+import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
@@ -107,6 +110,7 @@ export async function sendChatAnswer(frame, messageId, { answer, option }) {
  * @param {Function} options.addOrUpdateQA
  * @param {Function} options.readTemplates - data/chat-templates.lino with contacts filled in
  * @param {boolean} options.autoSend - Send perfect matches (--auto-send-exact-answers)
+ * @param {boolean} [options.autoReuse] - Answer a bot's offer to reuse earlier answers by comparing them (--auto-reuse-answers)
  * @param {Function} options.closePanel - Closes the chat panel
  * @param {(vacancyId: string|null) => string[]} [options.vacancyContext] - The vacancy's card and
  *   description, for the answers' contexts (answer-contexts.mjs)
@@ -115,7 +119,7 @@ export async function sendChatAnswer(frame, messageId, { answer, option }) {
  * @returns {(vacancyId: string|null) => Promise<void>}
  */
 export function createInstantChat({
-  page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, closePanel, vacancyContext = () => [],
+  page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, autoReuse = false, closePanel, vacancyContext = () => [],
   firstMessageMs = 20000, nextMessageMs = 15000, log = console.log,
 }) {
   /**
@@ -195,10 +199,35 @@ export function createInstantChat({
       handled = last.id;
       await frame.evaluate(scrollToLastMessage).catch(() => {});
       const options = await frame.evaluate(readQuickReplies).catch(() => []);
+      const contexts = await loadAnswerContexts();
+      const known = [...vacancyContext(vacancyId), ...chatContextTexts(chat)];
+      if (isReuseOffer(last.text)) {
+        const inContexts = answersInContexts(readQADatabase, contexts);
+        const compared = await compareReusedAnswers(chat.messages, (question) => inContexts(question, known));
+        log(describeReuse(compared));
+        const option = reuseOption(compared.decision, options);
+        if (autoReuse && option) {
+          if (await sendChatAnswer(frame, last.id, { answer: option, option }).catch(() => false)) {
+            log(`✅ Chose: ${option}`);
+            quietSince = Date.now();
+            waitMs = nextMessageMs;
+            continue;
+          }
+          log('⚠️  The choice did not show in the chat: left for you');
+        }
+        if (!isInteractive()) {
+          return;
+        }
+        const choice = await waitForUser(frame, last.id);
+        if (choice !== 'withdrawn') {
+          return;
+        }
+        quietSince = Date.now();
+        waitMs = nextMessageMs;
+        continue;
+      }
       // A salary in the vacancy's currency: its card and description (read before the application) tell
-      const reply = await knownReplyInContexts(last, {
-        readTemplates, readQADatabase, contexts: await loadAnswerContexts(), known: [...vacancyContext(vacancyId), ...chatContextTexts(chat)],
-      });
+      const reply = await knownReplyInContexts(last, { readTemplates, readQADatabase, contexts, known });
       const asked = last.text.replace(/\s+/g, ' ').slice(0, 160);
       if (reply?.noReply) {
         log(`💬 ${last.title || 'Chat'}: ${asked} (no reply needed)`);

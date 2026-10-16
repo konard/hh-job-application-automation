@@ -172,6 +172,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
       addOrUpdateQA,
       readTemplates: withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), contacts).readQADatabase,
       autoSend: argv.autoSendExactAnswers,
+      autoReuse: argv.autoReuseAnswers,
       closePanel: () => closeChatPanel(commander),
       vacancyContext: (vacancyId) => [vacancyFilters.card?.(vacancyId) ?? '', vacancyFilters.description?.(vacancyId) ?? ''],
     }) : undefined,
@@ -183,7 +184,9 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     const intervalSeconds = argv.chatsIntervalMinutes * 60;
     const chatScriptPath = new URL('./answer-chats.mjs', import.meta.url).pathname;
     // Answering clears the rejections first; without it the rejections alone are cleared
-    const mode = argv.processChats ? ['--auto', ...(argv.autoSendExactAnswers ? ['--auto-send'] : [])] : ['--clear-rejections'];
+    const mode = argv.processChats
+      ? ['--auto', ...(argv.autoSendExactAnswers ? ['--auto-send'] : []), ...(argv.autoReuseAnswers ? ['--auto-reuse'] : [])]
+      : ['--clear-rejections'];
     chatProcess = spawn(process.execPath, [chatScriptPath, ...mode, `--poll=${intervalSeconds}`], {
       // Its own output straight into this log: through a pipe it came only when it exited
       stdio: ['ignore', 'inherit', 'inherit'],

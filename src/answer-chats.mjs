@@ -22,10 +22,10 @@ import { contractContacts, withContacts } from './contacts.mjs';
 import { askClaude, plainText, relatedAnswers } from './form-prefill.mjs';
 import { loadAnswerSources, prefillForms, waitForCaptcha } from './form-slots.mjs';
 import { rememberFormVacancy } from './assignments.mjs';
-import { loadAnswerContexts } from './answer-contexts.mjs';
+import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, chatContextTexts, knownReplyInContexts, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isRejection, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
@@ -47,6 +47,8 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
                          chats; nothing is typed in them (apply runs it by default every 2 hours). Between
                          those passes a rejection that shows in the chat window is read at once
   --no-live-rejections   Read the rejections only in those passes, not as they show in the chat window
+  --auto-reuse           Answer a recruiter bot's offer to reuse earlier answers («Используем эти ответы?»): «Да»
+                         when each is the saved answer, «Нет» when one differs; without it you choose
   --auto-send            Send an exact answer (the saved question word for word, or a bot's button that is the saved
                          answer); everything else is only typed in for you (apply passes --auto-send-exact-answers)
   --no-draft             Do not draft unknown answers with local Claude Code
@@ -59,7 +61,7 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, learnAll: false, auto: false, clearRejections: false, liveRejections: true, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, learnAll: false, auto: false, clearRejections: false, liveRejections: true, autoSend: false, autoReuse: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -71,6 +73,8 @@ function parseArgs(args) {
       parsed.learnAll = true;
     } else if (flag === '--auto-send') {
       parsed.autoSend = true;
+    } else if (flag === '--auto-reuse') {
+      parsed.autoReuse = true;
     } else if (flag === '--clear-rejections') {
       parsed.clearRejections = true;
       parsed.watch = true;
@@ -405,6 +409,23 @@ async function prefillChat(id, depth = 0) {
       .catch((error) => console.log(`⚠️  Questionnaire prefill failed: ${error.message}`));
   }
 
+  // A bot offers the answers given before: compared with the saved ones, the user chooses
+  if (isReuseOffer(last.text)) {
+    const inContexts = answersInContexts(sources.qaDatabase.readQADatabase, await loadAnswerContexts());
+    const compared = await compareReusedAnswers(chat.messages, (question) => inContexts(question, chatContextTexts(chat)));
+    console.log(describeReuse(compared));
+    const option = reuseOption(compared.decision, await page.evaluate(readQuickReplies).catch(() => []));
+    if (argv.autoReuse && option && depth < 20) {
+      if (await sendChatAnswer(page.mainFrame(), last.id, { answer: option, option }).catch(() => false)) {
+        console.log(`✅ Chose: ${option}`);
+        await sleep(3000);
+        return prefillChat(id, depth + 1);
+      }
+      console.log('⚠️  The choice did not show in the chat: left for you');
+    }
+    console.log('👉 Choose in the chat yourself');
+    return { id: last.id, replied: false, title: chat.vacancy };
+  }
   // A salary in the vacancy's currency: the chat tells, else the vacancy page (read only when it matters)
   let reply = await knownReplyInContexts(last, {
     readTemplates: templatesDb.readQADatabase, readQADatabase: sources.qaDatabase.readQADatabase,

@@ -110,6 +110,12 @@ export function createConfig() {
             'perfect matches of saved answers are sent (with --auto-send-exact-answers), others wait for you in the panel',
           default: getenv('ANSWER_INSTANT_CHATS', true),
         })
+        .option('auto-reuse-answers', {
+          type: 'boolean',
+          description: 'When a recruiter bot offers the answers given to it before («Используем эти ответы?»), choose «Да» ' +
+            'when each is your saved answer and «Нет» when one differs; by default they are compared and you choose',
+          default: getenv('AUTO_REUSE_ANSWERS', false),
+        })
         .option('single-tab', {
           type: 'boolean',
           description: 'Keep the automation browser to one tab: other tabs are closed when the run attaches, new ones as they open',

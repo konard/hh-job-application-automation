@@ -190,6 +190,7 @@ on its own:
 | `--confirm` | `answers`, `cover-letter`, `send` (default), `popup` (comma-separated), or `none` | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends a form with questions (full form or popup; forms with only a cover letter are sent right away), everything in the short popup form |
 | `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy (kept in `data/deferred-questions.lino`) |
 | `--auto-send-exact-answers` | `true` (default), `false` | Send forms whose every question autofill answered with the saved answer of the very same question, without asking |
+| `--auto-reuse-answers` | `false` (default), `true` | When a recruiter bot in a chat offers the answers you gave it before («Похоже, вы отвечали на часть вопросов… Используем эти ответы?»), each is compared with your saved answer and the comparison is printed (✓ the same, ✗ differs, ? not saved); by default you choose, with this «Да» is clicked when all are the same and «Нет» when one differs (the bot then asks again and the saved answers are given) |
 | `--skip-question` | text, repeatable | Skip vacancies that ask a matching question for now (see below) |
 | `--max-applications` | number, `0` = no limit | Stop after sending this many applications |
 
