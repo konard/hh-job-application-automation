@@ -4,7 +4,7 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import { answerShape, inferSalaryAnswer, learnSalaryPatterns, salaryQuestion } from '../src/salary-questions.mjs';
-import { answersInContexts, loadAnswerContexts } from '../src/answer-contexts.mjs';
+import { answersInContexts, loadAnswerContexts, plainSalaryAnswer } from '../src/answer-contexts.mjs';
 import { withContacts } from '../src/contacts.mjs';
 import { savedAnswersInContext } from '../src/vacancy-response.mjs';
 
@@ -36,6 +36,19 @@ describe('Salary questions by pattern', () => {
     assert.deepEqual(patterns.variants['net:ru'], ['От {{salary_net}} в месяц на руки.', 'От {{salary_net}} ежемесячно на руки.']);
     assert.deepEqual(patterns.variants['gross:ru'], ['От {{salary_gross}} в месяц до вычета {{salary_tax}} ({{salary_net}} на руки).']);
     assert.deepEqual(patterns.variants['net:en'], ['From {{salary_net}} net per month.']);
+  });
+
+  test('the wording weighed by its words, not by its placeholders\' names', () => {
+    // «{{salary_net}}» is not «net»: «в месяц» alone says less than «в месяц на руки»
+    assert.equal(answerShape('От {{salary_net}} в месяц.').detail, 2);
+    assert.equal(answerShape('От {{salary_net}} в месяц на руки.').detail, 3);
+  });
+
+  test('a plain salary answer typed before may give way to another wording', () => {
+    assert.equal(plainSalaryAnswer('От 450 000 ₽ в месяц.'), true);
+    assert.equal(plainSalaryAnswer('От 530 000 ₽ в месяц до вычета НДФЛ (450 000 ₽ на руки).'), true);
+    assert.equal(plainSalaryAnswer('От 450 000 ₽, обсуждаемо.'), false);
+    assert.equal(plainSalaryAnswer('Да.'), false);
   });
 
   test('net or gross, in Russian or English', () => {
@@ -71,13 +84,16 @@ describe('Salary questions by pattern', () => {
 
   test('in the currency of the question or the vacancy', async () => {
     const values = { salary_net: '450 000 ₽', salary_gross: '530 000 ₽', salary_net_usd: '$6 000', salary_gross_usd: '$7 100',
-      salary_net_eur: '5 500 €', salary_gross_eur: '6 500 €', salary_tax: 'НДФЛ' };
+      salary_net_usdt: '6 000 USDT', salary_gross_usdt: '7 100 USDT', salary_net_eur: '5 500 €', salary_gross_eur: '6 500 €', salary_tax: 'НДФЛ' };
     const qa = withContacts({ readQADatabase: async () => new Map(saved) }, values);
     const inContexts = answersInContexts(qa.readQADatabase, await loadAnswerContexts());
     const eur = 'Укажите ваши минимальные финансовые ожидания в месяц (Gross, EUR)?';
     assert.equal((await inContexts(eur, '')).get(eur), 'От 6 500 € в месяц до вычета налогов (5 500 € на руки).');
     const rub = 'Ожидаемый уровень дохода до вычета налогов?';
     assert.equal((await inContexts(rub, 'от 300 000 ₽')).get(rub), 'От 530 000 ₽ в месяц до вычета НДФЛ (450 000 ₽ на руки).');
+    const usdt = 'Напишите, пожалуйста, какие у вас зарплатные пожелания?';
+    assert.match((await inContexts(usdt, 'Lead Blockchain Engineer / Architect')).get(usdt), /^От 6 000 USDT /);
+    assert.match((await inContexts(usdt, 'Python, криптография')).get(usdt), /^От 450 000 ₽ /);
     const usd = 'From what salary do you consider offers?';
     assert.equal((await inContexts(usd, 'Paid in USD')).get(usd), 'From $6 000 net per month.');
     // A question saved word for word keeps its own answer

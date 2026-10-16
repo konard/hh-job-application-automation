@@ -28,9 +28,9 @@ const GROSS = /gross|гросс|брутто|до\s+(?:вычета|уплаты
 const NOT_EXPECTATION = /(?:прошл|предыдущ|текущ|последн)\p{L}*\s+(?:мест|работ|должност|зарплат|заработн|доход|оклад|з\s?\/\s?п|зп|компенсац|уров)(?!\p{L}*\s+ожидан)|сейчас\s+получа|получали|устраива|подходит|подойд|соглас(?:ны|на|ен|итесь|ились)|готов\p{L}*\s+ли|рассматрива\p{L}*\s+ли|входит\p{L}*\s+ли|входит\p{L}*\s+в\s+ваш|вписыва|в\s+рамках|через\s+год|зарплатн\p{L}*\s+карт|подсистем|выплат\p{L}*\s+(?:зарплат|заработн)|вариант\p{L}*\s+оформлени/iu;
 /** A year or an hour is not the month the answers are about */
 const OTHER_PERIOD = /в\s+год|годов\p{L}*\s+(?:доход|оклад|компенсац|зарплат)|за\s+год|annual|per\s+year|в\s+час|почасов|за\s+час|hourly|per\s+hour/iu;
-const PLACEHOLDER = /\{\{(salary_\w+?)(?:_usd|_eur)?\}\}/g;
+const PLACEHOLDER = /\{\{(salary_\w+?)(?:_usdt|_usd|_eur)?\}\}/g;
 /** What a plain salary answer says besides its sums */
-const PLAIN_WORDS = new Set(['от', 'в', 'месяц', 'ежемесячно', 'на', 'руки', 'до', 'вычета', 'from', 'net', 'gross', 'per', 'month', 'salary', 'before', 'taxes', 'a']);
+const PLAIN_WORDS = new Set(['от', 'в', 'месяц', 'ежемесячно', 'на', 'руки', 'до', 'вычета', 'ндфл', 'налогов', 'from', 'net', 'gross', 'per', 'month', 'salary', 'before', 'taxes', 'a']);
 
 const words = (text) => (String(text).toLowerCase().replace(/ё/g, 'е').match(/[\p{L}]{4,}/gu) ?? []);
 const stems = (text) => new Set(words(text).map((word) => word.slice(0, 6)));
@@ -47,7 +47,8 @@ export function answerShape(answer) {
     return null;
   }
   const template = text.replace(PLACEHOLDER, '{{$1}}').replace(/\s*\.?$/, '.');
-  const rest = template.replace(/\{\{\w+\}\}/g, ' ').toLowerCase().match(/[\p{L}]+/gu) ?? [];
+  const words = template.replace(/\{\{\w+\}\}/g, ' ');
+  const rest = words.toLowerCase().match(/[\p{L}]+/gu) ?? [];
   const gross = template.includes('{{salary_gross}}');
   const net = template.includes('{{salary_net}}');
   return {
@@ -55,8 +56,8 @@ export function answerShape(answer) {
     template,
     plain: rest.every((word) => PLAIN_WORDS.has(word)),
     // The most said: both sums, the month, net or gross named
-    detail: Number(gross) + Number(net) + Number(/месяц|ежемесячно|month/i.test(template)) +
-      Number(/на руки|net|до вычета|before/i.test(template)),
+    detail: Number(gross) + Number(net) + Number(/месяц|ежемесячно|month/i.test(words)) +
+      Number(/на руки|net|до вычета|before/i.test(words)),
   };
 }
 

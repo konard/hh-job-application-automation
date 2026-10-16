@@ -31,7 +31,13 @@ describe('The currency of an answer (data/answer-contexts.lino)', () => {
     assert.equal(hasWord('usd', 'платежи в USDT'), false);
     assert.equal(hasWord('руб.', 'рубрикатор'), false);
     assert.equal(hasWord('рубл', 'в рублях'), true);
-    assert.equal(currency('Ваши ожидания?', 'Работа с USDT-платежами, рубрикатор'), 'rub');
+    assert.equal(currency('Ваши ожидания?', 'Работа с USDT-платежами, рубрикатор'), 'usdt');
+    assert.equal(currency('Ваши ожидания?', 'Криптография, рубрикатор, definitions'), 'rub');
+  });
+
+  test('a blockchain vacancy is paid in USDT, unless the question names its currency', () => {
+    assert.equal(currency('Ваши зарплатные пожелания?', 'Lead Blockchain Engineer / Architect, от 5 000 $'), 'usdt');
+    assert.equal(currency('Ваши ожидания в USD?', 'Lead Blockchain Engineer'), 'usd');
   });
 
   test('the saved answer in either currency', () => {

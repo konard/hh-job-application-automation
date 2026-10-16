@@ -14,7 +14,7 @@ import { COMPANY_TAXES_FILE, exchangeRates, parseCompanyTaxes, salaryValues } fr
 import { inferSalaryAnswer, learnSalaryPatterns } from './salary-questions.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
-const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd', 'salary_gross_eur', 'salary_net_eur'];
+const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd', 'salary_gross_usdt', 'salary_net_usdt', 'salary_gross_eur', 'salary_net_eur'];
 
 /**
  * @param {string} filePath - data/contacts.lino
@@ -66,6 +66,9 @@ function contactPattern(key, value) {
   // A salary as people write it: «$6000», «6 000 $», «6000 долларов», «450000 рублей», «450 000 ₽»
   if (key.startsWith('salary_') && digits) {
     const amount = digits.replace(/\B(?=(\d{3})+$)/g, '[\\s\\u00a0]?');
+    if (key.endsWith('_usdt')) {
+      return new RegExp(`(?<!\\d)${amount}\\s?USDT(?!\\p{L})`, 'gu');
+    }
     if (key.endsWith('_eur')) {
       return new RegExp(`€\\s?${amount}(?!\\d)|(?<!\\d)${amount}\\s?(?:€|EUR(?!\\p{L})|евро)`, 'gu');
     }

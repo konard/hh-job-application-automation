@@ -1,3 +1,21 @@
+"currency: usdt"
+  usdt
+  usdc
+  blockchain
+  блокчейн
+  криптовалют
+  криптобирж
+  cryptocurrenc
+  stablecoin
+  стейблкоин
+  web3
+  "{{salary_net}}: {{salary_net_usdt}}"
+  "{{salary_gross}}: {{salary_gross_usdt}}"
+  "{{salary_net_usd}}: {{salary_net_usdt}}"
+  "{{salary_gross_usd}}: {{salary_gross_usdt}}"
+  "{{salary_net_eur}}: {{salary_net_usdt}}"
+  "{{salary_gross_eur}}: {{salary_gross_usdt}}"
+  "{{salary_tax}}: налогов"
 "currency: usd"
   $
   usd
@@ -8,6 +26,8 @@
   "{{salary_gross}}: {{salary_gross_usd}}"
   "{{salary_net_eur}}: {{salary_net_usd}}"
   "{{salary_gross_eur}}: {{salary_gross_usd}}"
+  "{{salary_net_usdt}}: {{salary_net_usd}}"
+  "{{salary_gross_usdt}}: {{salary_gross_usd}}"
   "{{salary_tax}}: налогов"
 "currency: eur"
   €
@@ -18,6 +38,8 @@
   "{{salary_gross}}: {{salary_gross_eur}}"
   "{{salary_net_usd}}: {{salary_net_eur}}"
   "{{salary_gross_usd}}: {{salary_gross_eur}}"
+  "{{salary_net_usdt}}: {{salary_net_eur}}"
+  "{{salary_gross_usdt}}: {{salary_gross_eur}}"
   "{{salary_tax}}: налогов"
 "currency: rub (default)"
   ₽
@@ -28,3 +50,5 @@
   "{{salary_gross_usd}}: {{salary_gross}}"
   "{{salary_net_eur}}: {{salary_net}}"
   "{{salary_gross_eur}}: {{salary_gross}}"
+  "{{salary_net_usdt}}: {{salary_net}}"
+  "{{salary_gross_usdt}}: {{salary_gross}}"

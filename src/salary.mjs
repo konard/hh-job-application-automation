@@ -9,6 +9,8 @@
  *   {{salary_gross_usd}} $7 500        what a contract with the user's own company pays: its taxes
  *                                      included (data/company-taxes.lino), else the ruble tax's
  *                                      brackets at the Central Bank's rate of the day
+ *   {{salary_net_usdt}}  6 000 USDT    the dollar sums paid in a stablecoin (blockchain vacancies)
+ *   {{salary_gross_usdt}} 7 500 USDT
  *   {{salary_net_eur}}   5 500 €
  *   {{salary_gross_eur}} 6 900 €       the same in euros
  *   {{salary_ndfl}}      13% / 15% / 18%   the tax rates the ruble gross goes through
@@ -87,6 +89,7 @@ export function companyGross(net, taxes, rubPerUnit, rubPer = {}) {
 
 const FOREIGN = [
   { suffix: 'usd', code: 'USD', write: (sum) => `$${sum}` },
+  { suffix: 'usdt', code: 'USD', write: (sum) => `${sum} USDT` },
   { suffix: 'eur', code: 'EUR', write: (sum) => `${sum} €` },
 ];
 
@@ -131,7 +134,7 @@ export function salaryValues({ netRub = 0, netUsd = 0, netEur = 0, usdRate = nul
     values.salary_gross = `${grouped(roundUp(gross / 12, 10000))} ₽`;
     values.salary_ndfl = rates.map((rate) => `${Math.round(rate * 100)}%`).join(' / ');
   }
-  const foreign = { usd: [netUsd, usdRate], eur: [netEur, eurRate] };
+  const foreign = { usd: [netUsd, usdRate], usdt: [netUsd, usdRate], eur: [netEur, eurRate] };
   for (const { suffix, write } of FOREIGN) {
     const [net, rate] = foreign[suffix];
     if (net > 0) {

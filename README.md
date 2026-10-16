@@ -408,6 +408,8 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   tax by the company's revenue a year (`15% up to 3000000000 VND`, the band's sum in any currency
   the Central Bank has), then `payout` (the tax on the profit paid to you); it is rounded up to
   100. Without that file the ruble tax's brackets are used at the Central Bank's rate.
+  A blockchain vacancy («blockchain», «блокчейн», «криптовалют», «web3», «USDT»…) is paid in
+  USDT: the dollar sums are typed as «6 000 USDT», unless the question names its own currency.
 - A salary question not saved word for word is answered by pattern (`src/salary-questions.mjs`),
   learned from `qa.lino`: it is a salary question by its words (built in, and those found in saved
   salary questions only), it asks for the gross by «gross», «брутто», «до вычета», and the answer

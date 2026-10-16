@@ -28,6 +28,8 @@ describe('Gross from net', () => {
       salary_ndfl: '13% / 15% / 18%',
       salary_net_usd: '$6 000',
       salary_gross_usd: '$7 100',
+      salary_net_usdt: '6 000 USDT',
+      salary_gross_usdt: '7 100 USDT',
       salary_tax: 'НДФЛ',
     });
   });

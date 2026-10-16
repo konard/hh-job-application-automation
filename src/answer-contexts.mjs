@@ -23,6 +23,7 @@
 
 import path from 'node:path';
 import { createQADatabase } from './qa-database.mjs';
+import { answerShape } from './salary-questions.mjs';
 
 export const ANSWER_CONTEXTS_FILE = path.join(process.cwd(), 'data', 'answer-contexts.lino');
 
@@ -141,6 +142,16 @@ export function sameButSums(a, b) {
   const bare = (text) => String(text ?? '').replace(SUM, '{{sum}}').replace(/(?<!\p{L})(?:ндфл|налог\p{L}*)(?!\p{L})/giu, '{{tax}}')
     .replace(/\s+/g, ' ').trim().toLowerCase();
   return new RegExp(SUM.source, 'iu').test(String(a)) && bare(a) === bare(b);
+}
+
+/**
+ * Whether a text is a plain salary answer: sums and the words of the user's salary wordings only
+ * («От 450 000 ₽ в месяц.»), so another plain wording may take its place
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function plainSalaryAnswer(text) {
+  return Boolean(answerShape(String(text ?? '').replace(SUM, '{{salary_net}}'))?.plain);
 }
 
 /**

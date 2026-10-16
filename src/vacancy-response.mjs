@@ -19,7 +19,7 @@ import {
   answerText,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
-import { answersInContexts, loadAnswerContexts, sameButSums, showsContext } from './answer-contexts.mjs';
+import { answersInContexts, loadAnswerContexts, plainSalaryAnswer, sameButSums, showsContext } from './answer-contexts.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
@@ -162,9 +162,11 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
     // Each fill operation is sequential to prevent concurrent typing
     for (const [question, data] of questionToAnswer) {
       try {
-        // hh.ru keeps the form's text: an answer typed before with a sum in another currency is typed again
+        // hh.ru keeps the form's text: an answer typed before with a sum in another currency is typed
+        // again, and so is a plain salary answer typed before in another wording
         const typed = data.type === 'textarea' ? data.currentValue ?? '' : '';
-        if (typed && typed !== answerText(data.answer).trim() && sameButSums(typed, answerText(data.answer))) {
+        const retype = sameButSums(typed, answerText(data.answer)) || (plainSalaryAnswer(typed) && plainSalaryAnswer(answerText(data.answer)));
+        if (typed && typed !== answerText(data.answer).trim() && retype) {
           await commander.evaluate({
             fn: (selector) => {
               const textarea = document.querySelector(selector);
