@@ -57,6 +57,7 @@ export function readChat() {
     })
     .filter((message) => message.text);
   return {
+    id: window.location.pathname.match(/\/chat\/(\d+)/)?.[1] ?? '',
     // «Вакансия / <name> / Перейти»: the middle line
     vacancy: clean(document.querySelector('[data-qa="chatik-header-sub-header"]')?.innerText)
       .split('\n').map((line) => line.trim()).filter((line) => line && !/^(вакансия|перейти)$/i.test(line))[0] ?? '',

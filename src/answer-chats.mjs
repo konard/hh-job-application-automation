@@ -34,6 +34,7 @@ import { createSkippedVacancies, isSkippedForGood, SKIP_REASONS } from './skippe
 import { createVacancyFilters, describeFilterMatch } from './vacancy-filters.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
 import { recordEvent } from './stats.mjs';
+import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
@@ -57,11 +58,12 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --learn-all            Read every chat already read, slowly (scrolled to and clicked in the list), in a window
                          of its own (port 9341), and save
                          the answers you sent that are not saved yet (qa.lino, chat-templates.lino); unread
-                         chats are left unread
+                         chats are left unread. Each chat read is kept in logs/chat-history.json
+  --relearn              Learn the answers again from logs/chat-history.json, without opening hh.ru
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, learnAll: false, auto: false, clearRejections: false, liveRejections: true, autoSend: false, autoReuse: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, learnAll: false, relearn: false, auto: false, clearRejections: false, liveRejections: true, autoSend: false, autoReuse: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -71,6 +73,8 @@ function parseArgs(args) {
       parsed.watch = true;
     } else if (flag === '--learn-all') {
       parsed.learnAll = true;
+    } else if (flag === '--relearn') {
+      parsed.relearn = true;
     } else if (flag === '--auto-send') {
       parsed.autoSend = true;
     } else if (flag === '--auto-reuse') {
@@ -95,7 +99,7 @@ function parseArgs(args) {
       parsed.chats.push(args[i].match(/(\d{6,})/)?.[1] ?? args[i]);
     }
   }
-  if (parsed.chats.length === 0 && !parsed.watch && !parsed.learnAll) {
+  if (parsed.chats.length === 0 && !parsed.watch && !parsed.learnAll && !parsed.relearn) {
     console.log(USAGE);
     process.exit(1);
   }
@@ -252,6 +256,8 @@ const sources = await loadAnswerSources();
 const templatesFile = createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino'));
 const templatesDb = withContacts(templatesFile, sources.contacts);
 const handledForms = new Set();
+// Every chat read, kept: the answers can be learned again from it, and a template gets one of the user's replies
+const chatHistory = createChatHistory();
 const vacancyPages = new Map();
 /** The vacancy page's pay, title and description, read once a run */
 async function vacancyTexts(url) {
@@ -288,6 +294,19 @@ async function leftAloneBecause(chat) {
   return match ? `filtered out: ${describeFilterMatch(match)}` : null;
 }
 
+const THIRD_PARTY_CONTACT = /\+?\d[\d\s()-]{8,}\d|t\.me\/|@[A-Za-z]\w{3,}/;
+
+// The answers learned again from the chats kept, without a browser
+if (argv.relearn) {
+  const history = await chatHistory.read();
+  const before = sources.qaMap.size;
+  for (const chat of Object.values(history)) {
+    await learn(chat);
+  }
+  console.log(`📚 Learned again from ${Object.keys(history).length} chat(s) kept in logs/chat-history.json: ${sources.qaMap.size - before} new answer(s) in qa.lino`);
+  process.exit(0);
+}
+
 let session;
 let page;
 let human;
@@ -309,11 +328,10 @@ console.log(copied > 0
   : '⚠️  The automation browser is not running: log in to hh.ru in the chat slot if needed');
 enableConfirmations({ steps: [], onStop: () => process.exit(0), input: process.stdin });
 
-const THIRD_PARTY_CONTACT = /\+?\d[\d\s()-]{8,}\d|t\.me\/|@[A-Za-z]\w{3,}/;
-
 /** Save what the user has answered in the chat: questions to qa.lino, template messages to chat-templates.lino */
-async function learn(messages) {
-  const { questions, templates } = learnedPairs(messages);
+async function learn(chat) {
+  await chatHistory.record(chat).catch(() => {});
+  const { questions, templates } = learnedPairs(chat.messages);
   for (const [question, answer] of questions) {
     if (!sources.qaMap.has(question)) {
       await sources.qaDatabase.addOrUpdateQA(question, answer);
@@ -375,7 +393,7 @@ async function prefillChat(id, depth = 0) {
   }
   await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
   const chat = await page.evaluate(readChat);
-  await learn(chat.messages);
+  await learn(chat);
   const pending = pendingMessages(chat.messages);
   if (pending.length === 0) {
     console.log(`💬 Chat ${id} (${chat.vacancy}): nothing waits for an answer`);
@@ -431,6 +449,8 @@ async function prefillChat(id, depth = 0) {
     readTemplates: templatesDb.readQADatabase, readQADatabase: sources.qaDatabase.readQADatabase,
     contexts: await loadAnswerContexts(), known: chatContextTexts(chat), vacancyTexts: () => vacancyTexts(chat.vacancyUrl),
   });
+  // A template message: one of the replies the user has given to it
+  reply = varyReply(reply, replyVariants(await chatHistory.read(), await templatesDb.readQADatabase()));
   if (!reply && argv.draft) {
     console.log('🤖 Drafting the reply with local Claude Code from the resume and qa.lino...');
     const drafted = await askClaude(chatDraftPrompt({
@@ -481,7 +501,7 @@ async function waitForSend(answeredId) {
       const index = chat?.messages.findIndex((message) => message.id === answeredId) ?? -1;
       if (index >= 0 && chat.messages.slice(index + 1).some((message) => message.mine)) {
         sent = true;
-        await learn(chat.messages);
+        await learn(chat);
         withdrawPrompt();
       }
     }
@@ -506,11 +526,13 @@ async function learnFromAllChats() {
   // Chats read before and unchanged since (the same last line) are not opened again
   const readFile = path.join(process.cwd(), 'logs', 'chats-learned.json');
   const readBefore = await fs.readFile(readFile, 'utf8').then(JSON.parse, () => ({}));
+  const kept = await chatHistory.read();
   let opened = 0;
   console.log('📚 Going down the chat list for answers not saved yet (unread chats are left unread; ' +
     'chats with only the application, «Отклик на вакансию», are not opened)');
   await walkChatList(async (chat) => {
-    if (chat.unread || /^отклик\s+на\s+вакансию$/i.test(chat.last.trim()) || readBefore[chat.id] === chat.last) {
+    // A chat read before this history was kept is read once more, to keep it
+    if (chat.unread || /^отклик\s+на\s+вакансию$/i.test(chat.last.trim()) || (readBefore[chat.id] === chat.last && kept[chat.id])) {
       return false;
     }
     await openChat(chat.id);
@@ -520,7 +542,7 @@ async function learnFromAllChats() {
     await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
     const read = await page.evaluate(readChat).catch(() => null);
     if (read) {
-      await learn(read.messages);
+      await learn({ ...read, id: read.id || chat.id });
       readBefore[chat.id] = chat.last;
       await fs.mkdir(path.dirname(readFile), { recursive: true });
       await fs.writeFile(readFile, JSON.stringify(readBefore));
@@ -588,7 +610,7 @@ function learnAsTheUserAnswers() {
     const key = `${chat?.id}\n${chat?.messages?.at(-1)?.id}`;
     if (chat?.messages?.length && key !== last) {
       last = key;
-      await learn(chat.messages).catch((error) => console.log(`⚠️  Not learned from the chat: ${error.message}`));
+      await learn(chat).catch((error) => console.log(`⚠️  Not learned from the chat: ${error.message}`));
     }
   }, 5000);
   timer.unref();

@@ -468,7 +468,9 @@ Chats open in their own browser slot (port 9340), logged in with the hh.ru sessi
 browser. For the message waiting for an answer the reply is typed into the message field, never sent:
 
 - a template message (the same text from many companies, greeting and signature aside) gets its saved
-  reply from `data/chat-templates.lino`; a rejection gets the saved question about its reason (`Отказ`),
+  reply from `data/chat-templates.lino`, or one of the replies you have given to it before, picked at
+  random (those you used more often more likely; a reply to someone by name or a long one of its own
+  is not repeated elsewhere); a rejection gets the saved question about its reason (`Отказ`),
   a closed chat is only read;
 - a question gets the saved answer of a close question in `data/qa.lino`, otherwise local Claude Code
   drafts the reply from the chat, the resume and saved answers;
@@ -490,6 +492,11 @@ word next time, whatever the bot says first; hh.ru's AI assistant's summary («�
 кандидатом я узнал: …») is learned too and needs no reply. A check waits while you are typing or
 moving around in that window. `bun run answer-chats -- --learn-all` reads the chats you answered
 before, slowly, in a window of its own (port 9341).
+
+Every chat read (in the chat window, the chat panel after an application, or `--learn-all`) is kept
+as it is in `logs/chat-history.json` (personal, not committed), its new messages added as they come;
+`--learn-all` reads once more the chats read before it was kept. `bun run answer-chats -- --relearn`
+learns the answers again from it without opening hh.ru.
 
 ### Sync Work Experience with LinkedIn
 

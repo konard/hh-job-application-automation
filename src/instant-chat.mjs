@@ -21,6 +21,7 @@ import { normalizeQuestion } from './qa-database.mjs';
 import { askUser, isInteractive, withdrawPrompt } from './confirmations.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
+import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
@@ -119,7 +120,7 @@ export async function sendChatAnswer(frame, messageId, { answer, option }) {
  * @returns {(vacancyId: string|null) => Promise<void>}
  */
 export function createInstantChat({
-  page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, autoReuse = false, closePanel, vacancyContext = () => [],
+  page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, autoReuse = false, closePanel, chatHistory = createChatHistory(), vacancyContext = () => [],
   firstMessageMs = 20000, nextMessageMs = 15000, log = console.log,
 }) {
   /**
@@ -144,6 +145,8 @@ export function createInstantChat({
 
   /** Questions the user answered in the chat go to qa.lino */
   async function learn(chat) {
+    // Kept as it is: the answers can be learned again from it (answer-chats --relearn)
+    await chatHistory.record(chat).catch(() => {});
     const known = await readQADatabase();
     for (const [question, answer] of learnedPairs(chat.messages).questions) {
       if (!known.has(question)) {
@@ -227,7 +230,9 @@ export function createInstantChat({
         continue;
       }
       // A salary in the vacancy's currency: its card and description (read before the application) tell
-      const reply = await knownReplyInContexts(last, { readTemplates, readQADatabase, contexts, known });
+      // A template message: one of the replies the user has given to it
+      const reply = varyReply(await knownReplyInContexts(last, { readTemplates, readQADatabase, contexts, known }),
+        replyVariants(await chatHistory.read(), await readTemplates()));
       const asked = last.text.replace(/\s+/g, ' ').slice(0, 160);
       if (reply?.noReply) {
         log(`💬 ${last.title || 'Chat'}: ${asked} (no reply needed)`);
