@@ -10,7 +10,7 @@
  */
 
 import { createQADatabase } from './qa-database.mjs';
-import { exchangeRates, salaryValues } from './salary.mjs';
+import { COMPANY_TAXES_FILE, exchangeRates, parseCompanyTaxes, salaryValues } from './salary.mjs';
 import { inferSalaryAnswer, learnSalaryPatterns } from './salary-questions.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
@@ -20,18 +20,20 @@ const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 's
  * @param {string} filePath - data/contacts.lino
  * @returns {Promise<Object<string, string|string[]>>}
  */
-export async function loadContacts(filePath, { rates = exchangeRates } = {}) {
+export async function loadContacts(filePath, { rates = exchangeRates, companyTaxesFile = COMPANY_TAXES_FILE } = {}) {
   const entries = await createQADatabase(filePath).readQADatabase();
   const contacts = Object.fromEntries([...entries].map(([key, value]) => [key, Array.isArray(value) ? value : String(value)]));
   // Salary answers ({{salary_gross}}, …) from the net baselines in rubles, dollars and euros (salary.mjs)
   const amount = (key) => Number(String(contacts[key] ?? '').replace(/\D/g, ''));
   const [netRub, netUsd, netEur] = [amount('salary_net_rub'), amount('salary_net_usd'), amount('salary_net_eur')];
   if (netRub > 0 || netUsd > 0 || netEur > 0) {
-    const { usd, eur } = netUsd > 0 || netEur > 0 ? await rates() : {};
+    const { usd, eur, rubPer } = netUsd > 0 || netEur > 0 ? await rates() : {};
+    // A contract in dollars or euros pays the user's company: its taxes are in the gross
+    const company = parseCompanyTaxes(await createQADatabase(companyTaxesFile).readQADatabase().catch(() => new Map()));
     if ((netUsd > 0 && !usd) || (netEur > 0 && !eur)) {
       console.log('⚠️  No dollar or euro rate (Central Bank unreachable, none cached): gross in that currency is left as an open question');
     }
-    Object.assign(contacts, salaryValues({ netRub, netUsd, netEur, usdRate: usd, eurRate: eur }));
+    Object.assign(contacts, salaryValues({ netRub, netUsd, netEur, usdRate: usd, eurRate: eur, company, rubPer }));
   }
   return contacts;
 }

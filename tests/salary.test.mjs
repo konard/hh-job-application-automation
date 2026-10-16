@@ -3,7 +3,7 @@
  * placeholders, and question templates («pattern: gross») in saved answers
  */
 import { describe, test, assert } from 'test-anywhere';
-import { annualGrossFromNet, salaryValues } from '../src/salary.mjs';
+import { annualGrossFromNet, companyGross, parseCompanyTaxes, salaryValues } from '../src/salary.mjs';
 import { findBestMatch } from '../src/qa-database.mjs';
 import { expandContacts, withContacts } from '../src/contacts.mjs';
 
@@ -36,6 +36,23 @@ describe('Gross from net', () => {
     const values = salaryValues({ netRub: 450000, netEur: 5500, eurRate: 93.7693 });
     assert.equal(values.salary_net_eur, '5 500 €');
     assert.equal(values.salary_gross_eur, '6 500 €');
+  });
+
+  test('a contract with the user\'s company: its profit and payout taxes in the gross, by its revenue band', () => {
+    const company = parseCompanyTaxes(new Map([
+      ['profit', ['15% up to 3000000000 VND', '17% up to 50000000000 VND', '20%']],
+      ['payout', '5%'],
+    ]));
+    assert.deepEqual(company.profit.map(({ rate, code }) => [rate, code]), [[0.15, 'VND'], [0.17, 'VND'], [0.2, null]]);
+    const rubPer = { VND: 0.00326652 };
+    // 5 500 / (0.85 × 0.95) = 6 811: 82 000 € a year is under 3 billion dong
+    assert.equal(Math.round(companyGross(5500, company, 93.7693, rubPer)), 6811);
+    assert.equal(salaryValues({ netEur: 5500, eurRate: 93.7693, company, rubPer }).salary_gross_eur, '6 900 €');
+    assert.equal(salaryValues({ netUsd: 6000, usdRate: 83.76, company, rubPer }).salary_gross_usd, '$7 500');
+    // Over 3 billion dong a year: the next band
+    assert.equal(Math.round(companyGross(10000, company, 93.7693, rubPer)), Math.round(10000 / (0.83 * 0.95)));
+    // No rate for the band's currency: the ruble tax as before
+    assert.equal(salaryValues({ netEur: 5500, eurRate: 93.7693, company }).salary_gross_eur, '6 500 €');
   });
 
   test('no rate: the dollar gross is left out', () => {

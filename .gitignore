@@ -157,6 +157,8 @@ ignored-vacancy-ids.txt
 data/resume/
 # Contact overrides for prefilled forms (personal data)
 data/profile.lino
+# The taxes of the user's own company, what a gross in dollars or euros includes (personal data)
+data/company-taxes.lino
 
 # Formal AI caches (formal-ai chat run in the repository)
 data/wikidata-cache/

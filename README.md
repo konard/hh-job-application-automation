@@ -402,8 +402,12 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   vacancy page, read only when the reply depends on it) and forms prefilled in slots. Sums you type
   («$6000», «6000 USDT», «450 000 ₽») are saved as placeholders, so they follow the vacancy too.
   Euros work the same way («€», «EUR», «евро»): the minimum is `salary_net_eur` in
-  `data/contacts.lino`, the gross is counted from it at the Central Bank's rate, and «до вычета
-  НДФЛ» becomes «до вычета налогов» in dollars and euros.
+  `data/contacts.lino`, and «до вычета НДФЛ» becomes «до вычета налогов» in dollars and euros.
+  A gross in dollars or euros is what a contract pays your own company so that you get the net:
+  the company's taxes are set in `data/company-taxes.lino` (personal, not committed): the profit
+  tax by the company's revenue a year (`15% up to 3000000000 VND`, the band's sum in any currency
+  the Central Bank has), then `payout` (the tax on the profit paid to you); it is rounded up to
+  100. Without that file the ruble tax's brackets are used at the Central Bank's rate.
 - A salary question not saved word for word is answered by pattern (`src/salary-questions.mjs`),
   learned from `qa.lino`: it is a salary question by its words (built in, and those found in saved
   salary questions only), it asks for the gross by «gross», «брутто», «до вычета», and the answer
