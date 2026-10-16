@@ -215,14 +215,26 @@ async function showUnreadOnly(want) {
   return { was, is };
 }
 
-/** The chat page opened (once a pass, as a person opens it), its list shown; false behind a captcha */
+/**
+ * The chat page opened (once a pass, as a person opens it), its list shown; false behind a captcha.
+ * hh.ru sometimes stops sending the page halfway: one that shows neither chats nor the list's
+ * filter is opened again, up to 3 times
+ */
 async function openChatPage() {
   if (page.isClosed()) {
     console.log('🪟 The chat window was closed: opening it again');
     await openChatTab();
   }
-  await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-  await page.waitForSelector('[data-qa^="chatik-open-chat-"]', { timeout: 20000 }).catch(() => {});
+  for (let attempt = 1; ; attempt += 1) {
+    await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    const shown = await page.waitForSelector('[data-qa^="chatik-open-chat-"], input[data-qa="chatik-checkbox-only-unread"]', { state: 'attached', timeout: 20000 })
+      .then(() => true, () => false);
+    if (shown || attempt >= 3 || !await waitForCaptcha(page, console.log)) {
+      break;
+    }
+    console.log(`🔄 The chat page did not load (attempt ${attempt} of 3): opening it again`);
+    await humanPause(5000, 10000);
+  }
   return waitForCaptcha(page, console.log);
 }
 
