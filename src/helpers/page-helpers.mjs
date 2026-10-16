@@ -56,7 +56,7 @@ export async function isResponseSubmitted(commander) {
   const { value } = await commander.safeEvaluate({
     fn: (texts) => {
       // Normalize whitespace (including nbsp) for matching
-      const bodyText = document.body.textContent.replace(/\s+/g, ' ');
+      const bodyText = (document.body?.textContent ?? '').replace(/\s+/g, ' ');
       return texts.some((text) => bodyText.includes(text));
     },
     args: [RESPONSE_SENT_TEXTS],

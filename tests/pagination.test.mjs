@@ -128,3 +128,29 @@ describe('Pagination Logic', () => {
     assert.equal(nextPageNumber, 2, 'Next page should be 2 when current index is 0');
   });
 });
+
+describe('A list page that never loads', () => {
+  test('a blank page is reloaded, a drawn one is waited on', async () => {
+    const { waitForButtonsAfterNavigation } = await import('../src/vacancies.mjs');
+    const visits = [];
+    let blank = true;
+    const commander = {
+      getUrl: () => 'https://hh.ru/search/vacancy?resume=1',
+      shouldAbort: () => false,
+      evaluate: async ({ fn }) => (fn.name === 'readPageBlank' ? blank : null),
+      wait: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return {};
+      },
+      goto: async ({ url }) => visits.push(url),
+      findByText: async () => 'a',
+      count: async () => (blank ? 0 : 1),
+    };
+    const result = await waitForButtonsAfterNavigation({ commander, pageClosedByUser: () => false, blankReload: { first: 20, most: 100 } });
+    assert.equal(result.status, 'navigation_detected');
+    assert.deepEqual(visits, ['https://hh.ru/search/vacancy?resume=1']);
+    blank = false;
+    assert.equal((await waitForButtonsAfterNavigation({ commander, pageClosedByUser: () => false, blankReload: { first: 20, most: 100 } })).status, 'buttons_found');
+    assert.equal(visits.length, 1);
+  });
+});

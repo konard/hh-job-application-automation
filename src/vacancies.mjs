@@ -932,11 +932,21 @@ async function findAndClickNextPage({ commander }) {
   }
 }
 
+/** Runs in the page: it shows nothing, still loading or not drawn (hh.ru sometimes hangs so) */
+export function readPageBlank() {
+  return (document.body?.innerText ?? '').trim().length < 50;
+}
+
+/** How long a blank page is left before it is reloaded: 20 s, then twice as long each time, up to 10 min */
+const BLANK_RELOAD = { first: 20000, most: 600000 };
+let blankReloads = 0;
+
 /**
  * Wait for buttons to appear after page navigation
- * Stops waiting immediately if navigation is detected (commander.wait is abortable)
+ * Stops waiting immediately if navigation is detected (commander.wait is abortable). A page that
+ * stays blank is reloaded.
  */
-export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser }) {
+export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser, blankReload = BLANK_RELOAD }) {
   console.log('💡 No more "Откликнуться" buttons on this page.');
 
   const paginationResult = await findAndClickNextPage({ commander });
@@ -955,10 +965,26 @@ export async function waitForButtonsAfterNavigation({ commander, pageClosedByUse
 
   const startUrl = commander.getUrl();
   const isNavigating = () => commander.shouldAbort() || commander.navigationManager?.isNavigating();
+  const blankFor = Math.min(blankReload.first * 2 ** blankReloads, blankReload.most);
+  let blankSince = null;
 
   while (true) {
     if (pageClosedByUser()) {
       return { status: 'page_closed' };
+    }
+
+    const blank = await commander.evaluate({ fn: readPageBlank }).catch(() => false);
+    blankSince = blank ? (blankSince ?? Date.now()) : null;
+    if (!blank) {
+      blankReloads = 0;
+    }
+    if (blank && Date.now() - blankSince >= blankFor) {
+      blankReloads += 1;
+      console.log(`🔄 The page stayed blank for ${Math.round(blankFor / 1000)} s (it did not load): reloading it`);
+      await commander.goto({ url: startUrl, waitForStableUrlBefore: false }).catch((error) => {
+        console.log(`⚠️  The reload failed: ${error.message.split('\n')[0]}`);
+      });
+      return { status: 'navigation_detected' };
     }
 
     const waitResult = await commander.wait({ ms: 2000, reason: 'checking for manual navigation or new buttons' });
