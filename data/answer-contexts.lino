@@ -6,6 +6,19 @@
   в валюте
   "{{salary_net}}: {{salary_net_usd}}"
   "{{salary_gross}}: {{salary_gross_usd}}"
+  "{{salary_net_eur}}: {{salary_net_usd}}"
+  "{{salary_gross_eur}}: {{salary_gross_usd}}"
+  "{{salary_tax}}: налогов"
+"currency: eur"
+  €
+  eur
+  euro
+  евро
+  "{{salary_net}}: {{salary_net_eur}}"
+  "{{salary_gross}}: {{salary_gross_eur}}"
+  "{{salary_net_usd}}: {{salary_net_eur}}"
+  "{{salary_gross_usd}}: {{salary_gross_eur}}"
+  "{{salary_tax}}: налогов"
 "currency: rub (default)"
   ₽
   rub
@@ -13,3 +26,5 @@
   рубл
   "{{salary_net_usd}}: {{salary_net}}"
   "{{salary_gross_usd}}: {{salary_gross}}"
+  "{{salary_net_eur}}: {{salary_net}}"
+  "{{salary_gross_eur}}: {{salary_gross}}"

@@ -10,27 +10,28 @@
  */
 
 import { createQADatabase } from './qa-database.mjs';
-import { salaryValues, usdRate } from './salary.mjs';
+import { exchangeRates, salaryValues } from './salary.mjs';
+import { inferSalaryAnswer, learnSalaryPatterns } from './salary-questions.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
-const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd'];
+const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd', 'salary_gross_eur', 'salary_net_eur'];
 
 /**
  * @param {string} filePath - data/contacts.lino
  * @returns {Promise<Object<string, string|string[]>>}
  */
-export async function loadContacts(filePath, { rate = usdRate } = {}) {
+export async function loadContacts(filePath, { rates = exchangeRates } = {}) {
   const entries = await createQADatabase(filePath).readQADatabase();
   const contacts = Object.fromEntries([...entries].map(([key, value]) => [key, Array.isArray(value) ? value : String(value)]));
-  // Salary answers ({{salary_gross}}, …) from the net baselines in rubles and dollars (salary.mjs)
+  // Salary answers ({{salary_gross}}, …) from the net baselines in rubles, dollars and euros (salary.mjs)
   const amount = (key) => Number(String(contacts[key] ?? '').replace(/\D/g, ''));
-  const [netRub, netUsd] = [amount('salary_net_rub'), amount('salary_net_usd')];
-  if (netRub > 0 || netUsd > 0) {
-    const usdRub = netUsd > 0 ? await rate() : null;
-    if (netUsd > 0 && !usdRub) {
-      console.log('⚠️  No dollar rate (Central Bank unreachable, none cached): gross in dollars is left as an open question');
+  const [netRub, netUsd, netEur] = [amount('salary_net_rub'), amount('salary_net_usd'), amount('salary_net_eur')];
+  if (netRub > 0 || netUsd > 0 || netEur > 0) {
+    const { usd, eur } = netUsd > 0 || netEur > 0 ? await rates() : {};
+    if ((netUsd > 0 && !usd) || (netEur > 0 && !eur)) {
+      console.log('⚠️  No dollar or euro rate (Central Bank unreachable, none cached): gross in that currency is left as an open question');
     }
-    Object.assign(contacts, salaryValues({ netRub, netUsd, usdRate: usdRub }));
+    Object.assign(contacts, salaryValues({ netRub, netUsd, netEur, usdRate: usd, eurRate: eur }));
   }
   return contacts;
 }
@@ -63,12 +64,17 @@ function contactPattern(key, value) {
   // A salary as people write it: «$6000», «6 000 $», «6000 долларов», «450000 рублей», «450 000 ₽»
   if (key.startsWith('salary_') && digits) {
     const amount = digits.replace(/\B(?=(\d{3})+$)/g, '[\\s\\u00a0]?');
+    if (key.endsWith('_eur')) {
+      return new RegExp(`€\\s?${amount}(?!\\d)|(?<!\\d)${amount}\\s?(?:€|EUR(?!\\p{L})|евро)`, 'gu');
+    }
     return key.endsWith('_usd')
       ? new RegExp(`\\$\\s?${amount}(?!\\d)|(?<!\\d)${amount}\\s?(?:\\$|USDT?(?!\\p{L})|долл\\p{L}*)`, 'gu')
       : new RegExp(`(?<!\\d)${amount}\\s?(?:₽|руб\\p{L}*\\.?|р\\.)`, 'gu');
   }
   return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
 }
+
+const GROSS_TAX = /(до вычета )(?:НДФЛ|налогов)/g;
 
 /**
  * Write contact values in an answer as placeholders
@@ -77,9 +83,11 @@ function contactPattern(key, value) {
  * @returns {string}
  */
 export function contractContacts(text, contacts) {
-  return CONTRACTED.filter((key) => typeof contacts[key] === 'string' && contacts[key])
+  const contracted = CONTRACTED.filter((key) => typeof contacts[key] === 'string' && contacts[key])
     .sort((a, b) => contacts[b].length - contacts[a].length)
     .reduce((result, key) => result.replace(contactPattern(key, contacts[key]), `{{${key}}}`), String(text));
+  // The tax a gross is before follows the currency: «НДФЛ» in rubles, «налогов» in another
+  return /\{\{salary_gross/.test(contracted) ? contracted.replace(GROSS_TAX, '$1{{salary_tax}}') : contracted;
 }
 
 /**
@@ -116,11 +124,20 @@ export function withContacts(db, contacts) {
   return {
     ...db,
     /**
-     * @param {{contexts?: Array}} [options] - The answers in these contexts (answer-contexts.mjs):
-     *   e.g. salaries in dollars, whichever currency the answer was saved in
+     * @param {{contexts?: Array, questions?: string[]}} [options] - contexts: the answers in these
+     *   contexts (answer-contexts.mjs), e.g. salaries in dollars, whichever currency the answer was
+     *   saved in; questions: also these questions' answers by pattern when they are not saved word
+     *   for word (salary-questions.mjs)
      */
-    async readQADatabase({ contexts } = {}) {
+    async readQADatabase({ contexts, questions = [] } = {}) {
       const raw = await db.readQADatabase();
+      const patterns = questions.some((question) => !raw.has(question)) ? learnSalaryPatterns(raw) : null;
+      for (const question of questions.filter((item) => !raw.has(item))) {
+        const answer = inferSalaryAnswer(question, patterns);
+        if (answer) {
+          raw.set(question, answer);
+        }
+      }
       const values = contexts ? contactsInContexts(contacts, contexts) : contacts;
       // An answer with a placeholder that has no value (e.g. no dollar rate) is not typed as is
       return new Map([...raw].map(([question, answer]) => [question, expandAnswer(answer, values)])

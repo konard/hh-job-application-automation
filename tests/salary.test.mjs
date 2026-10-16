@@ -28,7 +28,14 @@ describe('Gross from net', () => {
       salary_ndfl: '13% / 15% / 18%',
       salary_net_usd: '$6 000',
       salary_gross_usd: '$7 100',
+      salary_tax: 'НДФЛ',
     });
+  });
+
+  test('euros from their own baseline, gross at the euro rate', () => {
+    const values = salaryValues({ netRub: 450000, netEur: 5500, eurRate: 93.7693 });
+    assert.equal(values.salary_net_eur, '5 500 €');
+    assert.equal(values.salary_gross_eur, '6 500 €');
   });
 
   test('no rate: the dollar gross is left out', () => {
@@ -71,6 +78,14 @@ describe('Salary written back as placeholders', () => {
     assert.equal(contractContacts('От 6000 долларов на руки.', contacts), 'От {{salary_net_usd}} на руки.');
     assert.equal(contractContacts('От $6000, от 450000 рублей, 530 000 ₽', contacts), 'От {{salary_net_usd}}, от {{salary_net}}, {{salary_gross}}');
     assert.equal(contractContacts('Опыт 6000 часов, 1450000 рублей', contacts), 'Опыт 6000 часов, 1450000 рублей');
+  });
+
+  test('euros, and the tax of a gross sum', async () => {
+    const { contractContacts } = await import('../src/contacts.mjs');
+    const contacts = { salary_net: '450 000 ₽', salary_gross: '530 000 ₽', salary_net_eur: '5 500 €', salary_gross_eur: '6 500 €' };
+    assert.equal(contractContacts('От 5500 евро на руки.', contacts), 'От {{salary_net_eur}} на руки.');
+    assert.equal(contractContacts('От 530 000 ₽ до вычета НДФЛ (450 000 ₽ на руки).', contacts), 'От {{salary_gross}} до вычета {{salary_tax}} ({{salary_net}} на руки).');
+    assert.equal(contractContacts('До вычета налогов не считал.', contacts), 'До вычета налогов не считал.');
   });
 });
 

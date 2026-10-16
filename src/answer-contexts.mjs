@@ -99,20 +99,30 @@ export function showsContext(contexts, texts) {
 }
 
 /**
- * The saved answers in the contexts of a question, read once for each set of contexts
- * @param {Function} readQADatabase - withContacts' (contacts.mjs): takes {contexts}
+ * The saved answers in the contexts of a question, read once for each set of contexts; a question
+ * not saved word for word also has its answer by pattern when it has one (a salary question,
+ * salary-questions.mjs), under the question itself
+ * @param {Function} readQADatabase - withContacts' (contacts.mjs): takes {contexts, questions}
  * @param {Array} contexts - parseAnswerContexts
  * @returns {(question: string, known?: string|string[]) => Promise<Map>}
  */
 export function answersInContexts(readQADatabase, contexts) {
   const maps = new Map();
-  return (question, known) => {
-    const chosen = chooseContexts(contexts, question, known);
-    const key = chosen.map(({ group, name }) => `${group}: ${name}`).join('\n');
+  const read = (key, options) => {
     if (!maps.has(key)) {
-      maps.set(key, readQADatabase({ contexts: chosen }));
+      maps.set(key, readQADatabase(options));
     }
     return maps.get(key);
+  };
+  return async (question, known) => {
+    const chosen = chooseContexts(contexts, question, known);
+    const key = chosen.map(({ group, name }) => `${group}: ${name}`).join('\n');
+    const saved = await read(key, { contexts: chosen });
+    if (saved.has(question) || !String(question ?? '').trim()) {
+      return saved;
+    }
+    const withPattern = await read(`${key}\n\n${question}`, { contexts: chosen, questions: [question] });
+    return withPattern.has(question) ? withPattern : saved;
   };
 }
 

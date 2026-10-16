@@ -19,7 +19,7 @@ import {
   answerText,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
-import { answersInContexts, loadAnswerContexts, sameButSums } from './answer-contexts.mjs';
+import { answersInContexts, loadAnswerContexts, sameButSums, showsContext } from './answer-contexts.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
@@ -84,22 +84,38 @@ async function answersInContext({ commander, readQADatabase, context = '' }) {
   const qaMap = await readQADatabase();
   const pageQuestions = await extractPageQuestions({ evaluate: commander.evaluate });
   const known = [...[context].flat(), ...pageQuestions.map(({ question }) => question)];
-  const inContexts = answersInContexts(readQADatabase, await loadAnswerContexts());
+  const contexts = await loadAnswerContexts();
+  const inContexts = answersInContexts(readQADatabase, contexts);
   const answerFor = async (formQuestion, savedQuestion) =>
     (await inContexts(formQuestion, known)).get(savedQuestion) ?? qaMap.get(savedQuestion);
-  return { qaMap, pageQuestions, answerFor };
+  // The salary questions not saved word for word, answered by pattern (salary-questions.mjs)
+  const byPattern = new Map();
+  for (const { question } of pageQuestions) {
+    if (!qaMap.has(question) && !byPattern.has(question)) {
+      const answer = (await inContexts(question, known)).get(question);
+      if (answer !== undefined) {
+        byPattern.set(question, answer);
+      }
+    }
+  }
+  // The currency is told (by the question, the vacancy's pay or description), not taken by default
+  const currencyShown = (question) => showsContext(contexts, [question, ...known]);
+  return { qaMap, pageQuestions, answerFor, byPattern, currencyShown };
 }
 
 /**
  * The saved answers, the form's own questions with their salaries in the currency of this form:
- * what its answers are compared with to count as exact
+ * what its answers are compared with to count as exact. A salary question answered by pattern
+ * counts as saved when the currency is told
  * @returns {Promise<Map>}
  */
 export async function savedAnswersInContext({ commander, readQADatabase, context = '' }) {
-  const { qaMap, pageQuestions, answerFor } = await answersInContext({ commander, readQADatabase, context });
+  const { qaMap, pageQuestions, answerFor, byPattern, currencyShown } = await answersInContext({ commander, readQADatabase, context });
   for (const { question } of pageQuestions) {
     if (qaMap.has(question)) {
       qaMap.set(question, await answerFor(question, question));
+    } else if (byPattern.has(question) && currencyShown(question)) {
+      qaMap.set(question, byPattern.get(question));
     }
   }
   return qaMap;
@@ -112,7 +128,7 @@ export async function savedAnswersInContext({ commander, readQADatabase, context
  */
 export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context = '' }) {
   try {
-    const { qaMap, pageQuestions, answerFor } = await answersInContext({ commander, readQADatabase, context });
+    const { qaMap, pageQuestions, answerFor, byPattern } = await answersInContext({ commander, readQADatabase, context });
     const questionToAnswer = new Map();
     const seenSelectors = new Set();
 
@@ -124,6 +140,13 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
       }
       seenSelectors.add(item.selector);
 
+      if (byPattern.has(item.question)) {
+        const answer = byPattern.get(item.question);
+        questionToAnswer.set(item.question, { ...item, answer, matchScore: 1 });
+        console.log(`[QA] Salary question answered by pattern: "${item.question}"`);
+        console.log(`[QA] Answer: "${answer}"`);
+        continue;
+      }
       const match = findBestMatch(item.question, qaMap);
       if (match && item.type === 'textarea' && !answerFits(item.question, match.answer)) {
         console.log(`[QA] "${item.question}": the saved answer of "${match.question}" (${match.answer}) does not answer it, left empty`);

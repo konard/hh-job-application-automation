@@ -401,6 +401,18 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   the chat panel after an application, chats (`answer-chats`: the employer's messages, else the
   vacancy page, read only when the reply depends on it) and forms prefilled in slots. Sums you type
   («$6000», «6000 USDT», «450 000 ₽») are saved as placeholders, so they follow the vacancy too.
+  Euros work the same way («€», «EUR», «евро»): the minimum is `salary_net_eur` in
+  `data/contacts.lino`, the gross is counted from it at the Central Bank's rate, and «до вычета
+  НДФЛ» becomes «до вычета налогов» in dollars and euros.
+- A salary question not saved word for word is answered by pattern (`src/salary-questions.mjs`),
+  learned from `qa.lino`: it is a salary question by its words (built in, and those found in saved
+  salary questions only), it asks for the gross by «gross», «брутто», «до вычета», and the answer
+  is one of your own saved wordings of that kind (net; gross with net), the one picked by the
+  question, so different questions get a bit different wordings with the same sums. Questions about
+  a past job's pay, a given range («устраивает?»), a year or an hour are left to the saved answers.
+  When the currency is told (by the question, the vacancy's pay or its description), such an
+  answer counts as saved, so a form whose other answers are saved too is sent without asking. The
+  answer is saved under the new question once the form is sent.
 - The report (every question, its source and answer) is printed and saved to `logs/forms/`.
 - `bun run formalize-qa` checks how [Formal AI](https://github.com/link-assistant/formal-ai)
   (its JavaScript version, nothing to compile; cloned into `~/.hh-automation/formal-ai`)
