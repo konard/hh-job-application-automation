@@ -130,14 +130,16 @@ export function answersInContexts(readQADatabase, contexts) {
 const SUM = /[$€₽]\s?\d[\d\s\u00a0.,]*\d|\d(?:[\d\s\u00a0.,]*\d)?\s?(?:[$€₽]|(?:тыс\.?\s?)?(?:usdt?|usd|eur|rub|руб\p{L}*\.?|р\.|долл\p{L}*|евро)|тыс\.?|[kк])(?!\p{L})/giu;
 
 /**
- * Whether two answers are the same but for their sums: an answer typed before in another context
- * («От 6000 USDT на руки или эквивалент.» for «От 450 000 ₽ на руки или эквивалент.»)
+ * Whether two answers are the same but for their sums (and the tax's name): an answer typed before
+ * in another context («От 6000 USDT на руки или эквивалент.» for «От 450 000 ₽ на руки или эквивалент.»)
  * @param {string} a
  * @param {string} b
  * @returns {boolean}
  */
 export function sameButSums(a, b) {
-  const bare = (text) => String(text ?? '').replace(SUM, '{{sum}}').replace(/\s+/g, ' ').trim().toLowerCase();
+  // The tax is named by the currency too: «до вычета НДФЛ» in rubles, «до вычета налогов» else
+  const bare = (text) => String(text ?? '').replace(SUM, '{{sum}}').replace(/(?<!\p{L})(?:ндфл|налог\p{L}*)(?!\p{L})/giu, '{{tax}}')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
   return new RegExp(SUM.source, 'iu').test(String(a)) && bare(a) === bare(b);
 }
 

@@ -80,6 +80,7 @@ describe('Context-aware answers everywhere', () => {
   test('an answer typed before in another currency is told by its words', () => {
     assert.equal(sameButSums('От 6000 USDT на руки или эквивалент.', 'От 450 000 ₽ на руки или эквивалент.'), true);
     assert.equal(sameButSums('От 350 тыс. рублей могу рассмотреть.', 'От $6 000 могу рассмотреть.'), true);
+    assert.equal(sameButSums('От 530 000 ₽ в месяц до вычета НДФЛ (450 000 ₽ на руки).', 'От 6 500 € в месяц до вычета налогов (5 500 € на руки).'), true);
     assert.equal(sameButSums('От 6000 USDT на руки.', 'От 450 000 ₽ в месяц на руки.'), false);
     assert.equal(sameButSums('Да', 'Да'), false);
   });
