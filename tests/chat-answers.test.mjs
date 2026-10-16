@@ -199,3 +199,38 @@ describe('requests without a question mark', () => {
     assert.deepEqual(learned, []);
   });
 });
+
+describe('Rejections read as they show in the chat window', () => {
+  test('only the unread «Отказ» cells', async () => {
+    const { visibleRejections } = await import('../src/chat-answers.mjs');
+    const chats = [
+      { id: '1', unread: true, last: 'Отказ' },
+      { id: '2', unread: false, last: 'Отказ' },
+      { id: '3', unread: true, last: 'Собеседование' },
+      { id: '4', unread: true, last: 'Здравствуйте! Отказ от...' },
+    ];
+    assert.deepEqual(visibleRejections(chats).map((chat) => chat.id), ['1']);
+  });
+
+  test('the user\'s activity is counted, the tool\'s own clicks are not', async () => {
+    const { readUserActivity } = await import('../src/chat-answers.mjs');
+    const listeners = {};
+    globalThis.window = {};
+    globalThis.document = {
+      addEventListener: (type, fn) => { listeners[type] = fn; },
+      querySelector: () => ({ value: '  ' }),
+    };
+    const first = readUserActivity();
+    assert.equal(first.typing, false);
+    assert.ok(first.at > 0);
+    window.__chatUserActivity.at = 1;
+    window.__chatAutomating = true;
+    listeners.pointerdown({ isTrusted: true });
+    assert.equal(readUserActivity().at, 1);
+    window.__chatAutomating = false;
+    listeners.pointerdown({ isTrusted: true });
+    assert.ok(readUserActivity().at > 1);
+    delete globalThis.window;
+    delete globalThis.document;
+  });
+});

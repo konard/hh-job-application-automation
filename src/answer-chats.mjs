@@ -25,7 +25,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import { loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, chatContextTexts, knownReplyInContexts, learnedPairs, pendingMessages, readChat, readChatList, scrollChatList, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, formLinks, isChatAnswered, isPattern, isRejection, chatContextTexts, knownReplyInContexts, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
@@ -43,7 +43,9 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
                          for you to check, or none found) it stops with that chat open and waits until you
                          have answered it
   --clear-rejections     Only open the unread rejections («Отказ»), from the chat list, so they leave the unread
-                         chats; nothing is typed in them (apply runs it by default every 2 hours)
+                         chats; nothing is typed in them (apply runs it by default every 2 hours). Between
+                         those passes a rejection that shows in the chat window is read at once
+  --no-live-rejections   Read the rejections only in those passes, not as they show in the chat window
   --auto-send            Send an exact answer (the saved question word for word, or a bot's button that is the saved
                          answer); everything else is only typed in for you (apply passes --auto-send-exact-answers)
   --no-draft             Do not draft unknown answers with local Claude Code
@@ -56,7 +58,7 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, learnAll: false, auto: false, clearRejections: false, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, learnAll: false, auto: false, clearRejections: false, liveRejections: true, autoSend: false, draft: true, forms: true, learn: true, poll: 300 };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -74,6 +76,8 @@ function parseArgs(args) {
     } else if (flag === '--auto') {
       parsed.auto = true;
       parsed.watch = true; // --auto implies watch mode
+    } else if (flag === '--no-live-rejections') {
+      parsed.liveRejections = false;
     } else if (flag === '--no-draft') {
       parsed.draft = false;
     } else if (flag === '--no-forms') {
@@ -577,6 +581,61 @@ async function userIsInTheWindow() {
   return typing || moved;
 }
 
+/** How long the user has not touched the chat window before a shown rejection is read */
+const USER_IDLE_MS = 15000;
+
+/**
+ * The unread rejections read as they show in the chat window: hh.ru adds them to the list as they
+ * come (the page is only read, no request). Each is opened by a click on its cell, then the window
+ * goes back (browser history, no reload) to the chat the user had open. It waits while a reply is
+ * typed or the user has done something in the window in the last 15 s
+ * @param {{leaveAlone: () => boolean}} options - leaveAlone: the chat pass has the window now
+ */
+function readRejectionsAsTheyShow({ leaveAlone }) {
+  let busy = false;
+  const tried = new Set();
+  const timer = setInterval(async () => {
+    if (busy || leaveAlone() || page.isClosed() || !/^https:\/\/hh\.ru\/chat(\/|$|\?)/.test(page.url())) {
+      return;
+    }
+    busy = true;
+    const userUrl = page.url();
+    let moves = 0;
+    try {
+      for (;;) {
+        const rejection = visibleRejections(await chatsOnScreen()).find((chat) => !tried.has(chat.id));
+        const user = await page.evaluate(readUserActivity).catch(() => null);
+        if (!rejection || !user || user.typing || Date.now() - user.at < USER_IDLE_MS || leaveAlone()) {
+          break;
+        }
+        tried.add(rejection.id);
+        await page.evaluate(() => { window.__chatAutomating = true; });
+        const cell = page.locator(`[data-qa="chatik-open-chat-${rejection.id}"]`).first();
+        if (!await human.click(cell) ||
+          !await page.waitForURL((url) => url.href.startsWith(chatUrl(rejection.id)), { timeout: 15000 }).then(() => true, () => false)) {
+          break;
+        }
+        moves += 1;
+        console.log(`📭 Chat ${rejection.id} (${rejection.title}): rejection read (it showed in the chat window)`);
+        await humanPause(2000, 4000);
+      }
+    } catch (error) {
+      console.log(`⚠️  A shown rejection was not read: ${error.message.split('\n')[0]}`);
+    } finally {
+      if (moves > 0 && !page.isClosed()) {
+        // Back to where the user was
+        await page.evaluate((steps) => window.history.go(-steps), moves).catch(() => {});
+        await page.waitForURL(userUrl, { timeout: 10000 }).catch(() => {});
+      }
+      await page.evaluate(() => { window.__chatAutomating = false; }).catch(() => {});
+      // The window moved by the tool, not by the user
+      seenUrl = page.isClosed() ? null : page.url();
+      busy = false;
+    }
+  }, 10000);
+  timer.unref();
+}
+
 if (argv.watch) {
   if (argv.learn) {
     learnAsTheUserAnswers();
@@ -586,6 +645,11 @@ if (argv.watch) {
   const seenKey = (chat) => `${chat.id}\n${chat.last}`;
   // --auto: the chat left open for the user; nothing else is processed until it is answered
   let stuckChat = null;
+  // The pass over the chat list is going: the window is left to it
+  let passRunning = false;
+  if (argv.liveRejections && (argv.auto || argv.clearRejections)) {
+    readRejectionsAsTheyShow({ leaveAlone: () => passRunning || stuckChat !== null });
+  }
   console.log(argv.auto
     ? `💬 Processing unread chats every ${argv.poll} s (rejections first)`
     : argv.clearRejections ? `📭 Clearing unread rejections every ${argv.poll} s` : `👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
@@ -609,7 +673,9 @@ if (argv.watch) {
       await sleep(300 * 1000);
       continue;
     }
+    passRunning = true;
     if (!await openChatPage()) {
+      passRunning = false;
       await sleep(argv.poll * 1000);
       continue;
     }
@@ -626,6 +692,7 @@ if (argv.watch) {
       // Rejections first, always before any chat is answered
       const rejections = await clearRejections();
       if (rejections === null) {
+        passRunning = false;
         await sleep(argv.poll * 1000);
         continue;
       }
@@ -663,6 +730,7 @@ if (argv.watch) {
       }
     }
     seenUrl = page.isClosed() ? null : page.url();
+    passRunning = false;
     await sleep(argv.poll * 1000);
   }
 }

@@ -194,7 +194,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     });
     console.log(argv.processChats
       ? `💬 Chat processor started (rejections cleared, then unread chats answered, every ${argv.chatsIntervalMinutes} min)`
-      : `📭 Rejection clearing started (unread rejections opened every ${argv.chatsIntervalMinutes} min)`);
+      : `📭 Rejection clearing started (unread rejections opened every ${argv.chatsIntervalMinutes} min, and as they show in the chat window)`);
   }
 
   await orchestrator.start();

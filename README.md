@@ -208,7 +208,10 @@ bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 
 Alongside the application loop, unread rejections («Отказ») in hh.ru chats are opened every 2
 hours in the separate chat browser slot (port 9340), so they leave the unread chats; nothing is
-typed in them. Turn it off with `--no-clear-rejections`.
+typed in them. Between those checks, a rejection that shows in the chat window is read at once
+(the page is only looked at every 10 s, no request to hh.ru): when you have not touched the window
+for 15 s and no reply is being typed, its chat is opened, then the window goes back to the chat you
+had open. Turn it off with `--no-clear-rejections`.
 
 To also answer unread hh.ru chats automatically, add `--process-chats` (the rejections are always
 cleared first). The chat processor runs in the separate chat browser slot (port 9340, never

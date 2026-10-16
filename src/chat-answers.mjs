@@ -119,6 +119,36 @@ export function readChatList() {
 }
 
 /**
+ * Runs in the page: the user's own activity in the chat window (keys, clicks, the pointer, the
+ * wheel), and whether a reply is being typed. The tool's own clicks are left out while it sets
+ * window.__chatAutomating
+ * @returns {{at: number, typing: boolean}} at: when the user last did something (the first read: then)
+ */
+export function readUserActivity() {
+  if (!window.__chatUserActivity) {
+    // Counted from now: what the user did before is not known
+    window.__chatUserActivity = { at: Date.now() };
+    const mark = (event) => {
+      if (event.isTrusted && !window.__chatAutomating) {
+        window.__chatUserActivity.at = Date.now();
+      }
+    };
+    for (const type of ['keydown', 'pointerdown', 'pointermove', 'wheel', 'input']) {
+      document.addEventListener(type, mark, { capture: true, passive: true });
+    }
+  }
+  const field = document.querySelector('textarea[data-qa="text-input"]');
+  return { at: window.__chatUserActivity.at, typing: Boolean(field?.value.trim()) };
+}
+
+/**
+ * The unread rejections shown in the chat list
+ * @param {Array} chats - readChatList's, those on screen
+ * @returns {Array}
+ */
+export const visibleRejections = (chats) => chats.filter((chat) => chat.unread && /^отказ$/i.test(chat.last ?? ''));
+
+/**
  * The messages after the user's last own message: what is waiting for an answer
  * @param {Array<{mine: boolean}>} messages
  * @returns {Array<Object>}
