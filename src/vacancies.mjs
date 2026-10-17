@@ -335,7 +335,25 @@ export async function processModalApplication({
   }
 
   await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
-  if (vacancyId && !await isVacancyCardResponded({ commander, vacancyId })) {
+  let confirmed = !vacancyId || await isVacancyCardResponded({ commander, vacancyId });
+  // A passing error of hh.ru («Произошла ошибка, попробуйте ещё раз»): the same popup sent again
+  // after a minute or more; never after the daily limit or a block
+  for (let attempt = 1; !confirmed && attempt <= SEND_RETRIES; attempt++) {
+    const error = await popupError(commander);
+    if (!isPassingError(error) || !await isButtonEnabled(commander, submitButtonSelector)) {
+      break;
+    }
+    const ms = RETRY_MIN_MS + Math.round(Math.random() * 30000);
+    console.log(`🔁 hh.ru: «${error.text}» (${error.code}); sending again in ${Math.round(ms / 1000)} s (try ${attempt} of ${SEND_RETRIES})`);
+    await commander.wait({ ms, reason: 'hh.ru error, before sending again' });
+    if (!await isButtonEnabled(commander, submitButtonSelector)) {
+      break;
+    }
+    await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend: true }).catch(() => {});
+    await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
+    confirmed = await isVacancyCardResponded({ commander, vacancyId });
+  }
+  if (!confirmed) {
     console.log(`⚠️  hh.ru did not mark vacancy ${vacancyId} as responded, manual check required`);
     return { success: false, reason: 'not_confirmed' };
   }
@@ -348,6 +366,37 @@ export async function processModalApplication({
  * Whether the vacancy card on the list shows "Вы откликнулись", waiting up to 10 s
  * @returns {Promise<boolean>}
  */
+/** Sends again after a passing error of hh.ru, at least a minute apart */
+const SEND_RETRIES = 2;
+const RETRY_MIN_MS = 60000;
+/** The daily limit, a block, too many requests: not sent again */
+const BLOCKING_ERROR = /limit|ban|block|captcha|many|лимит|огранич|заблок|блокир|слишком мно|не более|запрещ/i;
+
+/**
+ * The error the application popup shows after the send, if any
+ * @returns {Promise<{code: string, text: string}|null>}
+ */
+async function popupError(commander) {
+  const { value } = await commander.safeEvaluate({
+    fn: () => {
+      const element = document.querySelector('[data-qa-popup-error-code]');
+      return element ? { code: element.getAttribute('data-qa-popup-error-code') ?? '', text: element.innerText.replace(/\s+/g, ' ').trim() } : null;
+    },
+    defaultValue: null,
+    operationName: 'popup error check',
+    silent: true,
+  });
+  return value;
+}
+
+/**
+ * Whether an error of the popup passes by itself (sent again later): not the daily limit, a block
+ * or too many requests
+ * @param {{code: string, text: string}|null} error
+ * @returns {boolean}
+ */
+export const isPassingError = (error) => Boolean(error) && !BLOCKING_ERROR.test(`${error.code} ${error.text}`);
+
 async function isVacancyCardResponded({ commander, vacancyId }) {
   for (let attempt = 0; attempt < 10; attempt++) {
     const { value } = await commander.safeEvaluate({

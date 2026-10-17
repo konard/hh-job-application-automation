@@ -167,7 +167,9 @@ you (`--on-missing-answers wait`). Use `--on-missing-answers skip` for fully una
 
 An application hh.ru does not confirm as sent (no «Вы откликнулись»), on the popup or the full
 form, stops an unattended run and makes a supervised one wait for you; the run never moves on to the
-next vacancy then.
+next vacancy then. When the popup shows a passing error of hh.ru («Произошла ошибка,
+попробуйте ещё раз»), it is sent again after 1–1.5 minutes, at most twice; never after the daily
+limit, a block or «too many requests».
 
 ### Test Mode and Confirmations
 
