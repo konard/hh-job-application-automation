@@ -50,6 +50,7 @@ export const SKIP_REASONS = {
   button_disabled: { retry: 'once', text: 'the send button stayed disabled' },
   click_failed: { retry: 'once', text: 'the send button could not be clicked' },
   timeout: { retry: 'once', text: 'a timeout on the response form' },
+  send_error: { retry: 'once', text: 'hh.ru answered the send with «Произошла ошибка, попробуйте ещё раз», sent again twice' },
   letter_not_attached: { retry: 'never', text: 'sent, but the cover letter could not be attached (attach it on the vacancy page)' },
 };
 

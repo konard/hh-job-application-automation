@@ -169,7 +169,8 @@ An application hh.ru does not confirm as sent (no «Вы откликнулис�
 form, stops an unattended run and makes a supervised one wait for you; the run never moves on to the
 next vacancy then. When the popup shows a passing error of hh.ru («Произошла ошибка,
 попробуйте ещё раз»), it is sent again after 1–1.5 minutes, at most twice; never after the daily
-limit, a block or «too many requests».
+limit, a block or «too many requests». When it is still there after that, the vacancy is set aside
+(`send_error` in `skipped-vacancies.lino`, tried once more on a later run) and the run goes on.
 
 ### Test Mode and Confirmations
 
@@ -215,6 +216,12 @@ typed in them. Between those checks, a rejection that shows in the chat window i
 (the page is only looked at every 10 s, no request to hh.ru): when you have not touched the window
 for 15 s and no reply is being typed, its chat is opened, then the window goes back to the chat you
 had open. Turn it off with `--no-clear-rejections`.
+
+The same pass handles unread template messages: a chat whose last message, as the chat list shows it,
+is a saved template of `data/chat-templates.lino` word for word (greeting and signature aside, «Спасибо
+за отклик! Мы рассмотрим Ваше резюме и позже сообщим о своем решении.») is opened and answered with
+its reply (one of those you gave to it, with `--auto-send-exact-answers`, on by default), or only read
+when it needs none. A chat with anything else waiting is left for you, and other chats stay unread.
 
 To also answer unread hh.ru chats automatically, add `--process-chats` (the rejections are always
 cleared first). The chat processor runs in the separate chat browser slot (port 9340, never

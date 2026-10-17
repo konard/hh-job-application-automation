@@ -338,9 +338,11 @@ export async function processModalApplication({
   let confirmed = !vacancyId || await isVacancyCardResponded({ commander, vacancyId });
   // A passing error of hh.ru («Произошла ошибка, попробуйте ещё раз»): the same popup sent again
   // after a minute or more; never after the daily limit or a block
+  let passing = false;
   for (let attempt = 1; !confirmed && attempt <= SEND_RETRIES; attempt++) {
     const error = await popupError(commander);
-    if (!isPassingError(error) || !await isButtonEnabled(commander, submitButtonSelector)) {
+    passing = isPassingError(error);
+    if (!passing || !await isButtonEnabled(commander, submitButtonSelector)) {
       break;
     }
     const ms = RETRY_MIN_MS + Math.round(Math.random() * 30000);
@@ -352,6 +354,11 @@ export async function processModalApplication({
     await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend: true }).catch(() => {});
     await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
     confirmed = await isVacancyCardResponded({ commander, vacancyId });
+  }
+  // The error stays for this vacancy: it is set aside (tried once more on a later run), the run goes on
+  if (!confirmed && passing && isPassingError(await popupError(commander))) {
+    console.log(`⏭️  Vacancy ${vacancyId}: hh.ru still answers «Произошла ошибка»; set aside, tried again on a later run`);
+    return skip('send_error');
   }
   if (!confirmed) {
     console.log(`⚠️  hh.ru did not mark vacancy ${vacancyId} as responded, manual check required`);

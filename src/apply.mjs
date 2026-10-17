@@ -186,7 +186,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     // Answering clears the rejections first; without it the rejections alone are cleared
     const mode = argv.processChats
       ? ['--auto', ...(argv.autoSendExactAnswers ? ['--auto-send'] : []), ...(argv.autoReuseAnswers ? ['--auto-reuse'] : [])]
-      : ['--clear-rejections'];
+      : ['--clear-rejections', ...(argv.autoSendExactAnswers ? ['--auto-send'] : [])];
     chatProcess = spawn(process.execPath, [chatScriptPath, ...mode, `--poll=${intervalSeconds}`], {
       // Its own output straight into this log: through a pipe it came only when it exited
       stdio: ['ignore', 'inherit', 'inherit'],

@@ -25,7 +25,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isRejection, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isQuestion, isRejection, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
@@ -45,7 +45,9 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
                          for you to check, or none found) it stops with that chat open and waits until you
                          have answered it
   --clear-rejections     Only open the unread rejections («Отказ»), from the chat list, so they leave the unread
-                         chats; nothing is typed in them (apply runs it by default every 2 hours). Between
+                         chats; nothing is typed in them (apply runs it by default every 2 hours). An unread
+                         template message (a saved one word for word, «Спасибо за отклик! Мы рассмотрим Ваше
+                         резюме…») is read too, and with --auto-send answered with its reply. Between
                          those passes a rejection that shows in the chat window is read at once
   --no-live-rejections   Read the rejections only in those passes, not as they show in the chat window
   --auto-reuse           Answer a recruiter bot's offer to reuse earlier answers («Используем эти ответы?»): «Да»
@@ -566,21 +568,79 @@ async function learnFromAllChats() {
  */
 async function clearRejections() {
   let rejections = 0;
+  // The list line holds the whole last message: a saved template is known before the chat is opened
+  const templates = await templatesDb.readQADatabase();
   const stopped = await walkChatList(async (chat) => {
-    if (!chat.unread || !isRejectionCell(chat)) {
+    const template = chat.unread && !isRejectionCell(chat) ? templateCell(chat, templates) : null;
+    // A template to reply to is opened only when its reply is sent (--auto-send); otherwise it stays unread for you
+    if (!chat.unread || (!isRejectionCell(chat) && !(template && (template.noReply || argv.autoSend)))) {
       return false;
     }
     await openChat(chat.id);
     if (!await waitForCaptcha(page, console.log)) {
       return true;
     }
-    rejections += 1;
-    console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
-    recordEvent('rejection_read', { chatId: chat.id, live: false });
+    if (template) {
+      await answerTemplate(chat);
+    } else {
+      rejections += 1;
+      console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
+      recordEvent('rejection_read', { chatId: chat.id, live: false });
+    }
     await humanPause();
     return false;
   });
   return stopped ? null : rejections;
+}
+
+/**
+ * An unread chat whose last message, as its list line shows it, is a saved template word for word
+ * (greeting and signature aside), not a question
+ * @returns {Object|null} knownReply
+ */
+function templateCell(chat, templates) {
+  if (chat.lastIsMine || !chat.last || isQuestion(chat.last)) {
+    return null;
+  }
+  const reply = knownReply({ title: '', text: chat.last }, { templates, qaMap: new Map() });
+  return reply?.perfect && reply.source.startsWith('chat-templates') ? reply : null;
+}
+
+/**
+ * The open chat's template message answered with its reply (one of those the user gave to it), or
+ * only read when it needs none. A chat with more waiting than the template is left for the user
+ */
+async function answerTemplate(chat) {
+  await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
+  const read = await page.evaluate(readChat).catch(() => null);
+  if (!read) {
+    return;
+  }
+  await learn({ ...read, id: read.id || chat.id });
+  const pending = pendingMessages(read.messages);
+  const last = pending.at(-1);
+  if (!last) {
+    return;
+  }
+  const reply = varyReply(await knownReplyInContexts(last, {
+    readTemplates: templatesDb.readQADatabase, readQADatabase: sources.qaDatabase.readQADatabase,
+    contexts: await loadAnswerContexts(), known: chatContextTexts(read),
+  }), replyVariants(await chatHistory.read(), await templatesDb.readQADatabase()));
+  const about = templateCore(last.text, { sender: last.title }).replace(/\s+/g, ' ').slice(0, 100);
+  if (reply?.noReply) {
+    console.log(`📭 Chat ${chat.id} (${chat.title}): «${about}» read, no reply needed`);
+    return;
+  }
+  if (!reply?.perfect || !reply.source.startsWith('chat-templates') || pending.length > 1 || !read.canReply || !argv.autoSend) {
+    console.log(`👉 Chat ${chat.id} (${chat.title}): more than a template waits in it, left for you`);
+    return;
+  }
+  if (await sendChatAnswer(page.mainFrame(), last.id, { answer: reply.answer, option: null }).catch(() => false)) {
+    console.log(`✅ Chat ${chat.id} (${chat.title}): «${about}» answered: ${reply.answer}`);
+    recordEvent('template_answered', { chatId: chat.id });
+  } else {
+    console.log(`⚠️  Chat ${chat.id} (${chat.title}): the reply did not show in the chat, left for you`);
+  }
 }
 
 if (argv.learnAll) {
