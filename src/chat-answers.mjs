@@ -577,10 +577,16 @@ export const isReminder = (text) => REMINDER.test(String(text));
 /** hh.ru's own notices shown on the user's side of a chat: not the user's answers */
 const HH_NOTICE = /^ответьте на приглашение, даже если оно вам не интересно/i;
 
+/** A message that only greets */
+const GREETING_ONLY = /^(?:здравствуйте|добрый\s+(?:день|вечер|утро)|доброе\s+утро|привет|hello|hi)[\s!.,)]*$/iu;
+
+/** The hh.ru support chat: no vacancy, its replies are to the support, not to employers */
+export const isSupportChat = (chat) => !chat.vacancy && /поддержк|support|помощник/i.test(`${chat.company ?? ''} ${chat.title ?? ''}`);
+
 /**
  * Pairs the user has answered in a chat, to learn: an employer's message followed by the user's
  * reply, and the lines of a recruiter bot's summary. Questions go to qa.lino, other messages are templates. The application itself,
- * hh.ru's notices and replies that are questions back («Можно без опыта?») are not answers
+ * hh.ru's notices, replies that are questions back («Можно без опыта?») and a greeting alone are not answers
  * @param {Array<{mine: boolean, title: string, text: string}>} messages
  * @returns {{questions: Array<[string, string]>, templates: Array<[string, string]>}}
  */
@@ -593,12 +599,14 @@ export function learnedPairs(messages) {
       questions.push(...summaryPairs(message.text).filter(([, answer]) => !isQuestion(answer)));
       return;
     }
-    if (message.title === APPLICATION_TITLE || HH_NOTICE.test(message.text) || isQuestion(message.text)) {
+    // A greeting alone answers nothing: the answer follows in the next message
+    if (message.title === APPLICATION_TITLE || HH_NOTICE.test(message.text) || isQuestion(message.text) || GREETING_ONLY.test(message.text.trim())) {
       return;
     }
     // A reminder («не дождалась вашего ответа») is not what the user answers: the question before it is
     let before = index - 1;
-    while (before > 0 && !messages[before].mine && isReminder(messages[before].text)) {
+    // Nor is the user's own greeting sent before the answer
+    while (before > 0 && (messages[before].mine ? GREETING_ONLY.test(messages[before].text.trim()) : isReminder(messages[before].text))) {
       before -= 1;
     }
     const asked = messages[before];

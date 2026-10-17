@@ -4,7 +4,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   formLinks, isPattern, isRejection, knownReply, learnedPairs, learnPatterns, matchesPattern, pendingMessages, PATTERN_PREFIX,
-  NO_REPLY, REJECTION_KEY, questionCore, summaryPairs, templateCore, withLearnedPatterns,
+  NO_REPLY, REJECTION_KEY, isSupportChat, questionCore, summaryPairs, templateCore, withLearnedPatterns,
 } from '../src/chat-answers.mjs';
 
 const templates = new Map([
@@ -186,6 +186,20 @@ describe('reminders', () => {
       { mine: true, title: '', text: '150 млн туров, поиск до 50 мс.' },
     ]);
     assert.deepEqual(questions, [['Какой самый нагруженный проект у вас был?', '150 млн туров, поиск до 50 мс.']]);
+  });
+  test('a greeting alone is not an answer: the answer after it is', () => {
+    const { questions, templates: learned } = learnedPairs([
+      { mine: false, title: 'Анна', text: 'Какой самый нагруженный проект у вас был?' },
+      { mine: true, title: '', text: 'Здравствуйте!' },
+      { mine: true, title: '', text: '150 млн туров, поиск до 50 мс.' },
+    ]);
+    assert.deepEqual(questions, [['Какой самый нагруженный проект у вас был?', '150 млн туров, поиск до 50 мс.']]);
+    assert.deepEqual(learned, []);
+  });
+
+  test('the hh.ru support chat is not learned from', () => {
+    assert.equal(isSupportChat({ vacancy: '', company: 'Техническая поддержка' }), true);
+    assert.equal(isSupportChat({ vacancy: 'Senior Java Developer', company: 'Росгосстрах' }), false);
   });
 });
 

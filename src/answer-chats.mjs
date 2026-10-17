@@ -25,7 +25,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isQuestion, isRejection, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isQuestion, isSupportChat, isRejection, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
@@ -336,6 +336,10 @@ enableConfirmations({ steps: [], onStop: () => process.exit(0), input: process.s
 /** Save what the user has answered in the chat: questions to qa.lino, template messages to chat-templates.lino */
 async function learn(chat) {
   await chatHistory.record(chat).catch(() => {});
+  // The support chat is kept, its replies are not answers to employers
+  if (isSupportChat(chat)) {
+    return;
+  }
   const { questions, templates } = learnedPairs(chat.messages);
   for (const [question, answer] of questions) {
     if (!sources.qaMap.has(question)) {
