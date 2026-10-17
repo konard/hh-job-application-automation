@@ -106,6 +106,7 @@ export function readChatList() {
     // The line under the company: the last message, or the status («Отказ», «Собеседование»)
     const lines = cell.innerText.split('\n').map((line) => line.trim()).filter(Boolean);
     const last = lines[lines.indexOf(subtitle) + 1] ?? '';
+    const rect = cell.getBoundingClientRect();
     return {
       id: cell.getAttribute('data-qa').replace('chatik-open-chat-', ''),
       title: cell.querySelector('[data-qa="chat-cell-title"]')?.innerText.trim() ?? '',
@@ -115,6 +116,8 @@ export function readChatList() {
       unread: Boolean(cell.querySelector('[data-qa*="badge"], [data-qa*="counter"]')),
       top: offset ? Number(offset[1]) : index,
       height: row?.offsetHeight || cell.offsetHeight,
+      // Where it is drawn: the rows start below the list's own header, so their offset alone does not tell
+      screen: { top: rect.top, bottom: rect.bottom, window: window.innerHeight },
     };
   });
 }

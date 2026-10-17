@@ -165,7 +165,10 @@ async function moreChatsLoaded(height) {
 async function chatsOnScreen() {
   const at = await listPosition();
   const rows = await page.evaluate(readChatList).catch(() => []);
-  return rows.filter((chat) => !at || (chat.top >= at.top - 2 && chat.top + chat.height <= at.top + at.view + 2))
+  // Drawn whole inside the list and the window: a cell below them is not clicked
+  const shown = (chat) => !chat.screen || (chat.screen.top >= (at?.y ?? 0) - 2 &&
+    chat.screen.bottom <= Math.min(at ? at.y + at.view : Infinity, chat.screen.window) + 2);
+  return rows.filter((chat) => (!at || (chat.top >= at.top - 2 && chat.top + chat.height <= at.top + at.view + 2)) && shown(chat))
     .sort((a, b) => a.top - b.top);
 }
 
