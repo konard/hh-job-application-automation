@@ -479,7 +479,9 @@ browser. For the message waiting for an answer the reply is typed into the messa
 - a template message (the same text from many companies, greeting and signature aside) gets its saved
   reply from `data/chat-templates.lino`, or one of the replies you have given to it before, picked at
   random (those you used more often more likely; a reply to someone by name or a long one of its own
-  is not repeated elsewhere); a rejection gets the saved question about its reason (`Отказ`),
+  is not repeated elsewhere); a template you only thank for gets one of all the thanks you have given
+  to templates or saved for them («Здравствуйте, благодарю.», «Здравствуйте, благодарю, ожидаю.», …);
+  a rejection gets the saved question about its reason (`Отказ`),
   a closed chat is only read;
 - a question gets the saved answer of a close question in `data/qa.lino`, otherwise local Claude Code
   drafts the reply from the chat, the resume and saved answers;
@@ -488,7 +490,10 @@ browser. For the message waiting for an answer the reply is typed into the messa
   send in those questionnaires into `qa.lino` (`--no-learn` turns the questionnaire part off);
   Template messages you answered the same way are generalized into patterns, e.g.
   `pattern: ваше резюме … опыт* … позиции … свяже* с вами` (shared words in order, `…` for any
-  words, `*` for any ending), which match other companies' wordings of the same message.
+  words, `*` for any ending), which match other companies' wordings of the same message. A pattern
+  match counts as an exact one (sent with `--auto-send`) when the message says nothing more than the
+  pattern (at most 3 times its words, a company's and a vacancy's names in the gaps) and asks nothing:
+  no invitation, test, form, link or call.
 
 `--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
 quick replies are never clicked.

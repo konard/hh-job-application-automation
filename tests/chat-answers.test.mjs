@@ -98,6 +98,11 @@ describe('template patterns', () => {
     const templates = withLearnedPatterns(examples);
     const other = 'Анна, добрый день!\nМы получили ваше резюме. Если ваш опыт подойдёт для этой позиции, наш рекрутер свяжется с вами.';
     assert.equal(knownReply({ title: '', text: other }, { templates, qaMap })?.answer, reply);
+    // It says all of the message: sent as a saved reply is
+    assert.equal(knownReply({ title: '', text: other }, { templates, qaMap })?.perfect, true);
+    // An invitation in the same words is not the template
+    const invitation = 'Мы получили ваше резюме. Если ваш опыт подойдёт для этой позиции, свяжемся с вами и пригласим на собеседование.';
+    assert.equal(knownReply({ title: '', text: invitation }, { templates, qaMap })?.perfect, false);
     assert.ok(matchesPattern('ваше резюме … свяже* с вами', 'Ваше резюме у нас, свяжемся с вами'));
     assert.equal(knownReply({ title: '', text: 'Ваше резюме подходит, опыт есть, по позиции свяжемся с вами, когда удобно?' }, { templates, qaMap }), null);
     assert.equal(knownReply({ title: '', text: 'Пришлите, пожалуйста, портфолио.' }, { templates, qaMap }), null);

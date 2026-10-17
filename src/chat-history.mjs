@@ -3,7 +3,9 @@
  * chat ID, its messages merged as they come. From it:
  *   - the answers are learned again without opening hh.ru (answer-chats --relearn)
  *   - a template message gets one of the replies the user has given to it, picked at random (the
- *     ones used more often more likely), the saved reply among them
+ *     ones used more often more likely), the saved reply among them; a template thanked for only
+ *     («Здравствуйте, благодарю, ожидаю.») gets one of all the thanks the user has given to
+ *     templates and saved for them, with or without «ожидаю»
  *
  * @module chat-history
  */
@@ -62,14 +64,40 @@ export function createChatHistory(file = CHAT_HISTORY_FILE) {
 /** A reply to someone by name («Ирина, здравствуйте!») is theirs, not one for every chat */
 const BY_NAME = /^(?![Зз]дравствуй|[Дд]обр|[Пп]ривет|[Сс]пасибо|[Бб]лагодар|[Хх]орошо|[Оо]тлично|[Пп]онял)[А-ЯЁA-Z][а-яёa-z-]+(?:\s+[А-ЯЁA-Z][а-яёa-z-]+)?\s*[,!]/u;
 
+/** The key of the thanks for templates in replyVariants */
+export const THANKS = 'thanks';
+
+/** Words of a reply that only thanks and says the user waits */
+const THANKS_WORDS = new Set(['здравствуйте', 'добрый', 'день', 'вечер', 'утро', 'привет', 'благодарю', 'спасибо', 'большое',
+  'ожидаю', 'жду', 'буду', 'ждать', 'решения', 'ответа', 'обратной', 'связи', 'за', 'ответ', 'я', 'и', 'хорошо', 'понял', 'принял', 'отлично']);
+
+/**
+ * Whether a reply only thanks (and says the user waits): one of them fits any template thanked for
+ * @param {string} reply
+ * @returns {boolean}
+ */
+export function isThanks(reply) {
+  const words = String(reply ?? '').toLowerCase().replace(/ё/g, 'е').match(/\p{L}+/gu) ?? [];
+  return words.length > 0 && words.length <= 10 && words.some((word) => word === 'благодарю' || word === 'спасибо') &&
+    words.every((word) => THANKS_WORDS.has(word));
+}
+
 /**
  * The user's replies to each template, from the history
  * @param {Object} history - createChatHistory().read()
  * @param {Map} templates - chat-templates.lino with contacts filled in
- * @returns {Map<string, string[]>} Template message -> the replies given, once per use
+ * @returns {Map<string, string[]>} Template message -> the replies given, once per use; THANKS ->
+ *   the thanks given to templates thanked for and those saved for them
  */
 export function replyVariants(history, templates) {
   const variants = new Map();
+  const add = (key, reply) => variants.set(key, [...variants.get(key) ?? [], reply.trim()]);
+  for (const answer of templates.values()) {
+    const saved = [answer].flat().join('\n');
+    if (isThanks(saved)) {
+      add(THANKS, saved);
+    }
+  }
   for (const chat of Object.values(history)) {
     for (const [message, reply] of learnedPairs(chat.messages).templates) {
       const known = knownReply({ title: '', text: message }, { templates, qaMap: new Map() });
@@ -80,7 +108,10 @@ export function replyVariants(history, templates) {
       if (reply.length > Math.max(2 * known.answer.length, 120)) {
         continue;
       }
-      variants.set(known.matched, [...variants.get(known.matched) ?? [], reply.trim()]);
+      add(known.matched, reply);
+      if (isThanks(known.answer) && isThanks(reply)) {
+        add(THANKS, reply);
+      }
     }
   }
   return variants;
@@ -88,21 +119,21 @@ export function replyVariants(history, templates) {
 
 /**
  * One of the replies given to a template, picked at random: those used more often more likely,
- * the saved one counted once more
+ * the saved one counted once more. A template thanked for: one of all the thanks
  * @param {Object|null} reply - knownReply
  * @param {Map<string, string[]>} variants - replyVariants
  * @param {() => number} [random]
  * @returns {Object|null} The reply, its answer maybe another one the user gave
  */
 export function varyReply(reply, variants, random = Math.random) {
-  const given = reply?.matched && !reply.noReply && reply.answer !== NO_REPLY && reply.source?.startsWith('chat-templates')
-    ? variants.get(reply.matched) ?? []
-    : [];
+  const template = reply?.matched && !reply.noReply && reply.answer !== NO_REPLY && reply.source?.startsWith('chat-templates');
+  const thanks = template && isThanks(reply.answer);
+  const given = template ? (thanks ? variants.get(THANKS) : variants.get(reply.matched)) ?? [] : [];
   if (given.length === 0) {
     return reply;
   }
   const all = [reply.answer, ...given];
   const answer = all[Math.floor(random() * all.length)];
   const kinds = new Set(all).size;
-  return answer === reply.answer ? reply : { ...reply, answer, source: `${reply.source}, one of your ${kinds} replies to it` };
+  return answer === reply.answer ? reply : { ...reply, answer, source: `${reply.source}, one of your ${kinds} ${thanks ? 'thanks' : 'replies to it'}` };
 }

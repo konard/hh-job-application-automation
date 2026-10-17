@@ -327,6 +327,21 @@ export const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(te
 /** A request for the user's facts without a question mark: «Расскажите о вашем опыте с Kafka.», «Проживаете в РФ» */
 const REQUEST = /(?:^|[.!:]\s+)(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите)(?!\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\p{L})/iu;
 
+/** Words of a pattern itself, its gaps aside */
+const patternOwnWords = (pattern) => pattern.replace(PATTERN_PREFIX, '').split(' ').filter((token) => token && token !== GAP).length;
+
+/** Something the employer asks the user to do: an invitation, a test, a form, a link, a call */
+const ASKS_TO_DO = /пригла|собеседов|интервью|тестов|задани|анкет|заполн|пройд|напиши|напишите|позвон|созвон|свяжитесь|пришлите|отправьте|сообщите|укажите|ссылк|telegram|телеграм|https?:|t\.me|@\w/iu;
+
+/**
+ * A pattern says all of a message: the message tells nothing more than the template (a company's
+ * and a vacancy's names in the gaps), and asks the user to do nothing
+ * @param {string} pattern
+ * @param {string} core - templateCore of the message
+ * @returns {boolean}
+ */
+export const patternSays = (pattern, core) => !ASKS_TO_DO.test(core) && patternWords(core).length <= 3 * patternOwnWords(pattern);
+
 /** Whether a message asks the user something: a question, or a request for facts about them */
 export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(text).trim());
 
@@ -337,7 +352,8 @@ export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(t
  * @param {Map} sources.templates - data/chat-templates.lino: template message -> reply
  * @param {Map} sources.qaMap - data/qa.lino with contacts filled in
  * @returns {{answer: string, noReply?: boolean, perfect: boolean, source: string, matched: string}|null}
- *   perfect: the saved question or template is the message itself (or a template is contained in it word for word)
+ *   perfect: the saved question or template is the message itself (or a template is contained in it word for
+ *   word, or a learned pattern says all of it: patternSays)
  */
 export function knownReply(message, { templates, qaMap }) {
   // The offer to reuse earlier answers is decided by comparing them (compareReusedAnswers)
@@ -358,8 +374,11 @@ export function knownReply(message, { templates, qaMap }) {
   const flat = normalizeQuestion(core);
   const contained = [...examples.keys()].find((key) => key !== REJECTION_KEY && normalizeQuestion(key).length > 20 &&
     flat.includes(normalizeQuestion(key)));
-  // A learned pattern matches other wordings of the same template; a question is not a template
-  const pattern = !contained && !isQuestion(core) && [...templates.keys()].find((key) => isPattern(key) && matchesPattern(key, core));
+  // A learned pattern matches other wordings of the same template; a question is not a template.
+  // The pattern with the most words of its own, the closest one
+  const pattern = !contained && !isQuestion(core) && [...templates.keys()]
+    .filter((key) => isPattern(key) && matchesPattern(key, core))
+    .sort((a, b) => patternOwnWords(b) - patternOwnWords(a))[0];
   const template = contained || pattern
     ? { question: contained || pattern, answer: templates.get(contained || pattern), score: 1 }
     : findBestMatch(core, examples, { threshold: TEMPLATE_THRESHOLD });
@@ -368,7 +387,7 @@ export function knownReply(message, { templates, qaMap }) {
     return {
       answer: answer === NO_REPLY ? '' : answer,
       noReply: answer === NO_REPLY,
-      perfect: Boolean(contained) || sameText(core, template.question),
+      perfect: Boolean(contained) || (Boolean(pattern) && patternSays(pattern, core)) || sameText(core, template.question),
       source: `chat-templates.lino ${template.score.toFixed(2)}`,
       matched: template.question,
     };
