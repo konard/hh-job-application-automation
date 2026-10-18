@@ -25,11 +25,6 @@
   "title: IT Project Manager | ОсОО Юнифан"
   "time: 2026-10-13T08:13:56.208Z"
   "attempts: 1"
-138386495
-  "reason: timeout"
-  "title: Старший инженер по информационной безопасности (ML), Группа аналитики | Ozon Tech"
-  "time: 2026-10-13T08:33:53.806Z"
-  "attempts: 1"
 138415749
   "reason: timeout"
   "title: Тестировщик-автоматизатор Python (Senior), медиаплатформа | SkillStaff"
@@ -80,4 +75,9 @@
   "reason: questions_deferred"
   "title: Преподаватель Python"
   "time: 2026-10-17T14:45:11.648Z"
+  "attempts: 1"
+138390635
+  "reason: questions_deferred"
+  "title: Senior DevOps Engineer (Azure)"
+  "time: 2026-10-18T17:52:26.534Z"
   "attempts: 1"
