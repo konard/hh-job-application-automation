@@ -697,8 +697,8 @@ async function userIsInTheWindow() {
 const USER_IDLE_MS = 15000;
 
 /**
- * The unread rejections read as they show in the chat window: hh.ru adds them to the list as they
- * come (the page is only read, no request). Each is opened by a click on its cell, then the window
+ * The unread rejections read as they show in the chat window, and the saved templates answered
+ * (answerTemplate): hh.ru adds them to the list as they come (the page is only read, no request). Each is opened by a click on its cell, then the window
  * goes back (browser history, no reload) to the chat the user had open. It waits while a reply is
  * typed or the user has done something in the window in the last 15 s
  * @param {{leaveAlone: () => boolean}} options - leaveAlone: the chat pass has the window now
@@ -715,7 +715,12 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
     let moves = 0;
     try {
       for (;;) {
-        const rejection = visibleRejections(await chatsOnScreen()).find((chat) => !tried.has(chat.id));
+        // A rejection, or a saved template to answer (--auto-send) or only read
+        const onScreen = (await chatsOnScreen()).filter((chat) => !tried.has(chat.id));
+        const templates = await templatesDb.readQADatabase();
+        const template = (chat) => (chat.unread && !isRejectionCell(chat) ? templateCell(chat, templates) : null);
+        const rejection = visibleRejections(onScreen)[0] ??
+          onScreen.find((chat) => { const reply = template(chat); return reply && (reply.noReply || argv.autoSend); });
         const user = await page.evaluate(readUserActivity).catch(() => null);
         if (!rejection || !user || user.typing || Date.now() - user.at < USER_IDLE_MS || leaveAlone()) {
           break;
@@ -728,8 +733,14 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
           break;
         }
         moves += 1;
-        console.log(`📭 Chat ${rejection.id} (${rejection.title}): rejection read (it showed in the chat window)`);
-        recordEvent('rejection_read', { chatId: rejection.id, live: true });
+        if (isRejectionCell(rejection)) {
+          console.log(`📭 Chat ${rejection.id} (${rejection.title}): rejection read (it showed in the chat window)`);
+          recordEvent('rejection_read', { chatId: rejection.id, live: true });
+        } else {
+          // The chat on the right is replaced after the address
+          await sleep(2000);
+          await answerTemplate(rejection);
+        }
         await humanPause(2000, 4000);
       }
     } catch (error) {

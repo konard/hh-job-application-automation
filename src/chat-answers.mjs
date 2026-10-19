@@ -192,8 +192,21 @@ export function templateCore(text, { sender = '' } = {}) {
   while (lines.length > 1 && isSignature(lines[lines.length - 1])) {
     lines.pop();
   }
-  return lines.join('\n');
+  // «С уважением, Егор / HR команды Нонтон»: the closing and all after it, a few lines at the end
+  const closing = lines.findLastIndex((line, index) => index > 0 && index >= lines.length - 4 && CLOSING.test(line));
+  return (closing > 0 ? lines.slice(0, closing) : lines).join('\n');
 }
+
+/** The closing of a message before the signature */
+const CLOSING = /^(?:с уважением|с наилучшими пожеланиями|всего доброго|best regards|kind regards|regards)(?!\p{L})/iu;
+
+/**
+ * The words a company picks one of for the same thing: «для позиции», «для вакансии», «для
+ * должности» are the same template
+ * @param {string} text
+ * @returns {string}
+ */
+const sameWords = (text) => String(text).replace(/(?<!\p{L})(?:ваканси|позици|должност)\p{L}*/giu, 'позиции');
 
 /** The reply of a template that needs none (a bot's «Ваши ответы отправлены работодателю») */
 export const NO_REPLY = '[без ответа]';
@@ -341,6 +354,22 @@ const patternOwnWords = (pattern) => pattern.replace(PATTERN_PREFIX, '').split('
 const ASKS_TO_DO = /пригла|собеседов|интервью|тестов|задани|анкет|заполн|пройд|напиши|напишите|позвон|созвон|свяжитесь|пришлите|отправьте|сообщите|укажите|ссылк|telegram|телеграм|https?:|t\.me|@\w/iu;
 
 /**
+ * What a message adds to a template inside it asks the user something: more question marks than the
+ * template, a request («расскажите», «уточните»), an invitation, a form, a link
+ * @param {string} core - templateCore of the message
+ * @param {string} template - The saved template inside it
+ * @returns {boolean}
+ */
+const addsAsking = (core, template) => {
+  const marks = (text) => String(text).match(/\?/g)?.length ?? 0;
+  const rest = normalizeQuestion(sameWords(core)).replace(normalizeQuestion(sameWords(template)), ' ');
+  return marks(core) > marks(template) || ASKS_TO_DO.test(rest) || ASKS_FOR.test(rest);
+};
+
+/** A request for the user's facts anywhere in a text */
+const ASKS_FOR = /(?<!\p{L})(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите|напомните)(?!\p{L})/iu;
+
+/**
  * A pattern says all of a message: the message tells nothing more than the template (a company's
  * and a vacancy's names in the gaps), and asks the user to do nothing
  * @param {string} pattern
@@ -378,13 +407,13 @@ export function knownReply(message, { templates, qaMap }) {
   const core = templateCore(message.text, { sender: message.title });
   const examples = new Map([...templates].filter(([key]) => !isPattern(key)));
   // A template inside a longer message (a company adds a paragraph of its own) is still that template
-  const flat = normalizeQuestion(core);
+  const flat = normalizeQuestion(sameWords(core));
   const contained = [...examples.keys()].find((key) => key !== REJECTION_KEY && normalizeQuestion(key).length > 20 &&
-    flat.includes(normalizeQuestion(key)));
+    flat.includes(normalizeQuestion(sameWords(key))));
   // A learned pattern matches other wordings of the same template; a question is not a template.
   // The pattern with the most words of its own, the closest one
   const pattern = !contained && !isQuestion(core) && [...templates.keys()]
-    .filter((key) => isPattern(key) && matchesPattern(key, core))
+    .filter((key) => isPattern(key) && matchesPattern(sameWords(key), sameWords(core)))
     .sort((a, b) => patternOwnWords(b) - patternOwnWords(a))[0];
   const template = contained || pattern
     ? { question: contained || pattern, answer: templates.get(contained || pattern), score: 1 }
@@ -394,7 +423,9 @@ export function knownReply(message, { templates, qaMap }) {
     return {
       answer: answer === NO_REPLY ? '' : answer,
       noReply: answer === NO_REPLY,
-      perfect: Boolean(contained) || (Boolean(pattern) && patternSays(pattern, core)) || sameText(core, template.question),
+      // A template inside a longer message: what the company adds asks nothing of the user
+      perfect: (Boolean(contained) && !addsAsking(core, contained)) ||
+        (Boolean(pattern) && patternSays(pattern, core)) || sameText(core, template.question),
       source: `chat-templates.lino ${template.score.toFixed(2)}`,
       matched: template.question,
     };

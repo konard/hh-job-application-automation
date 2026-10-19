@@ -494,6 +494,11 @@ browser. For the message waiting for an answer the reply is typed into the messa
   match counts as an exact one (sent with `--auto-send`) when the message says nothing more than the
   pattern (at most 3 times its words, a company's and a vacancy's names in the gaps) and asks nothing:
   no invitation, test, form, link or call.
+  A template inside a longer message is an exact one when what the company adds asks nothing (no
+  more question marks, no «расскажите», «уточните», invitation, form or link). The closing and
+  the signature («С уважением, Егор / HR команды Нонтон») are left out, and «позиции», «вакансии»
+  and «должности» are the same word in templates. Templates are answered as they show in the chat
+  window, as rejections are read.
 
 `--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
 quick replies are never clicked.

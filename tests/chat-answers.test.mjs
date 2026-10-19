@@ -108,6 +108,20 @@ describe('template patterns', () => {
     assert.equal(knownReply({ title: '', text: 'Пришлите, пожалуйста, портфолио.' }, { templates, qaMap }), null);
   });
 
+  test('a closing with a signature after it, «вакансии» for «позиции»: still the template', () => {
+    const templates = new Map(examples);
+    const message = 'Константин Константинович, здравствуйте!\n\nСпасибо за отклик! Рассмотрим ваше резюме. Если навыки и опыт ' +
+      'подойдут для вакансии, мы свяжемся с вами.\n\nС уважением, Егор\nHR команды Нонтон';
+    assert.equal(templateCore(message, { sender: 'Егор' }),
+      'Спасибо за отклик! Рассмотрим ваше резюме. Если навыки и опыт подойдут для вакансии, мы свяжемся с вами.');
+    assert.equal(knownReply({ title: 'Егор', text: message }, { templates, qaMap })?.perfect, true);
+    // The chat list's line: the whole message in one line
+    assert.equal(knownReply({ title: '', text: message.replace(/\n+/g, ' ') }, { templates, qaMap })?.perfect, true);
+    // What the company adds asks the user to do something: not sent
+    const more = `${message.split('\n\n').slice(0, 2).join('\n\n')} Пройдите, пожалуйста, тестовое задание по ссылке.`;
+    assert.equal(knownReply({ title: 'Егор', text: more }, { templates, qaMap })?.perfect, false);
+  });
+
   test('learning again replaces old patterns', () => {
     const stale = new Map([...examples, [`${PATTERN_PREFIX}старый шаблон`, reply]]);
     assert.ok(!withLearnedPatterns(stale).has(`${PATTERN_PREFIX}старый шаблон`));
