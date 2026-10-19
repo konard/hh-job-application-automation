@@ -30,7 +30,8 @@ const APPLICATION_TITLE = 'Отклик на вакансию';
 /**
  * Runs in the page: the messages of the open chat, oldest first. The user's own messages carry a
  * delivery status icon; the others are the employer's or a bot's
- * @returns {{vacancy: string, messages: Array<{id: string, mine: boolean, title: string, text: string}>}}
+ * @returns {{vacancy: string, messages: Array<{id: string, mine: boolean, title: string, text: string}>, canReply: boolean, turnedOff: boolean}}
+ *   turnedOff: the employer turned the conversation off
  */
 export function readChat() {
   const clean = (text) => String(text ?? '').replace(/\n{3,}/g, '\n\n').trim();
@@ -67,6 +68,9 @@ export function readChat() {
     messages,
     // After a rejection hh.ru may close the chat: «Переписка будет доступна после приглашения работодателя»
     canReply: Boolean(document.querySelector('textarea[data-qa="text-input"]')),
+    // «Работодатель отключил переписку по данной вакансии» under the messages, in place of the field
+    turnedOff: [...document.querySelectorAll('span, div')].some((element) => element.childElementCount === 0 &&
+      /отключил\p{L}*\s+переписку/iu.test(element.textContent)),
   };
 }
 

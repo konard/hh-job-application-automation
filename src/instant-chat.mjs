@@ -162,7 +162,9 @@ export function createInstantChat({
     const watcher = (async () => {
       while (!done) {
         await sleep(2000);
-        if (answeredAfter(await frame.evaluate(readChat).catch(() => null), messageId)) {
+        const chat = await frame.evaluate(readChat).catch(() => null);
+        // Answered, or nothing can be answered any more
+        if (answeredAfter(chat, messageId) || chat?.turnedOff) {
           done = true;
           withdrawPrompt();
         }
@@ -190,6 +192,10 @@ export function createInstantChat({
       if (!chat || frame.isDetached() || (vacancyId && chatVacancy && chatVacancy !== vacancyId)) {
         log('💬 The chat panel was closed or shows another chat: left as it is');
         return;
+      }
+      if (chat.turnedOff) {
+        log('💬 The employer turned the conversation off: the panel is closed and the run goes on');
+        break;
       }
       const last = pendingMessages(chat.messages).at(-1);
       if (!last || last.id === handled) {

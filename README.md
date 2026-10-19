@@ -605,7 +605,9 @@ because it holds personal data:
   captchas (how many AI solved), skipped vacancies, rejections read (how many as they came) and
   letters attached later. A run prints today's line when it starts. The events are kept in
   `logs/stats.jsonl` (not in git).
-- **Chat panel**: hh.ru opens the employer chat after an application; the run closes it.
+- **Chat panel**: hh.ru opens the employer chat after an application; the run closes it. When the
+  employer turns the conversation off («Работодатель отключил переписку по данной вакансии») while
+  the run waits for your answer there, the panel is closed and the run goes on.
 
 ### Ignore Questionnaire Vacancies
 
