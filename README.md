@@ -503,8 +503,12 @@ browser. For the message waiting for an answer the reply is typed into the messa
   `pattern: ваше резюме … опыт* … позиции … свяже* с вами` (shared words in order, `…` for any
   words, `*` for any ending), which match other companies' wordings of the same message. A pattern
   match counts as an exact one (sent with `--auto-send`) when the message says nothing more than the
-  pattern (at most 3 times its words, a company's and a vacancy's names in the gaps) and asks nothing:
-  no invitation, test, form, link or call.
+  pattern (up to 40 words, or 3 times the pattern's, a company's and a vacancy's names in the gaps)
+  and asks nothing: no invitation, test, form, link or call.
+  An acknowledgement of the application in any company's words («Спасибо за интерес к нашей
+  вакансии! Мы рассмотрим ваше резюме… мы свяжемся с вами», «ознакомимся с резюме и дадим обратную
+  связь») is thanked for exactly, as the saved ones, unless it asks something, invites, links or
+  rejects. Thanks replies count as the same reply when templates are generalized.
   A template inside a longer message is an exact one when what the company adds asks nothing (no
   more question marks, no «расскажите», «уточните», invitation, form or link). The closing and
   the signature («С уважением, Егор / HR команды Нонтон») are left out, and «позиции», «вакансии»

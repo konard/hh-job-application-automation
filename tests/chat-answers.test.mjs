@@ -233,6 +233,30 @@ describe('requests without a question mark', () => {
   });
 });
 
+describe('Acknowledgements of the application, in any company\'s words', () => {
+  test('are thanked for as the saved ones; one that asks, invites or rejects is not', async () => {
+    const { isAcknowledgement, knownReply } = await import('../src/chat-answers.mjs');
+    const templates = new Map([
+      ['Спасибо за отклик! Мы рассмотрим Ваше резюме и позже сообщим о своем решении.', 'Здравствуйте, благодарю, ожидаю.'],
+      ['Рассмотрим ваше резюме. Если навыки и опыт подойдут для позиции, мы свяжемся с вами.', 'Здравствуйте, благодарю, ожидаю.'],
+      ['Компания Рога и копыта рассмотрит Ваше резюме на вакансию Разработчик и позже сообщит Вам о своем решении.', 'Здравствуйте, благодарю.'],
+    ]);
+    const message = 'Константин Константинович, здравствуйте!\n\nСпасибо за интерес к нашей вакансии! Мы обязательно рассмотрим ' +
+      'ваше резюме. Если навыки и опыт покажутся нам подходящими для данной позиции, мы свяжемся с вами.\n\nС уважением,\nКоманда HR Интерлизинг';
+    const reply = knownReply({ title: 'Дарья', text: message }, { templates, qaMap: new Map() });
+    assert.equal(reply.answer, 'Здравствуйте, благодарю, ожидаю.');
+    assert.equal(reply.perfect, true);
+    assert.equal(isAcknowledgement('Спасибо за ваш отклик, ознакомимся с Вашим резюме и дадим обратную связь.'), true);
+    assert.equal(isAcknowledgement('Ваш отклик мы получили! Внимательно изучим ваше резюме. Если ваш опыт совпадёт с нашими задачами — наша команда свяжется с вами.'), true);
+    // Asks, invites, sends a link or rejects: left to the user
+    assert.equal(isAcknowledgement('Мы рассмотрим ваше резюме. Какой у вас опыт с Kafka? Свяжемся с вами.'), false);
+    assert.equal(isAcknowledgement('Мы рассмотрим ваше резюме и пригласим на интервью, если опыт подойдёт. Свяжемся с вами.'), false);
+    assert.equal(isAcknowledgement('Мы рассмотрим ваше резюме, пройдите тест по ссылке https://example.com, и мы свяжемся с вами.'), false);
+    assert.equal(isAcknowledgement('Мы рассмотрели ваше резюме, но, к сожалению, опыт не подходит. Свяжемся, если появится позиция.'), false);
+    assert.equal(isAcknowledgement('Расскажите о своем опыте, мы рассмотрим резюме и свяжемся с вами.'), false);
+  });
+});
+
 describe('Rejections read as they show in the chat window', () => {
   test('only the unread «Отказ» cells', async () => {
     const { visibleRejections } = await import('../src/chat-answers.mjs');

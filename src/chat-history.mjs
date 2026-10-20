@@ -12,7 +12,9 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { NO_REPLY, knownReply, learnedPairs } from './chat-answers.mjs';
+import { NO_REPLY, isThanks, knownReply, learnedPairs } from './chat-answers.mjs';
+
+export { isThanks };
 
 export const CHAT_HISTORY_FILE = path.join(process.cwd(), 'logs', 'chat-history.json');
 
@@ -66,21 +68,6 @@ const BY_NAME = /^(?![Зз]дравствуй|[Дд]обр|[Пп]ривет|[С�
 
 /** The key of the thanks for templates in replyVariants */
 export const THANKS = 'thanks';
-
-/** Words of a reply that only thanks and says the user waits */
-const THANKS_WORDS = new Set(['здравствуйте', 'добрый', 'день', 'вечер', 'утро', 'привет', 'благодарю', 'спасибо', 'большое',
-  'ожидаю', 'жду', 'буду', 'ждать', 'решения', 'ответа', 'обратной', 'связи', 'за', 'ответ', 'я', 'и', 'хорошо', 'понял', 'принял', 'отлично']);
-
-/**
- * Whether a reply only thanks (and says the user waits): one of them fits any template thanked for
- * @param {string} reply
- * @returns {boolean}
- */
-export function isThanks(reply) {
-  const words = String(reply ?? '').toLowerCase().replace(/ё/g, 'е').match(/\p{L}+/gu) ?? [];
-  return words.length > 0 && words.length <= 10 && words.some((word) => word === 'благодарю' || word === 'спасибо') &&
-    words.every((word) => THANKS_WORDS.has(word));
-}
 
 /**
  * The user's replies to each template, from the history

@@ -396,14 +396,53 @@ const addsAsking = (core, template) => {
 /** A request for the user's facts anywhere in a text */
 const ASKS_FOR = /(?<!\p{L})(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите|напомните)(?!\p{L})/iu;
 
+/** The words of a message a pattern may say all of, whatever its own length */
+const PATTERN_MESSAGE_WORDS = 40;
+
 /**
- * A pattern says all of a message: the message tells nothing more than the template (a company's
- * and a vacancy's names in the gaps), and asks the user to do nothing
+ * A pattern says all of a message: the message asks the user nothing (no question, no request for
+ * facts, nothing to do) and is a short note (up to 40 words, or 3 times the pattern's own): what
+ * else it says (thanks, a company's and a vacancy's names) needs no other answer
  * @param {string} pattern
  * @param {string} core - templateCore of the message
  * @returns {boolean}
  */
-export const patternSays = (pattern, core) => !ASKS_TO_DO.test(core) && patternWords(core).length <= 3 * patternOwnWords(pattern);
+export const patternSays = (pattern, core) => !ASKS_TO_DO.test(core) && !ASKS_FOR.test(core) && !/\?/.test(core) &&
+  patternWords(core).length <= Math.max(PATTERN_MESSAGE_WORDS, 3 * patternOwnWords(pattern));
+
+/** An acknowledgement: the resume (the application) is reviewed, and the employer comes back with the result */
+const REVIEWS = /рассмотр|изуч|ознаком|в работу|приня(?:ли|то)|получили|подходит|подойд|review|consider/iu;
+const COMES_BACK = /свяж|сообщ|верн[её]м|верн[её]тся|обратн\p{L}* связ|позвон|напиш(?:ем|ет)|результат|contact|get back|reach out/iu;
+const ABOUT_APPLICATION = /резюме|отклик|кандидат|опыт|resume|cv|application/iu;
+/** Asks the user to do something: an imperative, an invitation, a test or a form, a link */
+const ASKS_USER = /(?<!\p{L})(?:напишите|позвоните|свяжитесь|пришлите|отправьте|сообщите|укажите|заполните|пройдите|ответьте|подтвердите|перейдите|почитайте|посмотрите|выберите|запишитесь|please)(?!\p{L})|пригла|собеседов|интервью|тестов|задани|анкет|ссылк|telegram|телеграм|https?:|t\.me|www\.|@\w/iu;
+/** Not good news: a rejection in other words */
+const BAD_NEWS = /к сожалению|отказ|не готовы|не можем|не подходит|unfortunately|regret/iu;
+
+/**
+ * Whether a message only acknowledges the application, in any company's words («Спасибо за
+ * отклик! Мы рассмотрим ваше резюме и свяжемся с вами»): it tells the resume is reviewed and the
+ * employer comes back, asks nothing and brings no bad news. Thanks answer it
+ * @param {string} core - templateCore of the message
+ * @returns {boolean}
+ */
+export function isAcknowledgement(core) {
+  const text = String(core ?? '');
+  return REVIEWS.test(text) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text) && !/\?/.test(text) &&
+    !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && patternWords(text).length <= 60;
+}
+
+/** The thanks saved most often for templates: the reply to an acknowledgement; null without one */
+function savedThanks(templates) {
+  const counts = new Map();
+  for (const answer of templates.values()) {
+    const text = answerText(answer);
+    if (isThanks(text)) {
+      counts.set(text, (counts.get(text) ?? 0) + 1);
+    }
+  }
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
 
 /** Whether a message asks the user something: a question, or a request for facts about them */
 export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(text).trim());
@@ -445,17 +484,23 @@ export function knownReply(message, { templates, qaMap }) {
   const template = contained || pattern
     ? { question: contained || pattern, answer: templates.get(contained || pattern), score: 1 }
     : findBestMatch(core, examples, { threshold: TEMPLATE_THRESHOLD });
-  if (template) {
-    const answer = answerText(template.answer);
-    return {
-      answer: answer === NO_REPLY ? '' : answer,
-      noReply: answer === NO_REPLY,
-      // A template inside a longer message: what the company adds asks nothing of the user
-      perfect: (Boolean(contained) && !addsAsking(core, contained)) ||
-        (Boolean(pattern) && patternSays(pattern, core)) || sameText(core, template.question),
-      source: `chat-templates.lino ${template.score.toFixed(2)}`,
-      matched: template.question,
-    };
+  const answer = template && answerText(template.answer);
+  const reply = template && {
+    answer: answer === NO_REPLY ? '' : answer,
+    noReply: answer === NO_REPLY,
+    // A template inside a longer message: what the company adds asks nothing of the user
+    perfect: (Boolean(contained) && !addsAsking(core, contained)) ||
+      (Boolean(pattern) && patternSays(pattern, core)) || sameText(core, template.question),
+    source: `chat-templates.lino ${template.score.toFixed(2)}`,
+    matched: template.question,
+  };
+  // Any company's acknowledgement of the application is thanked for, as the saved ones are
+  const thanks = !reply?.perfect && isAcknowledgement(core) && savedThanks(templates);
+  if (thanks) {
+    return { answer: thanks, noReply: false, perfect: true, source: 'chat-templates.lino: an acknowledgement of the application', matched: core };
+  }
+  if (reply) {
+    return reply;
   }
   if (asksSomething(core) || asksSomething(questionCore(core))) {
     const asked = questionCore(core);
@@ -574,8 +619,26 @@ function mergeTokens(a, b) {
 }
 
 
-/** Replies that say the same: equal, or nearly so («Благодарю, ожидаю» and «Благодарю, ожидаю!») */
-const sameReply = (a, b) => stringSimilarity(normalizeQuestion(answerText(a)), normalizeQuestion(answerText(b))) >= 0.85;
+/**
+ * Replies that say the same: equal, or nearly so («Благодарю, ожидаю» and «Благодарю, ожидаю!»), or
+ * both only thanks (one of them fits any template thanked for)
+ */
+const sameReply = (a, b) => (isThanks(answerText(a)) && isThanks(answerText(b))) || stringSimilarity(normalizeQuestion(answerText(a)), normalizeQuestion(answerText(b))) >= 0.85;
+
+/** Words of a reply that only thanks and says the user waits */
+const THANKS_WORDS = new Set(['здравствуйте', 'добрый', 'день', 'вечер', 'утро', 'привет', 'благодарю', 'спасибо', 'большое',
+  'ожидаю', 'жду', 'буду', 'ждать', 'решения', 'ответа', 'обратной', 'связи', 'за', 'ответ', 'я', 'и', 'хорошо', 'понял', 'принял', 'отлично']);
+
+/**
+ * Whether a reply only thanks (and says the user waits): one of them fits any template thanked for
+ * @param {string} reply
+ * @returns {boolean}
+ */
+export function isThanks(reply) {
+  const words = String(reply ?? '').toLowerCase().replace(/ё/g, 'е').match(/\p{L}+/gu) ?? [];
+  return words.length > 0 && words.length <= 10 && words.some((word) => word === 'благодарю' || word === 'спасибо') &&
+    words.every((word) => THANKS_WORDS.has(word));
+}
 
 /**
  * Patterns learned from template messages the user answered the same way: the messages of a reply
