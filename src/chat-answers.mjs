@@ -411,11 +411,16 @@ export const patternSays = (pattern, core) => !ASKS_TO_DO.test(core) && !ASKS_FO
   patternWords(core).length <= Math.max(PATTERN_MESSAGE_WORDS, 3 * patternOwnWords(pattern));
 
 /** An acknowledgement: the resume (the application) is reviewed, and the employer comes back with the result */
-const REVIEWS = /рассмотр|изуч|ознаком|в работу|приня(?:ли|то)|получили|подходит|подойд|review|consider/iu;
+const REVIEWS = /рассмотр|рассматр|анализ|изуч|ознаком|в работу|приня(?:ли|то)|получили|подходит|подойд|review|consider/iu;
 const COMES_BACK = /свяж|сообщ|верн[её]м|верн[её]тся|обратн\p{L}* связ|позвон|напиш(?:ем|ет)|результат|contact|get back|reach out/iu;
 const ABOUT_APPLICATION = /резюме|отклик|кандидат|опыт|resume|cv|application/iu;
-/** Asks the user to do something: an imperative, an invitation, a test or a form, a link */
-const ASKS_USER = /(?<!\p{L})(?:напишите|позвоните|свяжитесь|пришлите|отправьте|сообщите|укажите|заполните|пройдите|ответьте|подтвердите|перейдите|почитайте|посмотрите|выберите|запишитесь|please)(?!\p{L})|пригла|собеседов|интервью|тестов|задани|анкет|ссылк|telegram|телеграм|https?:|t\.me|www\.|@\w/iu;
+/**
+ * Asks the user to do something: an imperative, an invitation, an interview (not the results of
+ * interviews held), a test or a form, a link
+ */
+const ASKS_USER = /(?<!\p{L})(?:напишите|позвоните|свяжитесь|пришлите|отправьте|сообщите|укажите|заполните|пройдите|ответьте|подтвердите|перейдите|почитайте|посмотрите|выберите|запишитесь|please)(?!\p{L})|пригла|(?<!результат\p{L}*\s+)(?:собеседов|интервью)|тестов|задани|анкет|ссылк|telegram|телеграм|https?:|t\.me|www\.|@\w/iu;
+/** The words an acknowledgement may have: «Благодарим за интерес… продолжаем рассматривать кандидатов… свяжемся с вами» */
+const ACKNOWLEDGEMENT_WORDS = 80;
 /** Not good news: a rejection in other words */
 const BAD_NEWS = /к сожалению|отказ|не готовы|не можем|не подходит|unfortunately|regret/iu;
 
@@ -429,7 +434,7 @@ const BAD_NEWS = /к сожалению|отказ|не готовы|не мож
 export function isAcknowledgement(core) {
   const text = String(core ?? '');
   return REVIEWS.test(text) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text) && !/\?/.test(text) &&
-    !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && patternWords(text).length <= 60;
+    !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
 }
 
 /** The thanks saved most often for templates: the reply to an acknowledgement; null without one */

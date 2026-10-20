@@ -507,7 +507,8 @@ browser. For the message waiting for an answer the reply is typed into the messa
   and asks nothing: no invitation, test, form, link or call.
   An acknowledgement of the application in any company's words («Спасибо за интерес к нашей
   вакансии! Мы рассмотрим ваше резюме… мы свяжемся с вами», «ознакомимся с резюме и дадим обратную
-  связь») is thanked for exactly, as the saved ones, unless it asks something, invites, links or
+  связь», «продолжаем рассматривать кандидатов и анализировать результаты собеседований… свяжемся с
+  вами») is thanked for exactly, as the saved ones, unless it asks something, invites, links or
   rejects. Thanks replies count as the same reply when templates are generalized.
   A template inside a longer message is an exact one when what the company adds asks nothing (no
   more question marks, no «расскажите», «уточните», invitation, form or link). The closing and
