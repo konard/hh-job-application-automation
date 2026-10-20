@@ -9,6 +9,7 @@
  */
 
 import { SELECTORS } from '../hh-selectors.mjs';
+import { DIRECT_APPLICATION_MARKERS } from '../hh-words.mjs';
 import { log } from '../logging.mjs';
 
 /**
@@ -69,11 +70,10 @@ export async function checkAndCloseDirectApplicationModal({ commander } = {}) {
 
     // Cancel button found - verify by looking for direct application text nearby
     const detection = await commander.safeEvaluate({
-      fn: (cancelSelector, alertSelector, overlaySelector) => {
+      fn: (cancelSelector, alertSelector, overlaySelector, markers) => {
         const cancelButton = document.querySelector(cancelSelector);
         if (!cancelButton) return { found: false, reason: 'no cancel button' };
 
-        const markers = ['прямым откликом', 'сайте работодателя'];
         const hasMarker = (el) => markers.some((marker) => (el?.textContent || '').includes(marker));
         // The button that leads to the employer's site is a link next to the cancel button
         const employerLink = (scope) => [...(scope?.querySelectorAll('a[href]') ?? [])]
@@ -83,6 +83,10 @@ export async function checkAndCloseDirectApplicationModal({ commander } = {}) {
         const alert = document.querySelector(alertSelector);
         if (hasMarker(alert)) {
           return { found: true, reason: 'magritte-alert with direct application text', url: employerLink(alert) };
+        }
+        // Its own cancel button in the alert, in any language
+        if (alert?.contains(cancelButton)) {
+          return { found: true, reason: 'magritte-alert with the direct application cancel button', url: employerLink(alert) };
         }
         let container = cancelButton.parentElement;
         for (let i = 0; i < 5 && container; i++, container = container.parentElement) {
@@ -96,7 +100,7 @@ export async function checkAndCloseDirectApplicationModal({ commander } = {}) {
         }
         return { found: false, reason: 'cancel button found but no direct application text nearby' };
       },
-      args: [cancelButtonSelector, SELECTORS.directApplicationAlert, SELECTORS.modalOverlay],
+      args: [cancelButtonSelector, SELECTORS.directApplicationAlert, SELECTORS.modalOverlay, DIRECT_APPLICATION_MARKERS],
       defaultValue: { found: false, reason: 'evaluate failed' },
       operationName: 'direct application check',
       silent: true,

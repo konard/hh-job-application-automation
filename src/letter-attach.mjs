@@ -13,6 +13,7 @@
  */
 
 import { typeLongText } from './helpers/page-helpers.mjs';
+import { CLOSE_WORDS, RESPONSE_SENT_TEXTS } from './hh-words.mjs';
 
 export const LETTER_SELECTORS = {
   cardInformer: '[data-qa="vacancy-response-letter-informer"]',
@@ -31,10 +32,11 @@ const TARGET = 'data-letter-offer';
  * @param {string} informer - LETTER_SELECTORS.cardInformer
  * @param {string} toggle - LETTER_SELECTORS.cardToggle
  * @param {string} target - TARGET
+ * @param {string[]} [sentTexts] - RESPONSE_SENT_TEXTS, for a card without the marks
  * @returns {{applied: boolean, offer: string|null}} applied: hh.ru says the application is sent;
  *   offer: the selector of the card's «Приложить письмо»
  */
-export function readCardAfterClick(vacancyId, informer, toggle, target) {
+export function readCardAfterClick(vacancyId, informer, toggle, target, sentTexts = []) {
   const card = document.querySelector(`a[href*="/vacancy/${vacancyId}"]`)?.closest('[data-qa="vacancy-serp__vacancy"]');
   if (!card) {
     return { applied: false, offer: null };
@@ -45,7 +47,7 @@ export function readCardAfterClick(vacancyId, informer, toggle, target) {
     button.setAttribute(target, vacancyId);
   }
   return {
-    applied: Boolean(card.querySelector(informer)) || /Вы откликнулись|Ваш отклик отправлен/.test(text),
+    applied: Boolean(card.querySelector(`${informer}, [data-qa="vacancy-serp__vacancy_responded"]`)) || sentTexts.some((sent) => text.includes(sent)),
     offer: button ? `[${target}="${vacancyId}"]` : null,
   };
 }
@@ -61,7 +63,7 @@ export async function cardAfterClick(commander, vacancyId) {
   try {
     return await commander.evaluate({
       fn: readCardAfterClick,
-      args: [vacancyId, LETTER_SELECTORS.cardInformer, LETTER_SELECTORS.cardToggle, TARGET],
+      args: [vacancyId, LETTER_SELECTORS.cardInformer, LETTER_SELECTORS.cardToggle, TARGET, RESPONSE_SENT_TEXTS],
     }) ?? { applied: false, offer: null };
   } catch {
     return { applied: false, offer: null };
@@ -168,10 +170,10 @@ export async function attachLetter({ commander, vacancyId, letter, offer = null,
 /** Close the letter popup left open, without sending */
 async function closeLetterPopup(commander) {
   await commander.evaluate({
-    fn: (sel) => {
+    fn: (sel, closeWords) => {
       const footer = document.querySelector(sel)?.closest('[data-qa="modal-overlay"], [role="dialog"]')?.querySelector('[data-qa="modal-footer"]');
-      [...(footer?.querySelectorAll('button') ?? [])].find((button) => /Закрыть|Отмена/.test(button.innerText))?.click();
+      [...(footer?.querySelectorAll('button') ?? [])].find((button) => new RegExp(closeWords, 'iu').test(button.innerText.trim()))?.click();
     },
-    args: [LETTER_SELECTORS.textarea],
+    args: [LETTER_SELECTORS.textarea, CLOSE_WORDS],
   }).catch(() => {});
 }

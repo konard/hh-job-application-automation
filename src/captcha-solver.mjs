@@ -33,7 +33,7 @@ import { log } from './logging.mjs';
  */
 export const CAPTCHA_IMAGE_SELECTOR = 'img[data-qa="account-captcha-picture"], img[src*="captcha" i]';
 export const CAPTCHA_INPUT_SELECTOR =
-  'input[data-qa="account-captcha-input"], input[placeholder="Текст с картинки"], input[name*="captcha" i]';
+  'input[data-qa="account-captcha-input"], input[placeholder="Текст с картинки"], input[placeholder="Text from the picture"], input[name*="captcha" i]';
 
 export const CLAUDE_MODEL = 'claude-haiku-5-5';
 /** Used when the Codex model catalog cannot be read */
@@ -288,11 +288,12 @@ async function takeCaptchaImage(commander, page) {
 
 /**
  * Runs in the page: the button that sends the captcha answer, as a selector, or null. It is the
- * submit button of the form (or dialog) holding the answer field, else its "Отправить" button
+ * submit button of the form (or dialog) holding the answer field, else its "Отправить" (Send) button
  * @param {{inputSelector: string}} selectors
  * @returns {string|null}
  */
 export function findCaptchaSendButton({ inputSelector }) {
+  const SEND_WORDS = /^(?:отправить|send|submit)$/iu;
   const input = [...document.querySelectorAll(inputSelector)].find((element) => element.getClientRects().length > 0);
   const scope = input?.closest('form') ?? input?.closest('[role="dialog"]');
   if (!scope) {
@@ -309,7 +310,7 @@ export function findCaptchaSendButton({ inputSelector }) {
   if (submit) {
     return `${scopeSelector}:has(${inputMark}) button[type="submit"]`;
   }
-  const send = buttons.find((button) => button.innerText.trim() === 'Отправить');
+  const send = buttons.find((button) => SEND_WORDS.test(button.innerText.trim()));
   return send?.getAttribute('data-qa') ? `button[data-qa="${send.getAttribute('data-qa')}"]` : null;
 }
 

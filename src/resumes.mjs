@@ -13,11 +13,19 @@
 import { SELECTORS } from './hh-selectors.mjs';
 
 const MONTHS = ['январ', 'феврал', 'март', 'апрел', 'ма', 'июн', 'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'];
+const MONTHS_EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/** The month of a name, in Russian or English; -1 when it is none */
+const monthOf = (name) => {
+  const lower = name.toLowerCase();
+  const en = MONTHS_EN.findIndex((prefix) => lower.startsWith(prefix));
+  return en !== -1 ? en : MONTHS.findIndex((prefix) => lower.startsWith(prefix));
+};
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Parse an hh.ru update date such as "Резюме обновлено 7 октября 2026 в 14:28",
- * "сегодня в 9:05", "вчера в 23:10", "07.10.2026 14:28" or "5 минут назад"
+ * "сегодня в 9:05", "вчера в 23:10", "07.10.2026 14:28" or "5 минут назад", and the same in
+ * English: "Updated 7 October 2026 at 14:28", "October 7", "today at 9:05", "5 minutes ago"
  * @param {string} text
  * @param {Date} [now=new Date()]
  * @returns {number|null} Timestamp or null when the text has no date
@@ -25,19 +33,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function parseUpdatedAt(text, now = new Date()) {
   const time = text.match(/(\d{1,2}):(\d{2})/);
   const [hours, minutes] = time ? [Number(time[1]), Number(time[2])] : [0, 0];
-  if (/только что/i.test(text)) {
+  if (/только что|just now/i.test(text)) {
     return now.getTime();
   }
-  const ago = text.match(/(\d+)?\s*(минут|час)[а-я]*\s+назад/i);
+  const ago = text.match(/(\d+|an?)?\s*(минут|час|minute|hour)\p{L}*\s+(?:назад|ago)/iu);
   if (ago) {
-    const unit = ago[2].toLowerCase() === 'час' ? 60 * 60 * 1000 : 60 * 1000;
-    return now.getTime() - Number(ago[1] ?? 1) * unit;
+    const unit = /^(?:час|hour)/i.test(ago[2]) ? 60 * 60 * 1000 : 60 * 1000;
+    return now.getTime() - (Number(ago[1]) || 1) * unit;
   }
-  const relative = text.match(/(сегодня|вчера)/i);
+  const relative = text.match(/(сегодня|вчера|today|yesterday)/i);
   if (relative) {
     const date = new Date(now);
     date.setHours(hours, minutes, 0, 0);
-    if (relative[1].toLowerCase() === 'вчера') {
+    if (/^(?:вчера|yesterday)$/i.test(relative[1])) {
       date.setDate(date.getDate() - 1);
     }
     return date.getTime();
@@ -46,13 +54,16 @@ export function parseUpdatedAt(text, now = new Date()) {
   if (numeric) {
     return new Date(Number(numeric[3]), Number(numeric[2]) - 1, Number(numeric[1]), hours, minutes).getTime();
   }
-  const absolute = text.match(/(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?/i);
-  const month = absolute && MONTHS.findIndex((prefix) => absolute[2].toLowerCase().startsWith(prefix));
-  if (!absolute || month === -1) {
+  // «7 октября 2026», "7 October 2026" or "October 7, 2026"
+  const dayFirst = text.match(/(\d{1,2})\s+([a-zа-яё]+)(?:\s+(\d{4}))?/i);
+  const monthFirst = text.match(/([a-z]+)\s+(\d{1,2})(?:,?\s+(\d{4}))?/i);
+  const absolute = dayFirst && monthOf(dayFirst[2]) !== -1 ? { day: dayFirst[1], month: dayFirst[2], year: dayFirst[3] }
+    : monthFirst && monthOf(monthFirst[1]) !== -1 ? { day: monthFirst[2], month: monthFirst[1], year: monthFirst[3] } : null;
+  if (!absolute) {
     return null;
   }
-  const date = new Date(Number(absolute[3] ?? now.getFullYear()), month, Number(absolute[1]), hours, minutes);
-  if (!absolute[3] && date.getTime() > now.getTime() + DAY_MS) {
+  const date = new Date(Number(absolute.year ?? now.getFullYear()), monthOf(absolute.month), Number(absolute.day), hours, minutes);
+  if (!absolute.year && date.getTime() > now.getTime() + DAY_MS) {
     // "30 декабря" read in January is last year's
     date.setFullYear(date.getFullYear() - 1);
   }
@@ -218,7 +229,7 @@ export async function readResumes(commander) {
       hash: block.querySelector(resumeCardLink)?.getAttribute('data-qa').replace('resume-card-link-', '') ?? null,
       title: block.getAttribute('data-qa-title') ?? '',
       searchUrl: block.querySelector(resumeRecommendations)?.href ?? null,
-      updatedText: block.textContent.match(/обновлен[оа]?\s[^·•]{0,40}/i)?.[0] ?? null,
+      updatedText: block.textContent.match(/(?:обновлен[оа]?|updated)\s[^·•]{0,40}/i)?.[0] ?? null,
     })),
     // A template's text lives in its content fragment; reading it adds nothing to the page
     stateText: [...document.querySelectorAll('template')]

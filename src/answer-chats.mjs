@@ -25,7 +25,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isQuestion, isSupportChat, isRejection, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChat, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isQuestion, isSupportChat, isApplication, isRejection, isRejectionCell, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
 } from './chat-answers.mjs';
 import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
@@ -116,9 +116,6 @@ const AUTOMATION_PORT = 9322;
 const MESSAGE_INPUT = 'textarea[data-qa="text-input"]';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const chatUrl = (id) => `https://hh.ru/chat/${id}`;
-/** A chat whose list cell says «Отказ»: the employer's rejection */
-const isRejectionCell = (chat) => /^отказ$/i.test(chat.last ?? '');
-
 /** A person's pause between chats: a few seconds, never the same */
 const humanPause = (fromMs = 3000, toMs = 7000) => sleep(fromMs + Math.random() * (toMs - fromMs));
 
@@ -206,7 +203,7 @@ async function walkChatList(visit) {
  * sets the inner copy first, the outer one from then on (a click on the label's text sets neither)
  */
 const unreadOnlyBox = () => page.locator('input[data-qa="chatik-checkbox-only-unread"]').first();
-const UNREAD_ONLY_INPUTS = 'label:has-text("Только непрочитанные") input[type="checkbox"]';
+const UNREAD_ONLY_INPUTS = 'label:has(input[data-qa="chatik-checkbox-only-unread"]) input[type="checkbox"]';
 
 /** @returns {Promise<boolean|null>} Whether the filter is set; null without it on the page */
 async function unreadOnlyIsSet(timeout) {
@@ -401,7 +398,7 @@ async function prefillChat(id, depth = 0) {
     return null;
   }
   await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
-  const chat = await page.evaluate(readChat);
+  const chat = await readChatIn(page);
   await learn(chat);
   const pending = pendingMessages(chat.messages);
   if (pending.length === 0) {
@@ -506,7 +503,7 @@ async function waitForSend(answeredId) {
   const watcher = (async () => {
     while (!sent) {
       await sleep(3000);
-      const chat = await page.evaluate(readChat).catch(() => null);
+      const chat = await readChatIn(page).catch(() => null);
       const index = chat?.messages.findIndex((message) => message.id === answeredId) ?? -1;
       if (index >= 0 && chat.messages.slice(index + 1).some((message) => message.mine)) {
         sent = true;
@@ -541,7 +538,7 @@ async function learnFromAllChats() {
     'chats with only the application, «Отклик на вакансию», are not opened)');
   await walkChatList(async (chat) => {
     // A chat read before this history was kept is read once more, to keep it
-    if (chat.unread || /^отклик\s+на\s+вакансию$/i.test(chat.last.trim()) || (readBefore[chat.id] === chat.last && kept[chat.id])) {
+    if (chat.unread || isApplication({ title: chat.last.trim() }) || (readBefore[chat.id] === chat.last && kept[chat.id])) {
       return false;
     }
     await openChat(chat.id);
@@ -549,7 +546,7 @@ async function learnFromAllChats() {
       return true;
     }
     await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
-    const read = await page.evaluate(readChat).catch(() => null);
+    const read = await readChatIn(page).catch(() => null);
     if (read) {
       await learn({ ...read, id: read.id || chat.id });
       readBefore[chat.id] = chat.last;
@@ -619,7 +616,7 @@ function templateCell(chat, templates) {
  */
 async function answerTemplate(chat) {
   await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
-  const read = await page.evaluate(readChat).catch(() => null);
+  const read = await readChatIn(page).catch(() => null);
   if (!read) {
     return;
   }
@@ -673,7 +670,7 @@ function learnAsTheUserAnswers() {
     if (page.isClosed() || !/\/chat\/\d+/.test(page.url())) {
       return;
     }
-    const chat = await page.evaluate(readChat).catch(() => null);
+    const chat = await readChatIn(page).catch(() => null);
     const key = `${chat?.id}\n${chat?.messages?.at(-1)?.id}`;
     if (chat?.messages?.length && key !== last) {
       last = key;
@@ -783,7 +780,7 @@ if (argv.watch) {
       if (!page.url().startsWith(chatUrl(stuckChat.id))) {
         await page.goto(chatUrl(stuckChat.id), { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
       }
-      const chat = await page.evaluate(readChat).catch(() => null);
+      const chat = await readChatIn(page).catch(() => null);
       if (!chat || !isChatAnswered(chat)) {
         await sleep(argv.poll * 1000);
         continue;

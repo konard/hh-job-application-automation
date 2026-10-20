@@ -37,7 +37,7 @@ describe('chat answers', () => {
   });
 
   test('a rejection asks for the reason, whatever its wording', () => {
-    const rejection = { title: 'Анна', rejection: true, text: 'К сожалению, сейчас мы не готовы пригласить вас на следующий этап.' };
+    const rejection = { title: 'Анна', heading: 'Rejection', text: 'К сожалению, сейчас мы не готовы пригласить вас на следующий этап.' };
     assert.equal(isRejection(rejection), true);
     assert.equal(isRejection({ text: 'К сожалению, мы выбрали другого кандидата' }), true);
     assert.equal(knownReply(rejection, { templates, qaMap })?.answer, 'Подскажите, пожалуйста, причину отказа?');
@@ -243,6 +243,36 @@ describe('Rejections read as they show in the chat window', () => {
       { id: '4', unread: true, last: 'Здравствуйте! Отказ от...' },
     ];
     assert.deepEqual(visibleRejections(chats).map((chat) => chat.id), ['1']);
+  });
+
+  test('in any language: the word, or a red status in place of the last message', async () => {
+    const { isApplication, isRejection, isRejectionCell, learnedPairs, visibleRejections } = await import('../src/chat-answers.mjs');
+    const chats = [
+      { id: '1', unread: true, last: 'Rejection' },
+      // hh.ru's status in a language without its word here: red is a rejection, green an invitation
+      { id: '2', unread: true, last: 'Rad etildi', status: 'red' },
+      { id: '3', unread: true, last: 'Interview', status: 'green' },
+      // A message is not a status, whatever its color
+      { id: '4', unread: true, last: 'Unfortunately, we have chosen another candidate.', status: 'red' },
+    ];
+    assert.deepEqual(visibleRejections(chats).map((chat) => chat.id), ['1', '2']);
+    assert.equal(isRejectionCell({ last: 'Отказ' }), true);
+    assert.equal(isRejection({ mine: false, heading: 'Rejection', text: 'Thank you for your interest.' }), true);
+    assert.equal(isRejection({ mine: false, heading: '', text: 'Thank you for your interest.' }), false);
+    // The application: hh.ru's title in either language, or any title on the user's own message
+    assert.equal(isApplication({ mine: true, title: 'Vacancy application' }), true);
+    assert.equal(isApplication({ mine: true, title: 'Bewerbung' }), true);
+    assert.equal(isApplication({ mine: true, title: '' }), false);
+    assert.equal(isApplication({ title: 'Отклик на вакансию' }), true);
+    const { templates } = learnedPairs([
+      { mine: true, title: 'Vacancy application', text: 'Здравствуйте, мне интересна вакансия.' },
+      { mine: false, title: 'Анна', text: 'Спасибо, рассмотрим ваше резюме.' },
+      { mine: true, title: '', text: 'Благодарю, ожидаю.' },
+      { mine: false, title: 'Анна', text: 'Приглашаем вас на интервью в четверг.' },
+      // hh.ru's own notice on the user's side is not the user's answer
+      { mine: true, title: '', text: 'Respond to the invitation, even if you are not interested. This helps us.' },
+    ]);
+    assert.deepEqual(templates, [['Спасибо, рассмотрим ваше резюме.', 'Благодарю, ожидаю.']]);
   });
 
   test('the user\'s activity is counted, the tool\'s own clicks are not', async () => {

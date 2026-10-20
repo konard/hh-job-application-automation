@@ -16,7 +16,7 @@
  * @module instant-chat
  */
 
-import { chatContextTexts, compareReusedAnswers, describeReuse, isQuestion, isReuseOffer, knownReplyInContexts, learnedPairs, pendingMessages, readChat, reuseOption } from './chat-answers.mjs';
+import { chatContextTexts, compareReusedAnswers, describeReuse, isQuestion, isReuseOffer, knownReplyInContexts, learnedPairs, pendingMessages, readChatIn, reuseOption } from './chat-answers.mjs';
 import { normalizeQuestion } from './qa-database.mjs';
 import { askUser, isInteractive, withdrawPrompt } from './confirmations.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
@@ -72,7 +72,7 @@ const answeredAfter = (chat, messageId) => {
 
 async function waitForAnswer(frame, messageId, ms) {
   for (const started = Date.now(); Date.now() - started < ms; await sleep(500)) {
-    if (answeredAfter(await frame.evaluate(readChat).catch(() => null), messageId)) {
+    if (answeredAfter(await readChatIn(frame).catch(() => null), messageId)) {
       return true;
     }
   }
@@ -133,7 +133,7 @@ export function createInstantChat({
         if (!await frame.frameElement().then((element) => element.isVisible()).catch(() => false)) {
           continue;
         }
-        const chatVacancy = extractVacancyId((await frame.evaluate(readChat).catch(() => null))?.vacancyUrl ?? '');
+        const chatVacancy = extractVacancyId((await readChatIn(frame).catch(() => null))?.vacancyUrl ?? '');
         if (!vacancyId || chatVacancy === vacancyId) {
           return frame;
         }
@@ -162,7 +162,7 @@ export function createInstantChat({
     const watcher = (async () => {
       while (!done) {
         await sleep(2000);
-        const chat = await frame.evaluate(readChat).catch(() => null);
+        const chat = await readChatIn(frame).catch(() => null);
         // Answered, or nothing can be answered any more
         if (answeredAfter(chat, messageId) || chat?.turnedOff) {
           done = true;
@@ -186,7 +186,7 @@ export function createInstantChat({
     let quietSince = Date.now();
     let waitMs = firstMessageMs;
     for (;;) {
-      const chat = await frame.evaluate(readChat).catch(() => null);
+      const chat = await readChatIn(frame).catch(() => null);
       // Closed by the user, or another chat opened in it
       const chatVacancy = extractVacancyId(chat?.vacancyUrl ?? '');
       if (!chat || frame.isDetached() || (vacancyId && chatVacancy && chatVacancy !== vacancyId)) {
@@ -279,7 +279,7 @@ export function createInstantChat({
       if (choice !== 'withdrawn') {
         return;
       }
-      await learn(await frame.evaluate(readChat).catch(() => ({ messages: [] })));
+      await learn(await readChatIn(frame).catch(() => ({ messages: [] })));
       quietSince = Date.now();
       waitMs = nextMessageMs;
     }

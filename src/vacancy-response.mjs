@@ -25,6 +25,7 @@ import { noteSkip } from './skipped-vacancies.mjs';
 import { waitForVisibleResume } from './resume-visibility.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
+import { COVER_LETTER_TEXTS } from './hh-words.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
 import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
@@ -240,7 +241,7 @@ async function prepareCoverLetterTextarea({ commander }) {
     console.log('Cover letter section already expanded, textarea visible');
   } else {
     const toggleSelector = await findCoverLetterToggle(commander, {
-      texts: ['Добавить', 'Сопроводительное письмо'],
+      texts: ['Добавить', 'Add', ...COVER_LETTER_TEXTS],
       elementTypes: ['a', 'button', 'span', 'div'],
     });
     if (toggleSelector) {

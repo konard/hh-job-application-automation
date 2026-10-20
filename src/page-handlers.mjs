@@ -14,6 +14,7 @@ import { log } from './logging.mjs';
 import { createApplyButtonTracker } from './helpers/session-tracker.mjs';
 import { isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { URL_PATTERNS, extractVacancyId } from './hh-selectors.mjs';
+import { UNAVAILABLE_TEXT } from './hh-words.mjs';
 
 /**
  * Redirect back to the search page if the application was sent from a vacancy page
@@ -38,7 +39,7 @@ export async function checkAndRedirectIfNeeded({
     }
 
     // «Вам недоступна эта вакансия»: hh.ru closed it to this account; it is remembered and left
-    if (await commander.evaluate({ fn: () => /Вам недоступна эта вакансия/.test(document.body?.innerText ?? '') })) {
+    if (await commander.evaluate({ fn: (words) => new RegExp(words, 'iu').test(document.body?.innerText ?? ''), args: [UNAVAILABLE_TEXT] })) {
       await onUnavailable(extractVacancyId(currentUrl));
       console.log(`Back to the vacancy list: ${returnUrl}`);
       await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });

@@ -52,6 +52,18 @@ describe('parseUpdatedAt()', () => {
     assert.equal(parseUpdatedAt('Обновлено 7 октября', now), new Date(2026, 9, 7).getTime());
   });
 
+  test('parses the same dates in English', () => {
+    assert.equal(parseUpdatedAt('Updated 5 October 2026 at 14:30', now), new Date(2026, 9, 5, 14, 30).getTime());
+    assert.equal(parseUpdatedAt('Updated October 7, 2026 at 14:28', now), new Date(2026, 9, 7, 14, 28).getTime());
+    assert.equal(parseUpdatedAt('updated May 3', now), new Date(2026, 4, 3).getTime());
+    assert.equal(parseUpdatedAt('Updated today at 9:05', now), new Date(2026, 9, 9, 9, 5).getTime());
+    assert.equal(parseUpdatedAt('Updated yesterday at 23:10', now), new Date(2026, 9, 8, 23, 10).getTime());
+    assert.equal(parseUpdatedAt('Updated 5 minutes ago', now), now.getTime() - 5 * 60 * 1000);
+    assert.equal(parseUpdatedAt('updated an hour ago', now), now.getTime() - 60 * 60 * 1000);
+    assert.equal(parseUpdatedAt('Updated just now', now), now.getTime());
+    assert.equal(parseUpdatedAt('Uplift in search results', now), null);
+  });
+
   test('a date without a year later than today is last year', () => {
     assert.equal(parseUpdatedAt('Обновлено 30 декабря', new Date(2027, 0, 5)), new Date(2026, 11, 30).getTime());
   });

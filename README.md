@@ -312,6 +312,17 @@ Every filtered vacancy is logged with the rule (`🚫 Vacancy … filtered out b
 (question "кв.мм": …)`) and kept in `data/filtered-vacancies.lino` with its title and the time, so
 it is not opened again. Add a line to the rules when you see a vacancy that should have been skipped.
 
+### hh.ru in Any Language
+
+hh.ru can show its interface in Russian or English (the account's setting). The tool reads it by
+its markup, the same in every language: the «Откликнуться» (Apply) buttons, the «Только
+непрочитанные» (Unread only) filter, a rejection in the chat list (its status in red), the vacancy
+of a chat, the chat link of a sent application, the hidden resume notice and the direct
+application popup. Where only the text tells (a message titled «Отказ» / "Rejection", the
+application «Отклик на вакансию» / "Vacancy application", a chat the employer turned off, the
+captcha, «Вам недоступна эта вакансия»), the words are in `src/hh-words.mjs`, in both languages.
+Drafted answers are written in the language of the question.
+
 ### Applications Sent at Once, and the Cover Letter
 
 hh.ru sometimes sends the application at the click on «Откликнуться», with no popup: the card says

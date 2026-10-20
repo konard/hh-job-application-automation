@@ -8,6 +8,7 @@
 
 import { formatMonthYear } from './experience.mjs';
 import { waitForCaptcha } from './form-slots.mjs';
+import { pageLanguage } from './hh-words.mjs';
 
 export const LINKEDIN_PROFILE = 'https://www.linkedin.com/in/konard';
 const LOGIN_URL = /linkedin\.com\/(authwall|login|uas\/login|checkpoint|signup|start\/join)/i;
@@ -668,7 +669,7 @@ export async function prefillHhExperience(page, change, { resumeHash }) {
   await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
   // The list shows the latest jobs until it is expanded
   await page.evaluate(() => [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button')]
-    .filter((button) => /развернуть|показать (все|ещё)/i.test(button.innerText)).forEach((button) => button.click()));
+    .filter((button) => /развернуть|показать (все|ещё)|show (all|more)|expand/i.test(button.innerText)).forEach((button) => button.click()));
   await sleep(1000);
   if (change.kind === 'update') {
     const found = await page.evaluate(clickHhExperienceEdit, {
@@ -680,7 +681,7 @@ export async function prefillHhExperience(page, change, { resumeHash }) {
   } else {
     const added = await page.evaluate(() => {
       const button = [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button, [data-qa="resume-list-card-experience"] a')]
-        .find((element) => /^добавить/i.test(element.innerText.trim()));
+        .find((element) => /^(добавить|add)/i.test(element.innerText.trim()));
       button?.click();
       return Boolean(button);
     });
@@ -736,9 +737,10 @@ async function chooseHhMonth(page, index, date, notes) {
   if (!date.includes('-')) {
     return;
   }
-  const name = formatMonthYear(date, 'ru').split(' ')[0];
-  // The visible trigger shows "Месяц" and the chosen month; its combobox input is hidden
-  const trigger = page.locator(`${HH.monthSelect}:visible`).filter({ hasText: /^\s*Месяц/ }).nth(index);
+  // The months are named in hh.ru's language
+  const name = formatMonthYear(date, pageLanguage(await page.evaluate(() => document.documentElement.lang).catch(() => ''))).split(' ')[0];
+  // The visible trigger shows "Месяц" (Month) and the chosen month; its combobox input is hidden
+  const trigger = page.locator(`${HH.monthSelect}:visible`).filter({ hasText: /^\s*(Месяц|Month)/ }).nth(index);
   if (await trigger.count() === 0) {
     notes.push(`hh.ru: set the ${index === 0 ? 'start' : 'end'} month (${name}) yourself`);
     return;
@@ -776,7 +778,7 @@ export async function saveHhExperience(page) {
  */
 export async function discardHhExperience(page) {
   await page.locator(HH.cancel).first().click().catch(() => {});
-  const discard = page.getByRole('button', { name: 'Не надо', exact: true });
+  const discard = page.getByRole('button', { name: /^(не надо|don'?t save|discard)$/i });
   if (await discard.waitFor({ timeout: 5000 }).then(() => true, () => false)) {
     await discard.click();
   }

@@ -18,6 +18,7 @@ import { recordEvent } from './stats.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
 import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
+import { COVER_LETTER_TEXTS } from './hh-words.mjs';
 
 /**
  * Handle limit error when detected
@@ -164,7 +165,7 @@ export async function processModalApplication({
     console.log('💡 Cover letter textarea already visible, skipping toggle click');
   } else {
     const toggleSelector = await findCoverLetterToggle(commander, {
-      texts: ['сопроводительное'],
+      texts: COVER_LETTER_TEXTS,
       elementTypes: ['button', 'a'],
     });
     if (toggleSelector) {
@@ -467,19 +468,8 @@ export function markVacancyAsProcessed(vacancyId) {
 }
 
 /**
- * Get the "Откликнуться" button selector as a plain CSS selector usable in the browser
- * @returns {Promise<string|null>}
- */
-async function getApplyButtonSelector({ commander }) {
-  const textSelector = await commander.findByText({ text: 'Откликнуться', selector: 'a' });
-  const selector = await commander.normalizeSelector({ selector: textSelector });
-  // DEFENSIVE: Validate selector is a string to prevent Issue #148
-  // See docs/case-studies/issue-148/case-study.md for details
-  return typeof selector === 'string' && selector ? selector : null;
-}
-
-/**
- * Scan "Откликнуться" buttons and find the first one whose vacancy was not processed yet
+ * Scan the "Откликнуться" (Apply) buttons, found by their data-qa (the same in every language),
+ * and find the first one whose vacancy was not processed yet
  * @returns {Promise<{value: Object, navigationError?: boolean}>}
  */
 function scanApplyButtons({ commander, selector }) {
@@ -525,12 +515,7 @@ function scanApplyButtons({ commander, selector }) {
  * @returns {Promise<{selector: string|null, buttonIndex?: number, vacancyId?: string, status?: string}>}
  */
 async function findVacancyButton({ commander }) {
-  const selector = await getApplyButtonSelector({ commander });
-  if (!selector) {
-    log.debug(() => '🔍 Could not find button with text "Откликнуться"');
-    return { selector: null, status: 'no_buttons_found' };
-  }
-
+  const selector = SELECTORS.vacancyListApply;
   let scan = await scanApplyButtons({ commander, selector });
   if (!scan.navigationError && scan.value.unprocessedCount === 0) {
     log.debug(() => `🔍 Found ${scan.value.totalButtons} button(s), none unprocessed - waiting for page to fully load...`);
@@ -546,7 +531,7 @@ async function findVacancyButton({ commander }) {
     return { selector: null, status: 'no_buttons_found' };
   }
 
-  console.log(`📋 Found ${unprocessedCount} "Откликнуться" button(s). Processing next button...`);
+  console.log(`📋 Found ${unprocessedCount} apply button(s). Processing next button...`);
   log.debug(() => `🔍 ${totalButtons - unprocessedCount} button(s) already processed; next vacancy ID: ${vacancyId}`);
   return { selector, buttonIndex, vacancyId };
 }
@@ -1006,7 +991,7 @@ let blankReloads = 0;
  * stays blank is reloaded.
  */
 export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser, blankReload = BLANK_RELOAD }) {
-  console.log('💡 No more "Откликнуться" buttons on this page.');
+  console.log('💡 No more apply buttons on this page.');
 
   const paginationResult = await findAndClickNextPage({ commander });
   if (paginationResult.clicked) {
@@ -1054,8 +1039,7 @@ export async function waitForButtonsAfterNavigation({ commander, pageClosedByUse
 
     // Same URL, check if buttons appeared (e.g., dynamic content loaded)
     try {
-      const buttonSelector = await commander.findByText({ text: 'Откликнуться', selector: 'a' });
-      const buttonCount = await commander.count({ selector: buttonSelector });
+      const buttonCount = await commander.count({ selector: SELECTORS.vacancyListApply });
       if (buttonCount > 0) {
         console.log(`✅ Detected ${buttonCount} button(s) appeared on same page! Continuing automation...`);
         return { status: 'buttons_found' };

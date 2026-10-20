@@ -90,13 +90,14 @@ async function readRunningBrowserCookies(port) {
 function readResumeExport(page) {
   return page.evaluate(() => {
     const text = (element) => element?.innerText.trim() ?? '';
-    const skillGroup = (name) => [...document.querySelectorAll('.resume-skils')]
-      .find((group) => text(group.querySelector('.bloko-form-hint')) === name);
+    // Its labels follow hh.ru's language: Russian or English
+    const skillGroup = (...names) => [...document.querySelectorAll('.resume-skils')]
+      .find((group) => names.includes(text(group.querySelector('.bloko-form-hint'))));
     return {
       name: text(document.querySelector('.resume__title')),
       title: text(document.querySelector('.resume__position')),
-      updated: document.body.innerText.match(/Резюме обновлено[^\n]*/)?.[0].trim() ?? '',
-      keySkills: [...(skillGroup('Навыки')?.querySelectorAll('.resume-skils__item span') ?? [])]
+      updated: document.body.innerText.match(/(?:Резюме обновлено|Resume updated|Updated)[^\n]*/)?.[0].trim() ?? '',
+      keySkills: [...(skillGroup('Навыки', 'Skills', 'Key skills')?.querySelectorAll('.resume-skils__item span') ?? [])]
         .map((span) => text(span).replace(/;$/, '').trim())
         .filter(Boolean),
       jobs: [...document.querySelectorAll('.resume-experience')].map((job) => {
@@ -108,7 +109,7 @@ function readResumeExport(page) {
           description: [...job.querySelectorAll('.resume-experience__position ~ p')].map(text).join('\n'),
         };
       }),
-      about: text(skillGroup('Обо мне')),
+      about: text(skillGroup('Обо мне', 'About me', 'About')),
     };
   });
 }

@@ -17,6 +17,7 @@
 import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isPattern, matchesPattern, normalizeQuestion, patternWords, stringSimilarity } from './qa-database.mjs';
 import { answerText } from './qa.mjs';
 import { answersInContexts, showsContext } from './answer-contexts.mjs';
+import { APPLICATION_WORD, INVITE_NOTICE, REJECTION_WORD, TURNED_OFF_WORDS } from './hh-words.mjs';
 
 /** A template message is the same text in other words; its saved reply needs a close match */
 export const TEMPLATE_THRESHOLD = 0.6;
@@ -24,16 +25,22 @@ export const TEMPLATE_THRESHOLD = 0.6;
 /** Chat questions often ask two things at once; a saved answer to one of them needs a close match */
 export const CHAT_QUESTION_THRESHOLD = 0.7;
 
-/** Title of the first message of a chat: the user's own application with its cover letter */
-const APPLICATION_TITLE = 'Отклик на вакансию';
+/**
+ * The first message of a chat: the user's own application with its cover letter («Отклик на
+ * вакансию», "Vacancy application"). The user's own replies carry no title
+ * @param {{mine: boolean, title?: string}} message
+ * @returns {boolean}
+ */
+export const isApplication = (message) => APPLICATION_WORD.test(message.title ?? '') || Boolean(message.mine && message.title);
 
 /**
  * Runs in the page: the messages of the open chat, oldest first. The user's own messages carry a
- * delivery status icon; the others are the employer's or a bot's
- * @returns {{vacancy: string, messages: Array<{id: string, mine: boolean, title: string, text: string}>, canReply: boolean, turnedOff: boolean}}
- *   turnedOff: the employer turned the conversation off
+ * delivery status icon; the others are the employer's or a bot's. Read with readChatIn
+ * @param {string} turnedOffWords - TURNED_OFF_WORDS
+ * @returns {{vacancy: string, messages: Array<{id: string, mine: boolean, title: string, heading: string, text: string}>, canReply: boolean, turnedOff: boolean}}
+ *   heading: the bubble's own title («Отказ», "Rejection"); turnedOff: the employer turned the conversation off
  */
-export function readChat() {
+export function readChat(turnedOffWords) {
   const clean = (text) => String(text ?? '').replace(/\n{3,}/g, '\n\n').trim();
   const messages = [...document.querySelectorAll('[data-qa^="chatik-chat-message-"]')]
     .filter((element) => /^chatik-chat-message-\d+$/.test(element.getAttribute('data-qa')))
@@ -52,16 +59,18 @@ export function readChat() {
         // The sender: «Отклик на вакансию», a person's name or «Робот-рекрутер»
         title: clean(element.querySelector('[data-qa="chat-bubble-title"], [data-qa="chat-bubble-author-name"]')?.innerText),
         text: clean(element.querySelector('[data-qa="chat-bubble-text"]')?.innerText),
-        // hh.ru marks a rejection with an «Отказ» line in the bubble
-        rejection: !mine && /^\s*Отказ\s*$/m.test(element.innerText),
+        // hh.ru marks a rejection with an «Отказ» (Rejection) title in the bubble
+        heading: clean(element.querySelector('[data-qa="chat-bubble-title"]')?.innerText),
       };
     })
     .filter((message) => message.text);
+  // «Вакансия / <name> / Перейти» in any language: the line before the link, after the label
+  const header = document.querySelector('[data-qa="chatik-header-sub-header"]');
+  const link = clean(header?.querySelector('[data-qa="chatik-header-vacancy-link"]')?.innerText);
+  const headerLines = clean(header?.innerText).split('\n').map((line) => line.trim()).filter((line) => line && line !== link);
   return {
     id: window.location.pathname.match(/\/chat\/(\d+)/)?.[1] ?? '',
-    // «Вакансия / <name> / Перейти»: the middle line
-    vacancy: clean(document.querySelector('[data-qa="chatik-header-sub-header"]')?.innerText)
-      .split('\n').map((line) => line.trim()).filter((line) => line && !/^(вакансия|перейти)$/i.test(line))[0] ?? '',
+    vacancy: headerLines.at(-1) ?? '',
     company: clean(document.querySelector('[data-qa="participant-info-title"]')?.innerText),
     // «Перейти» leads to the vacancy
     vacancyUrl: document.querySelector('[data-qa="chatik-header-sub-header"] a[href*="/vacancy/"], a[href*="hh.ru/vacancy/"]')?.href.split('?')[0] ?? '',
@@ -70,9 +79,16 @@ export function readChat() {
     canReply: Boolean(document.querySelector('textarea[data-qa="text-input"]')),
     // «Работодатель отключил переписку по данной вакансии» under the messages, in place of the field
     turnedOff: [...document.querySelectorAll('span, div')].some((element) => element.childElementCount === 0 &&
-      /отключил\p{L}*\s+переписку/iu.test(element.textContent)),
+      new RegExp(turnedOffWords, 'iu').test(element.textContent)),
   };
 }
+
+/**
+ * The open chat, read in the page or frame
+ * @param {{evaluate: Function}} target - Playwright's page or frame
+ * @returns {Promise<Object>} readChat's
+ */
+export const readChatIn = (target) => target.evaluate(readChat, TURNED_OFF_WORDS);
 
 /**
  * Runs in the page: where the chat list is scrolled (and on screen), or scrolled to a position. The
@@ -107,7 +123,8 @@ export function readChatList() {
     const row = cell.closest('[class*="virtualized-row"]');
     const offset = /translateY\((\d+)/.exec(row?.style.transform ?? '');
     const subtitle = cell.querySelector('[data-qa="chat-cell-subtitle"]')?.innerText.trim() ?? '';
-    // The line under the company: the last message, or the status («Отказ», «Собеседование»)
+    // The line under the company: the last message, or the status («Отказ», «Собеседование»),
+    // colored: red for a rejection, green for an invitation
     const lines = cell.innerText.split('\n').map((line) => line.trim()).filter(Boolean);
     const last = lines[lines.indexOf(subtitle) + 1] ?? '';
     const rect = cell.getBoundingClientRect();
@@ -116,6 +133,7 @@ export function readChatList() {
       title: cell.querySelector('[data-qa="chat-cell-title"]')?.innerText.trim() ?? '',
       subtitle,
       last: /^\d+$/.test(last) ? '' : last,
+      status: /last-message-color_([a-z]+)/.exec(cell.querySelector('[class*="last-message-color_"]')?.className ?? '')?.[1] ?? '',
       lastIsMine: Boolean(cell.querySelector('[data-qa^="status-icon"]')),
       unread: Boolean(cell.querySelector('[data-qa*="badge"], [data-qa*="counter"]')),
       top: offset ? Number(offset[1]) : index,
@@ -150,11 +168,20 @@ export function readUserActivity() {
 }
 
 /**
+ * A chat of the list whose status is a rejection: in red, a word or two in place of the last
+ * message («Отказ», "Rejection"), in any language
+ * @param {{last?: string, status?: string}} chat - readChatList's
+ * @returns {boolean}
+ */
+export const isRejectionCell = (chat) => REJECTION_WORD.test(chat.last ?? '') ||
+  (chat.status === 'red' && /^\p{L}+(?:[\s-]\p{L}+)?$/u.test(chat.last ?? ''));
+
+/**
  * The unread rejections shown in the chat list
  * @param {Array} chats - readChatList's, those on screen
  * @returns {Array}
  */
-export const visibleRejections = (chats) => chats.filter((chat) => chat.unread && /^отказ$/i.test(chat.last ?? ''));
+export const visibleRejections = (chats) => chats.filter((chat) => chat.unread && isRejectionCell(chat));
 
 /**
  * The messages after the user's last own message: what is waiting for an answer
@@ -330,12 +357,12 @@ export function questionCore(text) {
 export const REJECTION_KEY = 'Отказ';
 
 /**
- * Whether a message is a rejection: hh.ru's «Отказ» mark, or the usual wording
- * @param {{rejection?: boolean, text: string}} message
+ * Whether a message is a rejection: hh.ru's «Отказ» (Rejection) title, or the usual wording
+ * @param {{heading?: string, text: string}} message
  * @returns {boolean}
  */
 export function isRejection(message) {
-  return Boolean(message.rejection) ||
+  return (!message.mine && REJECTION_WORD.test(message.heading ?? '')) ||
     /не готовы пригласить|не можем пригласить|приняли решение (не продолжать|отказать)|выбрали другого кандидата|к сожалению,? (мы )?(не готовы|вынуждены отказать|не можем)/i.test(message.text);
 }
 
@@ -609,14 +636,11 @@ export function withLearnedPatterns(templates) {
 const REMINDER = /не дождал(?:ась|ся|ись) (?:вашего )?ответа|можем продолжить (?:наше )?общение|^вы (?:ещё |еще )?здесь\?/i;
 export const isReminder = (text) => REMINDER.test(String(text));
 
-/** hh.ru's own notices shown on the user's side of a chat: not the user's answers */
-const HH_NOTICE = /^ответьте на приглашение, даже если оно вам не интересно/i;
-
 /** A message that only greets */
 const GREETING_ONLY = /^(?:здравствуйте|добрый\s+(?:день|вечер|утро)|доброе\s+утро|привет|hello|hi)[\s!.,)]*$/iu;
 
 /** The hh.ru support chat: no vacancy, its replies are to the support, not to employers */
-export const isSupportChat = (chat) => !chat.vacancy && /поддержк|support|помощник/i.test(`${chat.company ?? ''} ${chat.title ?? ''}`);
+export const isSupportChat = (chat) => !chat.vacancy && /поддержк|support|помощник|assistant/i.test(`${chat.company ?? ''} ${chat.title ?? ''}`);
 
 /**
  * Pairs the user has answered in a chat, to learn: an employer's message followed by the user's
@@ -635,7 +659,8 @@ export function learnedPairs(messages) {
       return;
     }
     // A greeting alone answers nothing: the answer follows in the next message
-    if (message.title === APPLICATION_TITLE || HH_NOTICE.test(message.text) || isQuestion(message.text) || GREETING_ONLY.test(message.text.trim())) {
+    // hh.ru's own notices shown on the user's side («Ответьте на приглашение…») are not the user's answers
+    if (isApplication(message) || INVITE_NOTICE.test(message.text) || isQuestion(message.text) || GREETING_ONLY.test(message.text.trim())) {
       return;
     }
     // A reminder («не дождалась вашего ответа») is not what the user answers: the question before it is
@@ -682,7 +707,7 @@ export function chatDraftPrompt({ vacancy, messages, resume, related }) {
     .map((message) => `${message.mine ? 'Я' : (message.title || 'Работодатель')}: ${message.text}`)
     .join('\n\n');
   return `Я кандидат и переписываюсь с работодателем в чате hh.ru${vacancy ? ` по вакансии «${vacancy}»` : ''}.
-Напиши мой ответ на последнее сообщение работодателя: коротко, вежливо, по делу, от первого лица, на русском.
+Напиши мой ответ на последнее сообщение работодателя: коротко, вежливо, по делу, от первого лица, на языке работодателя.
 Используй ТОЛЬКО факты из моего резюме и моих прошлых ответов ниже. Ничего не выдумывай: где нужного факта нет,
 поставь пометку «[уточнить: что именно]», я заполню сам. Если работодатель прислал ссылку на анкету, ответь, что заполню её.
 Пиши обычным текстом без Markdown (без **, # и обратных кавычек).

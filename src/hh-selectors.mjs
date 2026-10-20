@@ -22,6 +22,8 @@ export const SELECTORS = {
 
   // Application buttons
   applyButton: 'button[data-qa="vacancy-response-link-top"], button[data-qa="vacancy-serp__vacancy_response"]',
+  // «Откликнуться» (Apply) on the cards of the vacancy list, in any language
+  vacancyListApply: 'a[data-qa="vacancy-serp__vacancy_response"]',
   submitButtonPopup: '[data-qa="vacancy-response-submit-popup"]',
   submitButtonLetter: '[data-qa="vacancy-response-letter-submit"]',
   submitButtonWithoutQuestions: '[data-qa="vacancy-response-link-no-questions"]',

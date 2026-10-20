@@ -11,13 +11,14 @@
 
 import { log } from './logging.mjs';
 import { recordEvent } from './stats.mjs';
+import { CAPTCHA_TEXTS } from './hh-words.mjs';
 
-/** Texts of the hh.ru captcha dialog and captcha page */
-export const CAPTCHA_TEXTS = ['Пройдите капчу', 'введите текст с картинки', 'что вы не робот'];
+export { CAPTCHA_TEXTS };
 /** Elements of a captcha: its image, answer field, or a captcha frame */
 export const CAPTCHA_SELECTORS = [
   'img[src*="captcha" i]',
   'input[placeholder="Текст с картинки"]',
+  'input[placeholder="Text from the picture"]',
   'input[name*="captcha" i]',
   '[data-qa*="captcha" i]',
   'iframe[src*="captcha" i]',

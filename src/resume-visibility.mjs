@@ -9,18 +9,18 @@
  */
 
 import { askUser, isInteractive } from './confirmations.mjs';
-
-export const RESUME_HIDDEN_NOTICE = 'поменяйте видимость резюме';
+import { RESUME_HIDDEN_NOTICES } from './hh-words.mjs';
 
 /**
  * Runs in the page: whether the notice is rendered in the scope. hh.ru keeps it in every response
  * popup inside a collapsed block (data-qa="hidden-resume-warning", height 0) that opens only for a
- * hidden resume, so text inside a collapsed or hidden element does not count
+ * hidden resume, so text inside a collapsed or hidden element does not count. Any text of that
+ * block is the notice, in any language; elsewhere its words are looked for
  * @param {string|null} selector - The popup; the whole page when null
- * @param {string} notice - Lowercase text, ё as е
+ * @param {string[]} notices - Lowercase texts, ё as е
  * @returns {boolean}
  */
-export function findShownNotice(selector, notice) {
+export function findShownNotice(selector, notices) {
   const scope = selector ? document.querySelector(selector) : document.body;
   if (!scope) {
     return false;
@@ -32,7 +32,8 @@ export function findShownNotice(selector, notice) {
   };
   const walker = document.createTreeWalker(scope, window.NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (!node.textContent.toLowerCase().replace(/ё/g, 'е').includes(notice)) {
+    const text = node.textContent.toLowerCase().replace(/ё/g, 'е');
+    if (!(text.trim() && node.parentElement?.closest('[data-qa="hidden-resume-warning"]')) && !notices.some((notice) => text.includes(notice))) {
       continue;
     }
     let shown = true;
@@ -58,7 +59,7 @@ export function findShownNotice(selector, notice) {
 export async function isResumeHiddenNoticeShown(commander, scopeSelector) {
   const { value } = await commander.safeEvaluate({
     fn: findShownNotice,
-    args: [scopeSelector ?? null, RESUME_HIDDEN_NOTICE],
+    args: [scopeSelector ?? null, RESUME_HIDDEN_NOTICES],
     defaultValue: false,
     operationName: 'resume visibility notice',
     silent: true,

@@ -6,11 +6,10 @@
 
 import { isTimeoutError } from 'browser-commander';
 import { SELECTORS } from '../hh-selectors.mjs';
+import { RESPONSE_SENT_TEXTS } from '../hh-words.mjs';
 
-/**
- * Texts hh.ru shows once an application has been sent
- */
-const RESPONSE_SENT_TEXTS = ['Вы откликнулись', 'Вы уже откликались', 'Отклик отправлен'];
+/** What the vacancy page shows once an application has been sent: the link to its chat, the one to apply again */
+const RESPONSE_SENT_MARKS = '[data-qa="vacancy-response-link-view-topic"], [data-qa="vacancy-response-link-top-again"]';
 
 /**
  * Return the first selector that matches an element on the page
@@ -54,12 +53,15 @@ export async function findCoverLetterToggle(commander, { texts, elementTypes }) 
  */
 export async function isResponseSubmitted(commander) {
   const { value } = await commander.safeEvaluate({
-    fn: (texts) => {
+    fn: (texts, marks) => {
+      if (document.querySelector(marks)) {
+        return true;
+      }
       // Normalize whitespace (including nbsp) for matching
       const bodyText = (document.body?.textContent ?? '').replace(/\s+/g, ' ');
       return texts.some((text) => bodyText.includes(text));
     },
-    args: [RESPONSE_SENT_TEXTS],
+    args: [RESPONSE_SENT_TEXTS, RESPONSE_SENT_MARKS],
     defaultValue: false,
     operationName: 'response submitted check',
     silent: true,
