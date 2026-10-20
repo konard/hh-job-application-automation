@@ -82,6 +82,16 @@ describe('Salary questions by pattern', () => {
     assert.equal(inferSalaryAnswer('Зарплатные ожидания (Gross)?', patterns), patterns.variants['gross:ru'][0]);
   });
 
+  test('a question in English is answered in English, never with a Russian answer', () => {
+    const question = 'What are your salary expectations for this position (USD/monthly and indicate Gross or Net.)?';
+    assert.equal(inferSalaryAnswer(question, patterns), 'From {{salary_gross}} gross per month ({{salary_net}} net).');
+    assert.equal(inferSalaryAnswer('What are your salary expectations (net)?', patterns), 'From {{salary_net}} net per month.');
+    // An English question saved with a Russian answer is not an English answer
+    const mixed = learnSalaryPatterns(new Map([...saved, ['Salary expectations gross?', 'От {{salary_gross}} в месяц до вычета {{salary_tax}} ({{salary_net}} на руки).']]));
+    assert.equal(mixed.variants['gross:en'], undefined);
+    assert.equal(inferSalaryAnswer(question, mixed), 'From {{salary_gross}} gross per month ({{salary_net}} net).');
+  });
+
   test('in the currency of the question or the vacancy', async () => {
     const values = { salary_net: '450 000 ₽', salary_gross: '530 000 ₽', salary_net_usd: '$6 000', salary_gross_usd: '$7 100',
       salary_net_usdt: '6 000 USDT', salary_gross_usdt: '7 100 USDT', salary_net_eur: '5 500 €', salary_gross_eur: '6 500 €', salary_tax: 'НДФЛ' };

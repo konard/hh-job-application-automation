@@ -233,6 +233,39 @@ describe('requests without a question mark', () => {
   });
 });
 
+describe('A message in English is answered in English', () => {
+  test('an acknowledgement in English is thanked for in English; a Russian template reply is not reused', async () => {
+    const { knownReply, isThanks } = await import('../src/chat-answers.mjs');
+    const templates = new Map([
+      ['Спасибо за отклик! Мы рассмотрим Ваше резюме и позже сообщим о своем решении.', 'Здравствуйте, благодарю.'],
+      ['Thank you for your application! We will review your resume and get back to you.', 'Здравствуйте, благодарю.'],
+    ]);
+    const message = { title: '', text: 'Thanks for applying! Our team will review your CV and contact you if your experience is a match.' };
+    assert.equal(knownReply(message, { templates, qaMap: new Map() }).answer, 'Hello, thank you.');
+    // An English thanks saved before is the one used
+    templates.set('We have received your application and will get back to you.', 'Hello, thank you very much.');
+    templates.set('Your application is under review, we will contact you soon.', 'Hello, thank you very much.');
+    assert.equal(knownReply(message, { templates, qaMap: new Map() }).answer, 'Hello, thank you very much.');
+    assert.equal(isThanks('Hello, thank you, I look forward to hearing from you.'), true);
+    // A Russian message keeps its Russian thanks
+    const russian = { title: '', text: 'Спасибо за отклик! Мы рассмотрим резюме и свяжемся с вами, если опыт подойдёт.' };
+    assert.equal(knownReply(russian, { templates, qaMap: new Map() }).answer, 'Здравствуйте, благодарю.');
+  });
+
+  test('a question in English takes no saved answer in Russian; a Russian one takes either', async () => {
+    const { findBestMatch, isEnglish, speaksLanguageOf } = await import('../src/qa-database.mjs');
+    assert.equal(isEnglish('Are you comfortable with interviews in English?'), true);
+    assert.equal(isEnglish('Python, FastAPI?'), false);
+    assert.equal(speaksLanguageOf('Where are you located?', 'Во Вьетнаме.'), false);
+    assert.equal(speaksLanguageOf('Где вы находитесь?', "I'm in Vietnam."), true);
+    const qaMap = new Map([['pattern: experience … kafka', 'Да, 3 года.']]);
+    assert.equal(findBestMatch('Do you have commercial experience with Kafka?', qaMap), null);
+    assert.equal(findBestMatch('Какой у вас experience с Kafka?', qaMap).answer, 'Да, 3 года.');
+    qaMap.set('pattern: experience with kafka', 'Yes, 3 years.');
+    assert.equal(findBestMatch('Do you have commercial experience with Kafka?', qaMap).answer, 'Yes, 3 years.');
+  });
+});
+
 describe('Acknowledgements of the application, in any company\'s words', () => {
   test('are thanked for as the saved ones; one that asks, invites or rejects is not', async () => {
     const { isAcknowledgement, knownReply } = await import('../src/chat-answers.mjs');

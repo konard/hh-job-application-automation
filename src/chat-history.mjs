@@ -115,7 +115,10 @@ export function replyVariants(history, templates) {
 export function varyReply(reply, variants, random = Math.random) {
   const template = reply?.matched && !reply.noReply && reply.answer !== NO_REPLY && reply.source?.startsWith('chat-templates');
   const thanks = template && isThanks(reply.answer);
-  const given = template ? (thanks ? variants.get(THANKS) : variants.get(reply.matched)) ?? [] : [];
+  // Replies in the language of the saved one: a message in English is not answered in Russian
+  const russian = (text) => /[а-яё]/iu.test(text);
+  const given = (template ? (thanks ? variants.get(THANKS) : variants.get(reply.matched)) ?? [] : [])
+    .filter((answer) => russian(answer) === russian(reply.answer));
   if (given.length === 0) {
     return reply;
   }

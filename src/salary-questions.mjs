@@ -32,6 +32,9 @@ const PLACEHOLDER = /\{\{(salary_\w+?)(?:_usdt|_usd|_eur)?\}\}/g;
 /** What a plain salary answer says besides its sums */
 const PLAIN_WORDS = new Set(['от', 'в', 'месяц', 'ежемесячно', 'на', 'руки', 'до', 'вычета', 'ндфл', 'налогов', 'from', 'net', 'gross', 'per', 'month', 'salary', 'before', 'taxes', 'a']);
 
+/** Salary answers in English when none of the shape is saved */
+const ENGLISH_ANSWERS = { net: 'From {{salary_net}} net per month.', gross: 'From {{salary_gross}} gross per month ({{salary_net}} net).' };
+
 const words = (text) => (String(text).toLowerCase().replace(/ё/g, 'е').match(/[\p{L}]{4,}/gu) ?? []);
 const stems = (text) => new Set(words(text).map((word) => word.slice(0, 6)));
 const english = (text) => !/[а-яё]/i.test(text);
@@ -93,7 +96,7 @@ export function learnSalaryPatterns(saved) {
   }));
   const variants = {};
   for (const item of salary.filter(({ shape }) => shape.plain)) {
-    const key = `${item.shape.shape}:${english(item.question) ? 'en' : 'ru'}`;
+    const key = `${item.shape.shape}:${english(item.shape.template.replace(/\{\{\w+\}\}/g, '')) ? 'en' : 'ru'}`;
     (variants[key] ??= []).push(item.shape);
   }
   for (const [key, list] of Object.entries(variants)) {
@@ -148,8 +151,9 @@ export function inferSalaryAnswer(question, patterns) {
     return null;
   }
   const { variants } = patterns;
-  // A gross question in English without English gross answers takes the Russian ones, and so on
-  const list = variants[`${asked.shape}:${asked.language}`] ?? variants[`${asked.shape}:ru`] ??
-    (asked.shape === 'gross' ? null : variants['net:en']);
+  // A question in English is answered in English: without a saved answer of its shape, the built-in
+  // one; a question in Russian without a net answer in Russian takes the English one
+  const list = variants[`${asked.shape}:${asked.language}`] ??
+    (asked.language === 'en' ? [ENGLISH_ANSWERS[asked.shape]] : asked.shape === 'gross' ? null : variants['net:en']);
   return list?.length ? list[hash(question) % list.length] : null;
 }

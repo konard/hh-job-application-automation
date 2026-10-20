@@ -14,7 +14,7 @@
  * @module chat-answers
  */
 
-import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isPattern, matchesPattern, normalizeQuestion, patternWords, stringSimilarity } from './qa-database.mjs';
+import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isEnglish, isPattern, matchesPattern, normalizeQuestion, patternWords, stringSimilarity } from './qa-database.mjs';
 import { answerText } from './qa.mjs';
 import { answersInContexts, showsContext } from './answer-contexts.mjs';
 import { APPLICATION_WORD, INVITE_NOTICE, REJECTION_WORD, TURNED_OFF_WORDS } from './hh-words.mjs';
@@ -437,16 +437,22 @@ export function isAcknowledgement(core) {
     !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
 }
 
-/** The thanks saved most often for templates: the reply to an acknowledgement; null without one */
-function savedThanks(templates) {
+/** The thanks to a message in English when none in English is saved */
+const ENGLISH_THANKS = 'Hello, thank you.';
+
+/**
+ * The thanks saved most often for templates in the message's language: the reply to an
+ * acknowledgement; null without one
+ */
+function savedThanks(templates, english = false) {
   const counts = new Map();
   for (const answer of templates.values()) {
     const text = answerText(answer);
-    if (isThanks(text)) {
+    if (isThanks(text) && !/[а-яё]/iu.test(text) === english) {
       counts.set(text, (counts.get(text) ?? 0) + 1);
     }
   }
-  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? (english ? ENGLISH_THANKS : null);
 }
 
 /** Whether a message asks the user something: a question, or a request for facts about them */
@@ -500,7 +506,7 @@ export function knownReply(message, { templates, qaMap }) {
     matched: template.question,
   };
   // Any company's acknowledgement of the application is thanked for, as the saved ones are
-  const thanks = !reply?.perfect && isAcknowledgement(core) && savedThanks(templates);
+  const thanks = !reply?.perfect && isAcknowledgement(core) && savedThanks(templates, isEnglish(core));
   if (thanks) {
     return { answer: thanks, noReply: false, perfect: true, source: 'chat-templates.lino: an acknowledgement of the application', matched: core };
   }
@@ -626,13 +632,16 @@ function mergeTokens(a, b) {
 
 /**
  * Replies that say the same: equal, or nearly so («Благодарю, ожидаю» and «Благодарю, ожидаю!»), or
- * both only thanks (one of them fits any template thanked for)
+ * both only thanks in the same language (one of them fits any template thanked for)
  */
-const sameReply = (a, b) => (isThanks(answerText(a)) && isThanks(answerText(b))) || stringSimilarity(normalizeQuestion(answerText(a)), normalizeQuestion(answerText(b))) >= 0.85;
+const sameReply = (a, b) => (isThanks(answerText(a)) && isThanks(answerText(b)) &&
+  /[а-яё]/iu.test(answerText(a)) === /[а-яё]/iu.test(answerText(b))) || stringSimilarity(normalizeQuestion(answerText(a)), normalizeQuestion(answerText(b))) >= 0.85;
 
 /** Words of a reply that only thanks and says the user waits */
 const THANKS_WORDS = new Set(['здравствуйте', 'добрый', 'день', 'вечер', 'утро', 'привет', 'благодарю', 'спасибо', 'большое',
-  'ожидаю', 'жду', 'буду', 'ждать', 'решения', 'ответа', 'обратной', 'связи', 'за', 'ответ', 'я', 'и', 'хорошо', 'понял', 'принял', 'отлично']);
+  'ожидаю', 'жду', 'буду', 'ждать', 'решения', 'ответа', 'обратной', 'связи', 'за', 'ответ', 'я', 'и', 'хорошо', 'понял', 'принял', 'отлично',
+  'hello', 'hi', 'good', 'morning', 'afternoon', 'evening', 'thank', 'thanks', 'you', 'very', 'much', 'for', 'the', 'update', 'i',
+  'look', 'looking', 'forward', 'to', 'hearing', 'from', 'your', 'reply', 'response', 'and', 'will', 'wait', 'await', 'great', 'noted']);
 
 /**
  * Whether a reply only thanks (and says the user waits): one of them fits any template thanked for
@@ -641,7 +650,7 @@ const THANKS_WORDS = new Set(['здравствуйте', 'добрый', 'де�
  */
 export function isThanks(reply) {
   const words = String(reply ?? '').toLowerCase().replace(/ё/g, 'е').match(/\p{L}+/gu) ?? [];
-  return words.length > 0 && words.length <= 10 && words.some((word) => word === 'благодарю' || word === 'спасибо') &&
+  return words.length > 0 && words.length <= 10 && words.some((word) => ['благодарю', 'спасибо', 'thank', 'thanks'].includes(word)) &&
     words.every((word) => THANKS_WORDS.has(word));
 }
 

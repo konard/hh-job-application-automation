@@ -638,6 +638,26 @@ export const keywordSimilarityCaseSensitive = (a, b) => keywordSimilarity(a, b, 
  * @param {boolean} options.returnAll - Return all matches sorted by score (true) or just best match (false), default false
  * @returns {Array<{question: string, answer: string, score: number}>|{question: string, answer: string, score: number}|null}
  */
+/** Words of a sentence in English, which a bare list of technologies («Python, FastAPI?») lacks */
+const ENGLISH_WORDS = /(?<!\p{L})(?:the|a|an|you|your|are|do|does|did|have|has|what|how|which|where|when|why|is|can|could|would|will|please|describe|tell|with|for|of|to|in|and|any|ready|thank|thanks|we|our)(?!\p{L})/giu;
+
+/**
+ * Whether a text is in English: no Cyrillic, and English words, not only names of technologies
+ * @param {string} text
+ * @returns {boolean}
+ */
+export const isEnglish = (text) => !/[а-яё]/iu.test(String(text ?? '')) && (String(text ?? '').match(ENGLISH_WORDS) ?? []).length >= 2;
+
+/**
+ * Whether an answer speaks the language of its question: a question in English takes no answer in
+ * Russian (placeholders aside); a question in Russian takes either («Docker, Kubernetes»)
+ * @param {string} question
+ * @param {string|string[]} answer
+ * @returns {boolean}
+ */
+export const speaksLanguageOf = (question, answer) => !isEnglish(question) ||
+  !/[а-яё]/iu.test([answer].flat().join('\n').replace(/\{\{\w+\}\}/g, ''));
+
 export function findBestMatch(question, qaDatabase, options = {}) {
   // Handle backward compatibility: if options is a number, treat it as threshold
   const threshold = typeof options === 'number' ? options : (options.threshold ?? 0.4);
@@ -656,7 +676,8 @@ export function findBestMatch(question, qaDatabase, options = {}) {
   // A question template («pattern: gross») takes every wording of its question
   // The most specific one wins: «pattern: gross … usd» over «pattern: gross»
   const template = [...qaDatabase.entries()]
-    .filter(([dbQuestion]) => isPattern(dbQuestion) && matchesPattern(dbQuestion, question))
+    .filter(([dbQuestion, answer]) => isPattern(dbQuestion) && matchesPattern(dbQuestion, question) &&
+      (threshold === 0 || speaksLanguageOf(question, answer)))
     .sort(([a], [b]) => b.split(' ').length - a.split(' ').length)[0];
   const templateMatch = template ? { question: template[0], answer: template[1], score: 1.0 } : null;
   if (templateMatch && !returnAll) {
@@ -671,6 +692,10 @@ export function findBestMatch(question, qaDatabase, options = {}) {
     }
     // "опыт на C#" must not take the answer of "опыт на Go" (threshold 0 still lists everything)
     if (threshold > 0 && subjectTermsConflict(question, dbQuestion)) {
+      continue;
+    }
+    // A question in English is not answered in Russian
+    if (threshold > 0 && !speaksLanguageOf(question, answer)) {
       continue;
     }
 

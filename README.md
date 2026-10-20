@@ -321,7 +321,11 @@ of a chat, the chat link of a sent application, the hidden resume notice and the
 application popup. Where only the text tells (a message titled «Отказ» / "Rejection", the
 application «Отклик на вакансию» / "Vacancy application", a chat the employer turned off, the
 captcha, «Вам недоступна эта вакансия»), the words are in `src/hh-words.mjs`, in both languages.
-Drafted answers are written in the language of the question.
+Drafted answers are written in the language of the question, and a question or a message in English
+is never answered in Russian: a saved answer in Russian is not reused for it (a similar question, a
+`pattern:`, a chat template), a salary question gets an English answer («From $7 500 gross per month
+($6 000 net).»), and an acknowledgement gets an English thanks («Hello, thank you.», or the one you
+saved). A question in Russian may take an answer in English («Docker, Kubernetes»).
 
 ### Applications Sent at Once, and the Cover Letter
 
