@@ -64,8 +64,12 @@ Konstantin Dyachenko
 The application supports configuration via `.lenv` files using the [lino-arguments](https://github.com/link-foundation/lino-arguments) library. This allows you to set default values without typing them every time.
 
 **Requirements:** [Bun](https://bun.sh) 1.4.2 or newer (older Bun versions cannot attach Playwright
-to the browser) and an installed Google Chrome. The browser is started the way a person would start
-it (no automation infobars); the profile is kept in `~/.hh-automation/chrome-profile`.
+to the browser) and Chrome for Testing (`npx playwright install chromium`). The automation runs in
+that browser, an app of its own: your Google Chrome is never used, so a click on Chrome in the Dock
+or a new tab there is yours, and the macOS keychain is never asked (`--use-mock-keychain`). A profile
+Google Chrome used before is moved once, its logins kept (the cookies are read by Google Chrome
+without a window and set in Chrome for Testing, in memory only). The browser is started the way a
+person would start it (no automation infobars); the profile is kept in `~/.hh-automation/chrome-profile`.
 
 **Run with defaults:** `bun run apply -- --message-file data/cover-letter.txt` needs no other option
 (the cover letter is the one choice the run asks of you): it logs in, picks your most recently updated

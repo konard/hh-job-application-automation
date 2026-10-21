@@ -87,3 +87,21 @@ describe('LAUNCH_SETTINGS', () => {
     assert.equal(LAUNCH_SETTINGS.preferences.translate.enabled, false);
   });
 });
+
+describe('The automation\'s own browser', () => {
+  test('Chrome for Testing, not the user\'s Google Chrome; a Google Chrome profile is moved once', async () => {
+    const { automationExecutable, cookieParam, isGoogleChromeProfile } = await import('../src/browser-session.mjs');
+    assert.equal(/Chrome for Testing|chromium/i.test(automationExecutable()), true);
+    assert.equal(automationExecutable().startsWith('/Applications/Google Chrome.app/'), false);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-'));
+    assert.equal(isGoogleChromeProfile(dir), false);
+    fs.mkdirSync(path.join(dir, 'Default'));
+    fs.writeFileSync(path.join(dir, 'Default', 'Cookies'), '');
+    assert.equal(isGoogleChromeProfile(dir), true);
+    fs.writeFileSync(path.join(dir, 'hh-automation-browser'), 'chrome-for-testing');
+    assert.equal(isGoogleChromeProfile(dir), false);
+    // A session cookie keeps no expiry
+    assert.deepEqual(cookieParam({ name: 'a', value: 'b', domain: '.hh.ru', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', expires: -1, session: true, sourcePort: -1 }),
+      { name: 'a', value: 'b', domain: '.hh.ru', path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
+  });
+});

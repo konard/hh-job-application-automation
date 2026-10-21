@@ -1,7 +1,15 @@
 /**
  * Automation browser session, optionally kept open between script runs.
  *
- * The installed Chrome is started detached on a fixed remote debugging port and
+ * The browser is Chrome for Testing (Playwright's, `npx playwright install chromium`), an app of
+ * its own: the installed Google Chrome stays the user's. Started from the Google Chrome app, the
+ * automation window would be the one macOS brings up at a click on Chrome in the Dock, and a tab
+ * the user opens there would be closed as an extra one. A profile Google Chrome used before keeps
+ * its logins: its cookies are read by Google Chrome without a window (headless) and set in Chrome
+ * for Testing once, in memory, never written out. Chrome for Testing never asks for the keychain
+ * (`--use-mock-keychain`).
+ *
+ * Chrome for Testing is started detached on a fixed remote debugging port and
  * attached to with browser-commander. By default it is closed when the script exits.
  * With `keepOpen` it stays running: the next run (within the idle timeout) attaches
  * to it instead of starting a new one, so the hh.ru session, the open tab and its
@@ -26,8 +34,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { chromium } from 'playwright';
 import {
   connectBrowser,
   prepareUserDataDir,
@@ -51,6 +61,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const lastUsedFile = (userDataDir) => path.join(userDataDir, 'hh-automation-last-used');
 const tabFile = (userDataDir) => path.join(userDataDir, 'hh-automation-tab');
 const HH_URL = /^https:\/\/([\w-]+\.)?hh\.ru\//;
+/** Which browser the profile is for: «chrome-for-testing» once moved from Google Chrome */
+const browserFile = (userDataDir) => path.join(userDataDir, 'hh-automation-browser');
+const OWN_BROWSER = 'chrome-for-testing';
 export const watchdogPidFile = (userDataDir) => path.join(userDataDir, 'hh-automation-watchdog.pid');
 
 /**
@@ -91,6 +104,148 @@ export async function closeBrowser(port) {
     socket.onmessage = socket.onclose = socket.onerror = resolve;
     setTimeout(resolve, 5000);
   });
+}
+
+/**
+ * The automation's own browser: Chrome for Testing, never the user's Google Chrome
+ * @returns {string}
+ */
+export function automationExecutable() {
+  const executable = chromium.executablePath();
+  if (!executable || !fs.existsSync(executable)) {
+    throw new Error('Chrome for Testing is not installed (the automation does not use your Google Chrome): run `npx playwright install chromium`');
+  }
+  return executable;
+}
+
+/**
+ * Whether a profile is still Google Chrome's: used before the automation had a browser of its own
+ * @param {string} userDataDir
+ * @returns {boolean}
+ */
+export function isGoogleChromeProfile(userDataDir) {
+  let mark = null;
+  try {
+    mark = fs.readFileSync(browserFile(userDataDir), 'utf8').trim();
+  } catch {
+    // Not marked
+  }
+  return mark !== OWN_BROWSER && fs.existsSync(path.join(userDataDir, 'Default', 'Cookies'));
+}
+
+/** A free local port */
+const freePort = () => new Promise((resolve, reject) => {
+  const server = net.createServer().once('error', reject).listen(0, '127.0.0.1', () => {
+    const { port } = server.address();
+    server.close(() => resolve(port));
+  });
+});
+
+/**
+ * Send CDP commands to a browser's own target, one after another
+ * @param {number} port
+ * @param {Array<[string, Object?]>} commands
+ * @returns {Promise<Object[]>} Their results
+ */
+async function browserCommands(port, commands) {
+  const version = await fetch(`${endpoint(port)}/json/version`).then((response) => response.json());
+  const socket = new WebSocket(version.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve;
+    socket.onerror = reject;
+  });
+  const results = [];
+  try {
+    for (const [id, [method, params = {}]] of commands.entries()) {
+      results.push(await new Promise((resolve, reject) => {
+        const onMessage = (event) => {
+          const message = JSON.parse(event.data);
+          if (message.id === id) {
+            socket.removeEventListener('message', onMessage);
+            return message.error ? reject(new Error(`${method}: ${message.error.message}`)) : resolve(message.result);
+          }
+        };
+        socket.addEventListener('message', onMessage);
+        socket.send(JSON.stringify({ id, method, params }));
+      }));
+    }
+  } finally {
+    socket.close();
+  }
+  return results;
+}
+
+/**
+ * Wait until a browser answers on a port
+ * @param {number} port
+ * @returns {Promise<boolean>}
+ */
+async function waitForBrowser(port) {
+  for (const deadline = Date.now() + STARTUP_TIMEOUT_MS; Date.now() < deadline; await sleep(250)) {
+    if (await isBrowserRunning(port)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The cookies of a Google Chrome profile, read by Google Chrome without a window (it alone can
+ * decrypt them); kept in memory only
+ * @param {string} userDataDir
+ * @returns {Promise<Object[]>}
+ */
+async function googleChromeCookies(userDataDir) {
+  const port = await freePort();
+  const executable = await resolveLaunchExecutable({ engine: 'playwright', channel: 'chrome' });
+  const child = spawn(executable, [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--headless=new',
+    '--no-first-run', 'about:blank'], { stdio: 'ignore' });
+  try {
+    if (!(await waitForBrowser(port))) {
+      throw new Error('Google Chrome did not start without a window');
+    }
+    const [{ cookies }] = await browserCommands(port, [['Storage.getCookies']]);
+    await browserCommands(port, [['Browser.close']]).catch(() => {});
+    return cookies;
+  } finally {
+    await sleep(1000);
+    child.kill();
+  }
+}
+
+/**
+ * A cookie as Storage.setCookies takes it
+ * @param {Object} cookie - Of Storage.getCookies
+ * @returns {Object}
+ */
+export const cookieParam = ({ name, value, domain, path: cookiePath, secure, httpOnly, sameSite, expires, session, priority, sourceScheme, sourcePort, partitionKey }) => ({
+  name, value, domain, path: cookiePath, secure, httpOnly,
+  ...(sameSite ? { sameSite } : {}),
+  ...(session || !(expires > 0) ? {} : { expires }),
+  ...(priority ? { priority } : {}),
+  ...(sourceScheme ? { sourceScheme } : {}),
+  ...(sourcePort > 0 ? { sourcePort } : {}),
+  ...(partitionKey ? { partitionKey } : {}),
+});
+
+/**
+ * Move a Google Chrome profile to Chrome for Testing, its logins kept: the cookies read before the
+ * launch are set in the started browser, and the profile is marked as moved
+ * @param {Object} options
+ * @param {number} options.port - Chrome for Testing's
+ * @param {string} options.userDataDir
+ * @param {Object[]} options.cookies
+ */
+async function moveCookies({ port, userDataDir, cookies }) {
+  try {
+    await browserCommands(port, [['Storage.setCookies', { cookies: cookies.map(cookieParam) }]]);
+  } catch {
+    // A partitioned cookie in a shape this version does not take: the others still go
+    await browserCommands(port, [['Storage.setCookies', { cookies: cookies.filter((cookie) => !cookie.partitionKey).map(cookieParam) }]]);
+  }
+  fs.writeFileSync(browserFile(userDataDir), OWN_BROWSER);
+  const hh = cookies.filter((cookie) => /(?:^|\.)hh\.ru$/.test(cookie.domain)).length;
+  console.log(`🔀 ${path.basename(userDataDir)} moved from Google Chrome to Chrome for Testing: ${cookies.length} cookies kept (${hh} of hh.ru)`);
 }
 
 /**
@@ -215,16 +370,34 @@ export function attachOptions({ engine, port, kept, singleTab }) {
 export async function connectOrLaunchBrowser({
   engine, userDataDir, port, keepOpen, idleTimeoutMinutes, singleTab = true,
 }) {
+  const moving = isGoogleChromeProfile(userDataDir);
+  // A Google Chrome still running on the profile gives way to Chrome for Testing
+  if (moving && await isBrowserRunning(port)) {
+    await closeBrowser(port);
+    for (const deadline = Date.now() + STARTUP_TIMEOUT_MS; Date.now() < deadline && await isBrowserRunning(port);) {
+      await sleep(250);
+    }
+    await sleep(1000);
+  }
   let reused = await isBrowserRunning(port);
 
   if (reused) {
     console.log(`♻️  Reusing the running browser on port ${port}`);
   } else {
+    const executable = automationExecutable();
+    const cookies = moving ? await googleChromeCookies(userDataDir) : null;
     await prepareUserDataDir(userDataDir, { preferences: LAUNCH_SETTINGS.preferences });
-    const executable = await resolveLaunchExecutable({ engine });
-    const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, ...LAUNCH_SETTINGS.args];
+    // --use-mock-keychain: the macOS keychain is never asked («wants to access key Chromium Safe
+    // Storage»), the profile's cookies are encrypted with a key of its own
+    const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--no-first-run', '--use-mock-keychain', ...LAUNCH_SETTINGS.args];
     spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();
-    console.log(`🚀 Started browser on port ${port} (profile: ${userDataDir})`);
+    console.log(`🚀 Started Chrome for Testing on port ${port} (profile: ${userDataDir})`);
+    if (cookies) {
+      if (!(await waitForBrowser(port))) {
+        throw new Error(`Chrome for Testing did not start on port ${port}`);
+      }
+      await moveCookies({ port, userDataDir, cookies });
+    }
   }
 
   markBrowserUsed(userDataDir);
