@@ -70,7 +70,8 @@ or a new tab there is yours, the macOS keychain is never asked (`--use-mock-keyc
 «Chrome for Testing is only for automated testing» bar is not shown (`--test-type=gpu`). A profile
 Google Chrome used before is moved once, its logins kept (the cookies are read by Google Chrome
 without a window and set in Chrome for Testing, in memory only). The browser is started the way a
-person would start it (no automation infobars); the profile is kept in `~/.hh-automation/chrome-profile`.
+person would start it (no automation infobars), and a resized window shows the page at its new size
+(the recording's screenshots are taken by Chrome without a clip, browser-commander #180); the profile is kept in `~/.hh-automation/chrome-profile`.
 
 **Run with defaults:** `bun run apply -- --message-file data/cover-letter.txt` needs no other option
 (the cover letter is the one choice the run asks of you): it logs in, picks your most recently updated

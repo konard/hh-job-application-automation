@@ -12,11 +12,15 @@
  *   (`trace-dom.mjs`). Kept: browser-commander 0.28's `links.dom` export is unredacted and
  *   re-reads the whole bundle on every 500 ms mutation drain.
  *
+ * A checkpoint's screenshot is Chrome's own capture of what the window shows, not Playwright's
+ * page.screenshot (`windowSafePage`).
+ *
  * @module tracing
  */
 
 import fs from 'fs';
 import path from 'path';
+import { createCdpSession } from 'browser-commander';
 import { log } from './logging.mjs';
 import { recordNetwork } from './trace-network.mjs';
 import { recordDom } from './trace-dom.mjs';
@@ -42,6 +46,43 @@ export const TRACE_OPTIONS = Object.freeze({
 });
 
 const STOP_FLUSH_MS = 15000;
+
+/**
+ * The page as the trace recorder sees it, its screenshots taken by Chrome without a clip.
+ * Playwright's page.screenshot passes the viewport as a clip, and Chrome emulates that size
+ * while it captures: a window resized at that moment kept drawing the page at its old size, the
+ * rest of it blank, until the page was reloaded (2 of 8 drags; none without the clip;
+ * browser-commander #180)
+ * @param {Object} page - Raw engine page
+ * @param {() => Promise<{send: Function, detach: Function}>} openSession - Its CDP session
+ * @returns {{page: Object, detach: () => Promise<void>}}
+ */
+export function windowSafePage(page, openSession) {
+  let session = null;
+  const screenshot = async () => {
+    session ??= openSession().catch((error) => {
+      session = null;
+      throw error;
+    });
+    const { data } = await (await session).send('Page.captureScreenshot', { format: 'png' });
+    return Buffer.from(data, 'base64');
+  };
+  const view = new Proxy(page, {
+    get: (target, key) => {
+      if (key === 'screenshot') {
+        return screenshot;
+      }
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const detach = async () => {
+    const opened = session;
+    session = null;
+    await (await opened?.catch(() => null))?.detach().catch(() => {});
+  };
+  return { page: view, detach };
+}
 
 // The application run's own trace (startTracing/checkpoint/stopTracing)
 let current = null;
@@ -77,8 +118,10 @@ export async function createTracing({ commander, page, name = '' }) {
   const network = openLog(path.join(directory, 'network.lino'));
   const networkRecorder = recordNetwork({ page, write: network.write, onError: report('Network') });
 
+  const traced = windowSafePage(page, () => createCdpSession(page, { engine: commander.engine }));
   const trace = await commander.startTrace({
     ...TRACE_OPTIONS,
+    page: traced.page,
     output: path.join(directory, 'trace'),
     links: { output: path.join(directory, 'trace.lino') },
   });
@@ -106,6 +149,7 @@ export async function createTracing({ commander, page, name = '' }) {
       networkRecorder.detach();
       domRecorder.detach();
       await trace.stop().catch((error) => log.debug(() => `Trace stop failed: ${error.message}`));
+      await traced.detach();
       domRecorder.convertMutations({ final: true });
       await Promise.all([networkRecorder.flush(), domRecorder.flush(STOP_FLUSH_MS)]);
       await Promise.all([network.stream, dom.stream].map((stream) => new Promise((resolve) => stream.end(resolve))));
