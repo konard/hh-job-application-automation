@@ -66,7 +66,8 @@ The application supports configuration via `.lenv` files using the [lino-argumen
 **Requirements:** [Bun](https://bun.sh) 1.4.2 or newer (older Bun versions cannot attach Playwright
 to the browser) and Chrome for Testing (`npx playwright install chromium`). The automation runs in
 that browser, an app of its own: your Google Chrome is never used, so a click on Chrome in the Dock
-or a new tab there is yours, and the macOS keychain is never asked (`--use-mock-keychain`). A profile
+or a new tab there is yours, the macOS keychain is never asked (`--use-mock-keychain`), and its
+«Chrome for Testing is only for automated testing» bar is not shown (`--test-type=gpu`). A profile
 Google Chrome used before is moved once, its logins kept (the cookies are read by Google Chrome
 without a window and set in Chrome for Testing, in memory only). The browser is started the way a
 person would start it (no automation infobars); the profile is kept in `~/.hh-automation/chrome-profile`.
