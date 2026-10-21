@@ -34,7 +34,6 @@
 
 import fs from 'fs';
 import path from 'path';
-import net from 'net';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { chromium } from 'playwright';
@@ -44,6 +43,7 @@ import {
   resolveLaunchExecutable,
   resolveRestrictions,
 } from 'browser-commander';
+import { withFileLock } from './helpers/mutex.mjs';
 import { log } from './logging.mjs';
 
 /**
@@ -64,6 +64,8 @@ const HH_URL = /^https:\/\/([\w-]+\.)?hh\.ru\//;
 /** Which browser the profile is for: «chrome-for-testing» once moved from Google Chrome */
 const browserFile = (userDataDir) => path.join(userDataDir, 'hh-automation-browser');
 const OWN_BROWSER = 'chrome-for-testing';
+/** Taken by the process starting a profile's browser, so two never start one on it at once */
+const launchLockFile = (userDataDir) => path.join(userDataDir, 'hh-automation-launch');
 export const watchdogPidFile = (userDataDir) => path.join(userDataDir, 'hh-automation-watchdog.pid');
 
 /**
@@ -86,7 +88,7 @@ function isWatchdogRunning(userDataDir) {
  * @returns {Promise<boolean>}
  */
 export async function isBrowserRunning(port) {
-  return fetch(`${endpoint(port)}/json/version`).then((response) => response.ok, () => false);
+  return fetch(`${endpoint(port)}/json/version`, { signal: globalThis.AbortSignal.timeout(3000) }).then((response) => response.ok, () => false);
 }
 
 /**
@@ -133,14 +135,6 @@ export function isGoogleChromeProfile(userDataDir) {
   return mark !== OWN_BROWSER && fs.existsSync(path.join(userDataDir, 'Default', 'Cookies'));
 }
 
-/** A free local port */
-const freePort = () => new Promise((resolve, reject) => {
-  const server = net.createServer().once('error', reject).listen(0, '127.0.0.1', () => {
-    const { port } = server.address();
-    server.close(() => resolve(port));
-  });
-});
-
 /**
  * Send CDP commands to a browser's own target, one after another
  * @param {number} port
@@ -152,7 +146,8 @@ async function browserCommands(port, commands) {
   const socket = new WebSocket(version.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
     socket.onopen = resolve;
-    socket.onerror = reject;
+    socket.onerror = () => reject(new Error(`the browser on port ${port} did not answer`));
+    setTimeout(socket.onerror, 10000);
   });
   const results = [];
   try {
@@ -191,25 +186,30 @@ async function waitForBrowser(port) {
 
 /**
  * The cookies of a Google Chrome profile, read by Google Chrome without a window (it alone can
- * decrypt them); kept in memory only
+ * decrypt them, with the keychain access it already has); kept in memory only
  * @param {string} userDataDir
  * @returns {Promise<Object[]>}
  */
 async function googleChromeCookies(userDataDir) {
-  const port = await freePort();
-  const executable = await resolveLaunchExecutable({ engine: 'playwright', channel: 'chrome' });
-  const child = spawn(executable, [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--headless=new',
-    '--no-first-run', 'about:blank'], { stdio: 'ignore' });
-  try {
-    if (!(await waitForBrowser(port))) {
-      throw new Error('Google Chrome did not start without a window');
+  const executablePath = await resolveLaunchExecutable({ engine: 'playwright', channel: 'chrome' });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const context = await chromium.launchPersistentContext(userDataDir, {
+        executablePath, headless: true, timeout: STARTUP_TIMEOUT_MS,
+        // Its own keychain entry decrypts the cookies: the mock one would read none
+        ignoreDefaultArgs: ['--use-mock-keychain'],
+      });
+      try {
+        return await context.cookies();
+      } finally {
+        await context.close().catch(() => {});
+      }
+    } catch (error) {
+      if (attempt >= 2) {
+        throw new Error(`The logins of ${userDataDir} could not be read from Google Chrome: ${error.message.split('\n')[0]}`);
+      }
+      await sleep(2000);
     }
-    const [{ cookies }] = await browserCommands(port, [['Storage.getCookies']]);
-    await browserCommands(port, [['Browser.close']]).catch(() => {});
-    return cookies;
-  } finally {
-    await sleep(1000);
-    child.kill();
   }
 }
 
@@ -246,6 +246,47 @@ async function moveCookies({ port, userDataDir, cookies }) {
   fs.writeFileSync(browserFile(userDataDir), OWN_BROWSER);
   const hh = cookies.filter((cookie) => /(?:^|\.)hh\.ru$/.test(cookie.domain)).length;
   console.log(`🔀 ${path.basename(userDataDir)} moved from Google Chrome to Chrome for Testing: ${cookies.length} cookies kept (${hh} of hh.ru)`);
+}
+
+/**
+ * Start Chrome for Testing on a profile unless a browser runs on the port; a Google Chrome profile
+ * is moved first, its logins kept (a Google Chrome still running on it is closed)
+ * @param {Object} options
+ * @param {string} options.userDataDir
+ * @param {number} options.port
+ * @returns {Promise<boolean>} Whether a running browser is reused
+ */
+async function startBrowser({ userDataDir, port }) {
+  const moving = isGoogleChromeProfile(userDataDir);
+  if (moving && await isBrowserRunning(port)) {
+    await closeBrowser(port);
+    for (const deadline = Date.now() + STARTUP_TIMEOUT_MS; Date.now() < deadline && await isBrowserRunning(port);) {
+      await sleep(250);
+    }
+    await sleep(1000);
+  }
+  if (await isBrowserRunning(port)) {
+    console.log(`♻️  Reusing the running browser on port ${port}`);
+    return true;
+  }
+  const executable = automationExecutable();
+  const cookies = moving ? await googleChromeCookies(userDataDir) : null;
+  await prepareUserDataDir(userDataDir, { preferences: LAUNCH_SETTINGS.preferences });
+  // --use-mock-keychain: the macOS keychain is never asked («wants to access key Chromium Safe
+  // Storage»), the profile's cookies are encrypted with a key of its own. --test-type=gpu: no
+  // «Chrome for Testing is only for automated testing» bar (the one value of the switch that
+  // hides it, chrome/browser/ui/startup/infobar_utils.cc)
+  const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--no-first-run', '--use-mock-keychain',
+    '--test-type=gpu', ...LAUNCH_SETTINGS.args];
+  spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();
+  console.log(`🚀 Started Chrome for Testing on port ${port} (profile: ${userDataDir})`);
+  if (!(await waitForBrowser(port))) {
+    throw new Error(`Chrome for Testing did not start on port ${port}`);
+  }
+  if (cookies) {
+    await moveCookies({ port, userDataDir, cookies });
+  }
+  return false;
 }
 
 /**
@@ -370,35 +411,10 @@ export function attachOptions({ engine, port, kept, singleTab }) {
 export async function connectOrLaunchBrowser({
   engine, userDataDir, port, keepOpen, idleTimeoutMinutes, singleTab = true,
 }) {
-  const moving = isGoogleChromeProfile(userDataDir);
-  // A Google Chrome still running on the profile gives way to Chrome for Testing
-  if (moving && await isBrowserRunning(port)) {
-    await closeBrowser(port);
-    for (const deadline = Date.now() + STARTUP_TIMEOUT_MS; Date.now() < deadline && await isBrowserRunning(port);) {
-      await sleep(250);
-    }
-    await sleep(1000);
-  }
-  let reused = await isBrowserRunning(port);
-
-  if (reused) {
-    console.log(`♻️  Reusing the running browser on port ${port}`);
-  } else {
-    const executable = automationExecutable();
-    const cookies = moving ? await googleChromeCookies(userDataDir) : null;
-    await prepareUserDataDir(userDataDir, { preferences: LAUNCH_SETTINGS.preferences });
-    // --use-mock-keychain: the macOS keychain is never asked («wants to access key Chromium Safe
-    // Storage»), the profile's cookies are encrypted with a key of its own
-    const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--no-first-run', '--use-mock-keychain', ...LAUNCH_SETTINGS.args];
-    spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();
-    console.log(`🚀 Started Chrome for Testing on port ${port} (profile: ${userDataDir})`);
-    if (cookies) {
-      if (!(await waitForBrowser(port))) {
-        throw new Error(`Chrome for Testing did not start on port ${port}`);
-      }
-      await moveCookies({ port, userDataDir, cookies });
-    }
-  }
+  // One process starts the browser of a profile: the run and its chat processor may both open the
+  // chat slot at once, and a profile is moved from Google Chrome only once
+  let reused = await withFileLock(launchLockFile(userDataDir), () => startBrowser({ userDataDir, port }),
+    { timeoutMs: 2 * STARTUP_TIMEOUT_MS + 30000, staleMs: 2 * STARTUP_TIMEOUT_MS + 30000 });
 
   markBrowserUsed(userDataDir);
   if (keepOpen && !isWatchdogRunning(userDataDir)) {
