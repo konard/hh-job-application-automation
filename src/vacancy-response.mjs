@@ -22,7 +22,7 @@ import { findBestMatch } from './qa-database.mjs';
 import { answersInContexts, loadAnswerContexts, plainSalaryAnswer, sameButSums, showsContext } from './answer-contexts.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
-import { waitForVisibleResume } from './resume-visibility.mjs';
+import { resumeVisibility } from './resume-visibility.mjs';
 import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
@@ -413,11 +413,7 @@ export async function handleVacancyResponsePage({
       return;
     }
 
-    const visibility = await waitForVisibleResume(commander, { vacancyId });
-    if (visibility === 'withdrawn') {
-      return;
-    }
-    if (visibility === 'skip') {
+    if (await resumeVisibility(commander, { vacancyId }) === 'skip') {
       await skipVacancy('resume_not_visible');
       await returnToList();
       return;

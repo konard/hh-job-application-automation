@@ -9,7 +9,7 @@ import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { saveMarkedQAPairs, saveQAPairs, savedAnswersInContext, setupQAHandling } from './vacancy-response.mjs';
-import { waitForVisibleResume } from './resume-visibility.mjs';
+import { resumeVisibility } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { findCoverLetterToggle, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
@@ -150,11 +150,7 @@ export async function processModalApplication({
     await vacancyFilters.remember(vacancyId, filterMatch, { title });
     return skipModal({ commander, reason: 'filtered_out' });
   }
-  const visibility = await waitForVisibleResume(commander, { scopeSelector: SELECTORS.applicationForm, vacancyId });
-  if (visibility === 'withdrawn') {
-    return skipModal({ commander, reason: 'withdrawn' });
-  }
-  if (visibility !== 'visible') {
+  if (await resumeVisibility(commander, { scopeSelector: SELECTORS.applicationForm, vacancyId }) === 'skip') {
     return skip('resume_not_visible');
   }
 

@@ -1,14 +1,13 @@
 /**
  * hh.ru's notice on a response form when the resume is not visible to all employers:
  * «Чтобы откликнуться на эту вакансию, поменяйте видимость резюме на «Видно всем работодателям,
- * зарегистрированным на hh.ru»». It depends on the resume, not the vacancy (once it shows, every
- * vacancy that needs it does), so the run asks the user to change the visibility instead of
- * skipping vacancy after vacancy.
+ * зарегистрированным на hh.ru»». Such a vacancy is skipped without asking and kept in
+ * skipped-vacancies.lino (`bun run skipped -- --clear resume_not_visible` opens them again once the
+ * resume is visible to all employers).
  *
  * @module resume-visibility
  */
 
-import { askUser, isInteractive } from './confirmations.mjs';
 import { RESUME_HIDDEN_NOTICES } from './hh-words.mjs';
 
 /**
@@ -68,26 +67,18 @@ export async function isResumeHiddenNoticeShown(commander, scopeSelector) {
 }
 
 /**
- * When the notice is shown, ask the user to change the visibility of the resume (on hh.ru in their
- * own browser or the app: the automation browser keeps to one tab) or to skip the vacancy
+ * Whether the vacancy can be applied to with this resume; logged when it cannot
  * @param {Object} commander
  * @param {Object} [options]
  * @param {string} [options.scopeSelector] - The popup; the whole page when not given
  * @param {string|number} [options.vacancyId]
- * @returns {Promise<'visible'|'skip'|'withdrawn'>} 'visible' when there is no notice or the user
- *   has changed the visibility, 'skip' also when nobody can answer (unattended run), 'withdrawn'
- *   when the page changed meanwhile (e.g. the user reloaded it)
+ * @returns {Promise<'visible'|'skip'>} 'skip' when the notice is shown
  */
-export async function waitForVisibleResume(commander, { scopeSelector, vacancyId } = {}) {
+export async function resumeVisibility(commander, { scopeSelector, vacancyId } = {}) {
   if (!await isResumeHiddenNoticeShown(commander, scopeSelector)) {
     return 'visible';
   }
-  console.log(`🙈 hh.ru takes responses to vacancy ${vacancyId ?? ''} only from a resume visible to all employers ` +
+  console.log(`🙈 Skipped: hh.ru takes responses to vacancy ${vacancyId ?? ''} only from a resume visible to all employers ` +
     '(«поменяйте видимость резюме на «Видно всем работодателям, зарегистрированным на hh.ru»»)');
-  if (!isInteractive()) {
-    return 'skip';
-  }
-  const choice = await askUser('Make the resume visible to all employers (on hh.ru in your own browser or the app: ' +
-    'the automation browser keeps to this tab), then', { skip: 'skip this vacancy' });
-  return choice === 'continue' ? 'visible' : choice;
+  return 'skip';
 }

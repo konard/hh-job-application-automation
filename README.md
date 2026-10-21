@@ -386,12 +386,9 @@ bun run skipped -- --clear 138295841
 The file holds only public vacancy data (IDs, titles from the vacancy card, the employer's link) and
 can be committed like `data/deferred-questions.lino`.
 
-hh.ru's notice «поменяйте видимость резюме на «Видно всем работодателям…»» is not a filter: it
-depends on the resume, so once it shows, every such vacancy shows it. Only a rendered notice counts:
-every response popup carries it in a collapsed `hidden-resume-warning` block that opens only for a
-hidden resume. The run asks you to make the
-resume visible (on hh.ru in your own browser or the app; the automation browser keeps to one tab)
-and then goes on, or `s` skips the vacancy. Unattended runs skip it.
+A vacancy with hh.ru's notice «поменяйте видимость резюме на «Видно всем работодателям…»» is skipped
+without asking (`resume_not_visible`). Only a rendered notice counts: every response popup carries it
+in a collapsed `hidden-resume-warning` block that opens only for a hidden resume.
 
 ### Prefill External Forms
 
