@@ -17,7 +17,7 @@ import { handleVacancyResponsePage } from './vacancy-response.mjs';
 import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
 import { dismissOverlays, isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { registerPageTriggers, saveFormAnswers } from './page-triggers.mjs';
-import { ensureLoggedIn } from './login.mjs';
+import { ensureLoggedIn, watchHhSessions } from './login.mjs';
 import { findSuggestedVacanciesUrl, latestResumeSearchUrl } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
@@ -310,6 +310,8 @@ export function createOrchestrator({
         return;
       }
       await checkpoint('logged-in');
+      // A login made later in any hh.ru window (this one, chat, forms) reaches the others
+      watchHhSessions({ port: argv.browserPort });
 
       if (!START_URL) {
         START_URL = URL_PATTERNS.searchVacancy.test(commander.getUrl()) && commander.getUrl().includes('resume=')

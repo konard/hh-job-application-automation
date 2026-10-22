@@ -58,6 +58,8 @@ export const SELECTORS = {
 
   // Navigation
   loginLink: 'a[data-qa="login"]',
+  // The menu items only a signed-in applicant sees (responses, profile)
+  signedInMenu: '[data-qa~="mainmenu_vacancyResponses"], [data-qa~="mainmenu_applicantProfilePage"]',
 
   // Login (inline login card on the profile page)
   loginForm: '[data-qa="account-login-form"]',

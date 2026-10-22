@@ -8,9 +8,8 @@
 
 import os from 'os';
 import path from 'path';
-import { chromium } from 'playwright';
 import { makeBrowserCommander } from 'browser-commander';
-import { connectOrLaunchBrowser, isBrowserRunning } from './browser-session.mjs';
+import { connectOrLaunchBrowser } from './browser-session.mjs';
 import { createTracing } from './tracing.mjs';
 
 /**
@@ -57,30 +56,4 @@ export async function openSlot({ name, port, keepOpenHours = 24, trace = tracing
       return session.release(...args);
     },
   };
-}
-
-/**
- * Copy the cookies of a site from another running browser (the hh.ru automation browser) into
- * a slot, so the slot is logged in. Values are never printed
- * @param {Object} options
- * @param {number} options.fromPort - Port of the browser holding the session
- * @param {Object} options.page - A page of the slot
- * @param {RegExp} options.domain - Cookie domains to copy
- * @returns {Promise<number>} Number of cookies copied (0 when the source browser is not running)
- */
-export async function copySession({ fromPort, page, domain }) {
-  if (!await isBrowserRunning(fromPort)) {
-    return 0;
-  }
-  const source = await chromium.connectOverCDP(`http://127.0.0.1:${fromPort}`);
-  try {
-    const cookies = (await source.contexts()[0].cookies()).filter((cookie) => domain.test(cookie.domain));
-    if (cookies.length > 0) {
-      await page.context().addCookies(cookies);
-    }
-    return cookies.length;
-  } finally {
-    // Disconnects only: the source browser keeps running
-    await source.close();
-  }
 }

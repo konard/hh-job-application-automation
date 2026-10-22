@@ -10,8 +10,10 @@
  * 4. Copy the resulting hh.ru cookies into the persistent automation browser.
  * 5. Fall back to waiting for a manual login in the automation browser.
  *
- * A browser slot (chat, forms, experience) gets the session of the automation browser, or else
- * of a browser you use (seedHhSession), so no slot starts signed out.
+ * A browser slot (chat, forms, experience) gets the session of the automation browser or of
+ * another slot, or else of a browser you use (seedHhSession), so no slot starts signed out. A
+ * login made in any of these windows is copied into the others that show signed out
+ * (shareHhSession), so you log in once.
  *
  * @module login
  */
@@ -24,8 +26,10 @@ import {
   saveStorageState,
   setCookies,
 } from 'browser-commander';
+import { chromium } from 'playwright';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
-import { copySession, tracingEnabled } from './browser-slots.mjs';
+import { tracingEnabled } from './browser-slots.mjs';
+import { isBrowserRunning } from './browser-session.mjs';
 import { createTracing } from './tracing.mjs';
 import { dismissOverlays } from './helpers/page-helpers.mjs';
 import { log } from './logging.mjs';
@@ -219,11 +223,114 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
     }
   }
 
-  console.log('🙋 Please log in to hh.ru in the browser window; the automation continues automatically.');
+  console.log('🙋 Please log in to hh.ru in this or any other hh.ru window of the automation; the login is copied to the others and the automation continues.');
   await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
-  while (!isPageClosed() && !await isLoggedIn(commander).catch(() => false)) {
+  for (let round = 1; !isPageClosed() && !await isLoggedIn(commander).catch(() => false); round++) {
+    // A login made in a slot window (chat, forms) is taken from there
+    if (round % 5 === 0) {
+      await shareHhSession({ ports: sessionPorts(argv.browserPort) }).catch(() => {});
+    }
     await commander.wait({ ms: 2000, reason: 'waiting for manual login' });
   }
+  // And the slots still signed out get this login
+  await shareHhSession({ ports: sessionPorts(argv.browserPort) }).catch(() => {});
+}
+
+/** Ports of the windows that hold an hh.ru session: the automation browser, chat (9340, 9341), forms (9331-9339), experience (9351) */
+export const HH_SESSION_PORTS = [9322, 9340, 9341, ...Array.from({ length: 9 }, (_, index) => 9331 + index), 9351];
+
+const sessionPorts = (port) => [...new Set([port ?? 9322, ...HH_SESSION_PORTS])];
+
+const isHhUrl = (url) => /^https:\/\/([\w-]+\.)*hh\.ru\//.test(url);
+
+/**
+ * Whether an open hh.ru page shows a signed-in user, read as it is (nothing is loaded)
+ * @param {Object} page - Playwright page
+ * @returns {Promise<'in'|'out'|null>} null when the page does not tell (not hh.ru, still loading)
+ */
+export async function pageSignInState(page) {
+  if (!isHhUrl(page.url())) {
+    return null;
+  }
+  if (URL_PATTERNS.loginPage.test(page.url())) {
+    return 'out';
+  }
+  return await page.evaluate(([signedIn, signedOut]) => {
+    if (document.querySelector(signedOut)) {
+      return 'out';
+    }
+    return document.querySelector(signedIn) ? 'in' : null;
+  }, [SELECTORS.signedInMenu, `${SELECTORS.loginLink}, ${SELECTORS.loginForm}`]).catch(() => null);
+}
+
+/**
+ * Log in once for all windows: when one hh.ru window of the automation is signed in, its hh.ru
+ * cookies are copied into each running one that shows signed out, and that page is reloaded.
+ * Only names of ports are printed, never values
+ * @param {Object} [options]
+ * @param {number[]} [options.ports] - Debugging ports of the windows
+ * @param {(message: string) => void} [options.log]
+ * @returns {Promise<number[]>} Ports signed in this way
+ */
+export async function shareHhSession({ ports = HH_SESSION_PORTS, log: say = console.log } = {}) {
+  const windows = [];
+  try {
+    for (const port of ports) {
+      if (!await isBrowserRunning(port)) {
+        continue;
+      }
+      const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => null);
+      if (!browser) {
+        continue;
+      }
+      const pages = browser.contexts().flatMap((context) => context.pages()).filter((page) => isHhUrl(page.url()));
+      const states = await Promise.all(pages.map(pageSignInState));
+      windows.push({ port, browser, pages: pages.filter((_, index) => states[index] === 'out'), signedIn: states.includes('in') });
+    }
+    const source = windows.find((window) => window.signedIn);
+    const targets = windows.filter((window) => !window.signedIn && window.pages.length > 0);
+    if (!source || targets.length === 0) {
+      return [];
+    }
+    const cookies = (await source.browser.contexts()[0].cookies()).filter(isHhCookie);
+    const signedIn = [];
+    for (const target of targets) {
+      await target.browser.contexts()[0].addCookies(cookies);
+      for (const page of target.pages) {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+      }
+      if (await pageSignInState(target.pages[0]) !== 'out') {
+        say(`🔑 The hh.ru login of the window on port ${source.port} is copied to the window on port ${target.port} (${cookies.length} cookies, values not shown)`);
+        signedIn.push(target.port);
+      }
+    }
+    return signedIn;
+  } finally {
+    // Disconnects only: the windows keep running
+    await Promise.all(windows.map(({ browser }) => browser.close().catch(() => {})));
+  }
+}
+
+/**
+ * Keep the hh.ru windows signed in together: every interval a login made in one of them is
+ * copied into the others that show signed out
+ * @param {Object} [options]
+ * @param {number} [options.port] - Port of the automation browser
+ * @param {number} [options.intervalMs=60000]
+ * @returns {() => void} Stops watching
+ */
+export function watchHhSessions({ port, intervalMs = 60000 } = {}) {
+  let running = false;
+  const timer = setInterval(async () => {
+    if (running) {
+      return;
+    }
+    running = true;
+    await shareHhSession({ ports: sessionPorts(port) }).catch(() => {});
+    running = false;
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 /**
@@ -241,8 +348,8 @@ export async function hhPageSignedIn(page) {
 }
 
 /**
- * Sign a browser slot in to hh.ru: the session of the automation browser, or else the session of
- * a browser you use. Values are never printed
+ * Sign a browser slot in to hh.ru: its own login is kept; else the login of the automation
+ * browser or another slot, or else the session of a browser you use. Values are never printed
  * @param {Object} options
  * @param {Object} options.page - Playwright page of the slot
  * @param {number} [options.fromPort=9322] - Port of the automation browser
@@ -250,14 +357,16 @@ export async function hhPageSignedIn(page) {
  * @returns {Promise<boolean>} Whether the slot is signed in
  */
 export async function seedHhSession({ page, fromPort = 9322, log: say = console.log }) {
-  const copied = await copySession({ fromPort, page, domain: /(^|\.)hh\.ru$/ });
-  if (copied > 0 && await hhPageSignedIn(page)) {
-    say(`🔑 Logged in with the hh.ru session of the automation browser (${copied} cookies, values not shown)`);
+  // A slot signed in on its own keeps its login (a signed-out browser's cookies would replace it)
+  if (await hhPageSignedIn(page)) {
+    return true;
+  }
+  if ((await shareHhSession({ ports: sessionPorts(fromPort), log: say })).length > 0 && await pageSignInState(page) === 'in') {
     return true;
   }
   if (await importUserSession({ page, domain: HH_DOMAIN, signedIn: () => hhPageSignedIn(page), log: say })) {
     return true;
   }
-  say('⚠️  No signed-in hh.ru session in the automation browser or your browsers: log in to hh.ru in this slot window');
+  say('⚠️  No signed-in hh.ru session in the automation windows or your browsers: log in to hh.ru in any automation window, the others take that login');
   return false;
 }

@@ -88,8 +88,10 @@ resume and applies to the vacancies hh.ru suggests for it:
   their cookie files (Safari needs Full Disk Access for the terminal). Else a social sign-in through
   a Chromium-based profile is copied into the automation profile. Use `--login-from chrome` to pick
   a browser, or `--manual-login` to log in yourself. Every other browser slot (chats, forms,
-  experience, LinkedIn) starts signed in the same way: with the automation browser's session, or
-  else with a browser of yours. Cookie values are never printed or stored outside the profiles.
+  experience, LinkedIn) starts signed in the same way: with its own login, the login of another
+  automation window, or else with a browser of yours. Log in once: a login made in any hh.ru window
+  of the automation (main, chat, forms) is copied into the others that show signed out, checked
+  every minute. Cookie values are never printed or stored outside the profiles.
 - **Resume** - the suggested vacancies of the most recently updated resume are opened, unless `--url`
   is given. The update dates come from hh.ru's own state embedded in the resumes page (the page shows
   none), so choosing costs no extra request; the log names the resume and why it was chosen. A
