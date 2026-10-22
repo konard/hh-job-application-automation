@@ -20,7 +20,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
-import { openSlot, copySession, tracingEnabled } from './browser-slots.mjs';
+import { openSlot, tracingEnabled } from './browser-slots.mjs';
+import { seedHhSession } from './login.mjs';
 import { enableConfirmations, askUser, withdrawPrompt } from './confirmations.mjs';
 import {
   applySyncDecision, detectLanguage, diffExperience, formatChange, formatDiffReport, linkedInItemsFromText, normalizeHhJobs, normalizeLinkedInJobs,
@@ -220,8 +221,7 @@ async function runSync(argv, data, diff, translator) {
   const { page } = session;
   if (argv.to === 'hh') {
     // Only the hh.ru cookies are copied; the automation browser keeps running untouched
-    const copied = await copySession({ fromPort: argv.hhBrowserPort, page, domain: /(^|\.)hh\.ru$/ });
-    console.log(copied > 0 ? `🔑 hh.ru login copied from the browser on port ${argv.hhBrowserPort}` : `⚠️  No browser on port ${argv.hhBrowserPort} to copy the hh.ru login from: log in in the slot window`);
+    await seedHhSession({ page, fromPort: argv.hhBrowserPort });
   }
   const done = [];
   enableConfirmations({

@@ -9,6 +9,7 @@
 import { formatMonthYear } from './experience.mjs';
 import { waitForCaptcha } from './form-slots.mjs';
 import { pageLanguage } from './hh-words.mjs';
+import { importUserSession } from './user-sessions.mjs';
 
 export const LINKEDIN_PROFILE = 'https://www.linkedin.com/in/konard';
 const LOGIN_URL = /linkedin\.com\/(authwall|login|uas\/login|checkpoint|signup|start\/join)/i;
@@ -140,17 +141,26 @@ export async function readLinkedInExperience(page, { profileUrl = LINKEDIN_PROFI
 }
 
 /**
- * Wait, when the slot has no LinkedIn session (no li_at cookie) or shows a login wall, until the
- * user logs in in the slot's window, then open `url`. Login stays manual: nothing here reads,
- * types or copies a password
+ * When the slot has no LinkedIn session (no li_at cookie) or shows a login wall: take the LinkedIn
+ * session of a browser you use (user-sessions), or else wait until the user logs in in the slot's
+ * window, then open `url`. Nothing here reads, types or copies a password
  * @param {Object} page
  * @param {Object} options
  * @param {string} options.url - The page to be on afterwards
  * @param {number} [options.port=9350] - Shown in the message, to find the window
  * @param {number} [options.waitMinutes=30]
+ * @param {boolean} [options.importSession=true] - Try the sessions of your browsers first
  */
-export async function waitForLinkedInLogin(page, { url, port = 9350, waitMinutes = 30 }) {
+export async function waitForLinkedInLogin(page, { url, port = 9350, waitMinutes = 30, importSession = true }) {
   if (await hasLinkedInSession(page) && !isLinkedInLoginPage(page.url())) {
+    return;
+  }
+  // The LinkedIn session of a browser you use, before asking you to log in
+  const signedIn = async () => {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    return await hasLinkedInSession(page) && !isLinkedInLoginPage(page.url());
+  };
+  if (importSession && await importUserSession({ page, domain: 'linkedin.com', signedIn })) {
     return;
   }
   console.log(`🔐 Not logged in to LinkedIn: log in to LinkedIn in the slot window (port ${port}). The run goes on by itself`);

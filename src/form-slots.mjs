@@ -10,7 +10,8 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { formVacancy, isAssignmentLinkQuestion, readAssignment, readAssignments } from './assignments.mjs';
-import { copySession, openSlot, slotDir } from './browser-slots.mjs';
+import { openSlot, slotDir } from './browser-slots.mjs';
+import { seedHhSession } from './login.mjs';
 import { isBrowserRunning } from './browser-session.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { startFormWatch } from './form-answers.mjs';
@@ -91,8 +92,7 @@ async function prefillSlot(url, slot, { qaMap, qaDatabase, profile, resume }, { 
   log(`🌐 ${url} (browser on port ${port})`);
   // hh.ru's own pages (the employer rating poll) need the hh.ru login of the automation browser
   if (/(^|\.)hh\.ru$/.test(new URL(url).hostname)) {
-    const copied = await copySession({ fromPort: 9322, page, domain: /(^|\.)hh\.ru$/ });
-    log(copied > 0 ? `🔑 Logged in with the hh.ru session (${copied} cookies, values not shown)` : '⚠️  Log in to hh.ru in this slot if needed');
+    await seedHhSession({ page, fromPort: 9322, log });
   }
   if (page.url() !== url) {
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 }).catch((error) => log(`⚠️  ${error.message.split('\n')[0]}`));

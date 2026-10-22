@@ -3,11 +3,15 @@
  *
  * 1. Detect logins available on this machine: browser profiles holding cookies of
  *    hh.ru or of the social networks hh.ru accepts for sign-in (VK, Mail.ru, OK, ...).
- * 2. Start a temporary snapshot of the best Chromium profile. Chrome decrypts its own
+ * 2. Take the hh.ru session of any browser you use, Safari and Firefox included (user-sessions).
+ * 3. Otherwise start a temporary snapshot of the best Chromium profile. Chrome decrypts its own
  *    cookies, so no Keychain prompt is shown. If that profile is not logged in to
  *    hh.ru, sign in through the social network whose session it holds.
- * 3. Copy the resulting hh.ru cookies into the persistent automation browser.
- * 4. Fall back to waiting for a manual login in the automation browser.
+ * 4. Copy the resulting hh.ru cookies into the persistent automation browser.
+ * 5. Fall back to waiting for a manual login in the automation browser.
+ *
+ * A browser slot (chat, forms, experience) gets the session of the automation browser, or else
+ * of a browser you use (seedHhSession), so no slot starts signed out.
  *
  * @module login
  */
@@ -21,10 +25,11 @@ import {
   setCookies,
 } from 'browser-commander';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
-import { tracingEnabled } from './browser-slots.mjs';
+import { copySession, tracingEnabled } from './browser-slots.mjs';
 import { createTracing } from './tracing.mjs';
 import { dismissOverlays } from './helpers/page-helpers.mjs';
 import { log } from './logging.mjs';
+import { importUserSession } from './user-sessions.mjs';
 
 const HH_DOMAIN = 'hh.ru';
 // Shows the login card inline when logged out and the profile when logged in
@@ -184,8 +189,18 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
     for (const { browser, profile, hh, providers, usable } of logins) {
       console.log(`   ${browser} (${profile}): hh.ru cookies ${hh}, social: ${providers.join(', ') || '-'}${usable ? '' : ' (not usable: no CDP)'}`);
     }
-    const candidates = logins.filter(({ usable, browser, profile }) =>
-      usable && (!argv.loginFrom || `${browser} ${profile}`.toLowerCase().includes(argv.loginFrom.toLowerCase())));
+    const chosen = ({ browser, profile }) =>
+      !argv.loginFrom || `${browser} ${profile}`.toLowerCase().includes(argv.loginFrom.toLowerCase());
+    // The hh.ru session of a browser you use, as it is
+    const signedIn = async () => {
+      await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
+      return await isLoggedIn(commander);
+    };
+    if (await importUserSession({ page, domain: HH_DOMAIN, signedIn, accept: chosen })) {
+      return;
+    }
+    // Else a sign-in through a social network whose session a Chromium profile holds
+    const candidates = logins.filter((login) => login.usable && login.providers.length > 0 && chosen(login));
     for (const candidate of candidates) {
       try {
         const cookies = await hhCookiesFromProfile(candidate);
@@ -209,4 +224,40 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
   while (!isPageClosed() && !await isLoggedIn(commander).catch(() => false)) {
     await commander.wait({ ms: 2000, reason: 'waiting for manual login' });
   }
+}
+
+/**
+ * Whether a slot's page is signed in to hh.ru: the profile page shows no login link or form
+ * @param {Object} page - Playwright page of the slot
+ * @returns {Promise<boolean>}
+ */
+export async function hhPageSignedIn(page) {
+  await page.goto(PROFILE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  const url = page.url();
+  if (!/(^|\.)hh\.ru$/.test(new URL(url).hostname) || URL_PATTERNS.loginPage.test(url)) {
+    return false;
+  }
+  return await page.locator(`${SELECTORS.loginLink}, ${SELECTORS.loginForm}`).count() === 0;
+}
+
+/**
+ * Sign a browser slot in to hh.ru: the session of the automation browser, or else the session of
+ * a browser you use. Values are never printed
+ * @param {Object} options
+ * @param {Object} options.page - Playwright page of the slot
+ * @param {number} [options.fromPort=9322] - Port of the automation browser
+ * @param {(message: string) => void} [options.log]
+ * @returns {Promise<boolean>} Whether the slot is signed in
+ */
+export async function seedHhSession({ page, fromPort = 9322, log: say = console.log }) {
+  const copied = await copySession({ fromPort, page, domain: /(^|\.)hh\.ru$/ });
+  if (copied > 0 && await hhPageSignedIn(page)) {
+    say(`🔑 Logged in with the hh.ru session of the automation browser (${copied} cookies, values not shown)`);
+    return true;
+  }
+  if (await importUserSession({ page, domain: HH_DOMAIN, signedIn: () => hhPageSignedIn(page), log: say })) {
+    return true;
+  }
+  say('⚠️  No signed-in hh.ru session in the automation browser or your browsers: log in to hh.ru in this slot window');
+  return false;
 }

@@ -15,7 +15,8 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { openSlot, copySession } from './browser-slots.mjs';
+import { openSlot } from './browser-slots.mjs';
+import { seedHhSession } from './login.mjs';
 import { askUser, enableConfirmations, withdrawPrompt } from './confirmations.mjs';
 import { createQADatabase, findBestMatch } from './qa-database.mjs';
 import { contractContacts, withContacts } from './contacts.mjs';
@@ -324,10 +325,7 @@ async function openChatTab() {
   await blockHangingHosts(page).catch(() => {});
 }
 await openChatTab();
-const copied = await copySession({ fromPort: AUTOMATION_PORT, page, domain: /(^|\.)hh\.ru$/ });
-console.log(copied > 0
-  ? `🔑 Logged in with the hh.ru session of the automation browser (${copied} cookies, values not shown)`
-  : '⚠️  The automation browser is not running: log in to hh.ru in the chat slot if needed');
+await seedHhSession({ page, fromPort: AUTOMATION_PORT });
 enableConfirmations({ steps: [], onStop: () => process.exit(0), input: process.stdin });
 
 /** Save what the user has answered in the chat: questions to qa.lino, template messages to chat-templates.lino */

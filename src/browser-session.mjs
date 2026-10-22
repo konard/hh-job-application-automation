@@ -277,7 +277,8 @@ async function startBrowser({ userDataDir, port }) {
   // «Chrome for Testing is only for automated testing» bar (the one value of the switch that
   // hides it, chrome/browser/ui/startup/infobar_utils.cc). --restore-last-session: the session
   // cookies are kept like «Continue where you left off» keeps them (hh.ru's login is one of them);
-  // without it a browser closed normally starts logged out of hh.ru
+  // without it a browser closed normally starts logged out of hh.ru. To come from browser-commander
+  // as the default of every persistent profile (browser-commander #187)
   const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--no-first-run', '--use-mock-keychain',
     '--test-type=gpu', '--restore-last-session', ...LAUNCH_SETTINGS.args];
   spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();

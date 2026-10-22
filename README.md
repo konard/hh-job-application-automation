@@ -73,7 +73,8 @@ without a window and set in Chrome for Testing, in memory only). The browser is 
 person would start it (no automation infobars), and a resized window shows the page at its new size
 (the recording's screenshots are taken by Chrome without a clip, browser-commander #180); the profile is kept in `~/.hh-automation/chrome-profile`.
 A restart keeps the hh.ru login: hh.ru keeps it in a session cookie, and the browser keeps session
-cookies like «Continue where you left off» does (`--restore-last-session`).
+cookies like «Continue where you left off» does (`--restore-last-session`, until browser-commander
+keeps them for every persistent profile by default: browser-commander #187).
 
 **Run with defaults:** `bun run apply -- --message-file data/cover-letter.txt` needs no other option
 (the cover letter is the one choice the run asks of you): it logs in, picks your most recently updated
@@ -81,9 +82,14 @@ resume and applies to the vacancies hh.ru suggests for it:
 
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names
-  are counted). The best Chromium-based profile is opened as a temporary copy (no Keychain prompt) and
-  its hh.ru login, or a social sign-in through it, is copied into the automation profile. Use
-  `--login-from chrome` to pick a browser, or `--manual-login` to log in yourself.
+  are counted). The hh.ru session of any browser you use (Google Chrome, Safari, Firefox, Edge,
+  Brave, Yandex, Arc, …) is tried first, most hh.ru cookies first: Chrome-family cookies are read by
+  the browser itself from a copy of its profile (no Keychain prompt), Safari's and Firefox's from
+  their cookie files (Safari needs Full Disk Access for the terminal). Else a social sign-in through
+  a Chromium-based profile is copied into the automation profile. Use `--login-from chrome` to pick
+  a browser, or `--manual-login` to log in yourself. Every other browser slot (chats, forms,
+  experience, LinkedIn) starts signed in the same way: with the automation browser's session, or
+  else with a browser of yours. Cookie values are never printed or stored outside the profiles.
 - **Resume** - the suggested vacancies of the most recently updated resume are opened, unless `--url`
   is given. The update dates come from hh.ru's own state embedded in the resumes page (the page shows
   none), so choosing costs no extra request; the log names the resume and why it was chosen. A
