@@ -143,6 +143,18 @@ describe('recruiter bot summaries and messages without a reply', () => {
     assert.deepEqual(summaryPairs('Есть ли опыт? Расскажите'), []);
   });
 
+  test('a bot summary keeps the answers to questions asked without «?»', () => {
+    const bot = 'Есть опыт автоматизации на Python или TypeScript?: Да\nОпыт работы с Playwright или Cypress/Selenium: Да\nОпыт использования AI для автоматизации тестирования?: Да';
+    assert.deepEqual(summaryPairs(bot), [
+      ['Есть опыт автоматизации на Python или TypeScript?', 'Да'],
+      ['Опыт работы с Playwright или Cypress/Selenium', 'Да'],
+      ['Опыт использования AI для автоматизации тестирования?', 'Да'],
+    ]);
+    assert.deepEqual(learnedPairs([{ mine: false, title: 'Робот-рекрутер', text: bot }]).questions.length, 3);
+    // Lines with colons but no question are not a summary
+    assert.deepEqual(summaryPairs('Адрес: Москва\nГрафик: 5/2'), []);
+  });
+
   test('a summary and a template saved without a reply need no reply', () => {
     const closing = 'Спасибо!\nВаши ответы отправлены работодателю. Если ваш отклик его заинтересует, он напишет в этом же чате или позвонит по номеру, который вы указали.';
     const withClosing = new Map([...templates, [closing.replace('\n', ' '), NO_REPLY]]);

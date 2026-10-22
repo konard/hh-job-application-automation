@@ -256,8 +256,9 @@ export function summaryPairs(text) {
       return question && given ? [[question.trim(), given]] : [];
     });
   }
-  const pairs = lines.map((line) => line.match(/^(.+\?)\s*:\s+(.+)$/)).filter(Boolean).map(([, question, answer]) => [question.trim(), answer.trim()]);
-  return pairs.length > 0 && pairs.length === lines.length ? pairs : [];
+  // «Вопрос?: Ответ» on every line; a question the bot asked without «?» is listed as «Вопрос: Ответ»
+  const pairs = lines.map((line) => line.match(/^(.+?\??)\s*:\s+(.+)$/)).filter(Boolean).map(([, question, answer]) => [question.trim(), answer.trim()]);
+  return pairs.length === lines.length && pairs.some(([question]) => question.endsWith('?')) ? pairs : [];
 }
 
 /** Whether a message is a bot's summary of the answers given: not a question to the user */

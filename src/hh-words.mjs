@@ -12,6 +12,12 @@ export const REJECTION_WORD = /^(?:отказ|rejection|refusal|declined)$/iu;
 /** The title of the user's own first message in a chat: the application with its cover letter */
 export const APPLICATION_WORD = /^(?:отклик на вакансию|vacancy application|application for (?:the|a) vacancy|response to (?:the|a) vacancy)$/iu;
 
+/**
+ * hh.ru's notice that a recruiter bot has passed the answers on, so it asks nothing more:
+ * «Спасибо за ответы! Мы передали их работодателю», «Ваши ответы отправлены работодателю»
+ */
+export const ANSWERS_PASSED = /(?:ответы|answers)[^.!?]{0,40}(?:отправлен|передан|sent|passed|forwarded)|передали\s+(?:их|ответы)\s+работодател|(?:sent|passed|forwarded)\s+them\s+(?:on\s+)?to\s+the\s+employer/iu;
+
 /** Shown in place of the reply field: «Работодатель отключил переписку по данной вакансии» */
 export const TURNED_OFF_WORDS = String.raw`отключил\p{L}*\s+переписку|(?:disabled|turned off|switched off|closed)\s+(?:the\s+)?(?:chat|messag\p{L}*|correspondence|conversation)`;
 

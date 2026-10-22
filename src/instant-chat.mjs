@@ -11,7 +11,8 @@
  * - a bot's offer to reuse the answers given before («Используем эти ответы?») is compared with
  *   the saved answers; the user chooses, or with autoReuse «Да» is clicked when all are the saved
  *   ones and «Нет» when one differs
- * - when the bot has nothing more to ask, the panel is closed and the run goes on
+ * - when the bot has nothing more to ask (hh.ru says the answers are passed to the employer), the
+ *   panel is closed and the run goes on
  *
  * @module instant-chat
  */
@@ -22,11 +23,19 @@ import { askUser, isInteractive, withdrawPrompt } from './confirmations.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
+import { ANSWERS_PASSED } from './hh-words.mjs';
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
 const INPUT = 'textarea[data-qa="text-input"]';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * hh.ru's notice that the bot passed the answers to the employer: nothing more is asked
+ * @param {{text: string}} message
+ * @returns {boolean}
+ */
+export const answersPassed = (message) => ANSWERS_PASSED.test(message?.text ?? '');
 
 /**
  * Runs in the chat frame: the reply buttons the bot offers under its last message
@@ -143,12 +152,17 @@ export function createInstantChat({
   }
 
 
-  /** Questions the user answered in the chat go to qa.lino */
+  /** The bot's messages that came with reply buttons: questions, even without «?» */
+  const buttonQuestions = new Set();
+
+  /** Questions answered in the chat go to qa.lino: the user's answers, and the bot's summary of them */
   async function learn(chat) {
     // Kept as it is: the answers can be learned again from it (answer-chats --relearn)
     await chatHistory.record(chat).catch(() => {});
     const known = await readQADatabase();
-    for (const [question, answer] of learnedPairs(chat.messages).questions) {
+    const { questions, templates } = learnedPairs(chat.messages);
+    const asked = templates.filter(([text]) => buttonQuestions.has(normalizeQuestion(text)));
+    for (const [question, answer] of [...questions, ...asked]) {
       if (!known.has(question)) {
         await addOrUpdateQA(question, answer);
         log(`💾 Learned from the chat (qa.lino): ${question}`);
@@ -176,12 +190,8 @@ export function createInstantChat({
     return choice;
   }
 
-  return async function answerInstantChat(vacancyId) {
-    const frame = await waitForChat(vacancyId, 10000);
-    if (!frame) {
-      log('💬 hh.ru opened no chat panel for this application');
-      return;
-    }
+  /** @returns {Promise<boolean>} Whether the bot is done, so the panel can be closed */
+  async function answerIn(frame, vacancyId) {
     let handled = null;
     let quietSince = Date.now();
     let waitMs = firstMessageMs;
@@ -191,7 +201,7 @@ export function createInstantChat({
       const chatVacancy = extractVacancyId(chat?.vacancyUrl ?? '');
       if (!chat || frame.isDetached() || (vacancyId && chatVacancy && chatVacancy !== vacancyId)) {
         log('💬 The chat panel was closed or shows another chat: left as it is');
-        return;
+        return false;
       }
       if (chat.turnedOff) {
         log('💬 The employer turned the conversation off: the panel is closed and the run goes on');
@@ -208,6 +218,9 @@ export function createInstantChat({
       handled = last.id;
       await frame.evaluate(scrollToLastMessage).catch(() => {});
       const options = await frame.evaluate(readQuickReplies).catch(() => []);
+      if (options.length > 0) {
+        buttonQuestions.add(normalizeQuestion(last.text));
+      }
       const contexts = await loadAnswerContexts();
       const known = [...vacancyContext(vacancyId), ...chatContextTexts(chat)];
       if (isReuseOffer(last.text)) {
@@ -225,15 +238,19 @@ export function createInstantChat({
           log('⚠️  The choice did not show in the chat: left for you');
         }
         if (!isInteractive()) {
-          return;
+          return false;
         }
         const choice = await waitForUser(frame, last.id);
         if (choice !== 'withdrawn') {
-          return;
+          return false;
         }
         quietSince = Date.now();
         waitMs = nextMessageMs;
         continue;
+      }
+      if (answersPassed(last)) {
+        log(`💬 ${last.title || 'Chat'}: ${last.text.replace(/\s+/g, ' ').slice(0, 160)} (the bot is done)`);
+        break;
       }
       // A salary in the vacancy's currency: its card and description (read before the application) tell
       // A template message: one of the replies the user has given to it
@@ -263,7 +280,7 @@ export function createInstantChat({
       }
       if (!isInteractive()) {
         log('💬 Not a perfect match: the chat is left for the chat processor');
-        return;
+        return false;
       }
       if (reply && !option) {
         const input = frame.locator(INPUT).first();
@@ -277,12 +294,34 @@ export function createInstantChat({
       await frame.evaluate(scrollToLastMessage).catch(() => {});
       const choice = await waitForUser(frame, last.id);
       if (choice !== 'withdrawn') {
-        return;
+        return false;
       }
       await learn(await readChatIn(frame).catch(() => ({ messages: [] })));
       quietSince = Date.now();
       waitMs = nextMessageMs;
     }
-    await closePanel();
+    return true;
+  }
+
+  return async function answerInstantChat(vacancyId) {
+    const frame = await waitForChat(vacancyId, 10000);
+    if (!frame) {
+      log('💬 hh.ru opened no chat panel for this application');
+      return;
+    }
+    buttonQuestions.clear();
+    let botDone = false;
+    try {
+      botDone = await answerIn(frame, vacancyId);
+    } finally {
+      // Whatever was answered is saved for the next time, however the chat ended
+      const chat = await readChatIn(frame).catch(() => null);
+      if (chat) {
+        await learn(chat).catch(() => {});
+      }
+    }
+    if (botDone) {
+      await closePanel();
+    }
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { perfectOption } from '../src/instant-chat.mjs';
+import { answersPassed, perfectOption } from '../src/instant-chat.mjs';
 import { knownReply } from '../src/chat-answers.mjs';
 
 describe('instant chat answers', () => {
@@ -20,5 +20,15 @@ describe('instant chat answers', () => {
     const templates = new Map([['Спасибо! Ваши ответы отправлены работодателю. Если ваш отклик его заинтересует, он напишет в этом же чате или позвонит по номеру, который вы указали.', '[без ответа]']]);
     const reply = knownReply({ title: 'Робот-рекрутер', text: 'Спасибо! Ваши ответы отправлены работодателю. Если ваш отклик его заинтересует, он напишет в этом же чате или позвонит по номеру, который вы указали.' }, { templates, qaMap: new Map() });
     expect(reply).toMatchObject({ noReply: true, perfect: true });
+  });
+
+  test('hh.ru saying the answers are passed on ends the bot, in any wording', () => {
+    for (const text of ['Спасибо за ответы! Мы передали их работодателю.', 'Спасибо! Ваши ответы отправлены работодателю.',
+      'Thank you for your answers! We have passed them to the employer.', 'Your answers have been sent to the employer.']) {
+      expect(answersPassed({ text })).toBe(true);
+    }
+    for (const text of ['Опыт работы с Playwright или Cypress/Selenium', 'Готовы оформиться самозанятым или работать через ИП?', 'Какой у вас опыт с ответами клиентам?']) {
+      expect(answersPassed({ text })).toBe(false);
+    }
   });
 });
