@@ -72,6 +72,8 @@ Google Chrome used before is moved once, its logins kept (the cookies are read b
 without a window and set in Chrome for Testing, in memory only). The browser is started the way a
 person would start it (no automation infobars), and a resized window shows the page at its new size
 (the recording's screenshots are taken by Chrome without a clip, browser-commander #180); the profile is kept in `~/.hh-automation/chrome-profile`.
+A restart keeps the hh.ru login: hh.ru keeps it in a session cookie, and the browser keeps session
+cookies like «Continue where you left off» does (`--restore-last-session`).
 
 **Run with defaults:** `bun run apply -- --message-file data/cover-letter.txt` needs no other option
 (the cover letter is the one choice the run asks of you): it logs in, picks your most recently updated

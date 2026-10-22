@@ -275,9 +275,11 @@ async function startBrowser({ userDataDir, port }) {
   // --use-mock-keychain: the macOS keychain is never asked («wants to access key Chromium Safe
   // Storage»), the profile's cookies are encrypted with a key of its own. --test-type=gpu: no
   // «Chrome for Testing is only for automated testing» bar (the one value of the switch that
-  // hides it, chrome/browser/ui/startup/infobar_utils.cc)
+  // hides it, chrome/browser/ui/startup/infobar_utils.cc). --restore-last-session: the session
+  // cookies are kept like «Continue where you left off» keeps them (hh.ru's login is one of them);
+  // without it a browser closed normally starts logged out of hh.ru
   const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--no-first-run', '--use-mock-keychain',
-    '--test-type=gpu', ...LAUNCH_SETTINGS.args];
+    '--test-type=gpu', '--restore-last-session', ...LAUNCH_SETTINGS.args];
   spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();
   console.log(`🚀 Started Chrome for Testing on port ${port} (profile: ${userDataDir})`);
   if (!(await waitForBrowser(port))) {
