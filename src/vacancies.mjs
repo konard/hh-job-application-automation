@@ -5,7 +5,7 @@
 
 import { isNavigationError, isTimeoutError } from 'browser-commander';
 import { allAnswersExact, countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
-import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
+import { askUnlessDeferred, DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { saveMarkedQAPairs, saveQAPairs, savedAnswersInContext, setupQAHandling } from './vacancy-response.mjs';
@@ -263,10 +263,14 @@ export async function processModalApplication({
     }
   }
   while (open > 0) {
-    const choice = await askUser(`Answer the ${open} open question(s) in the application popup (the answers are saved to qa.lino)`, {
-      skip: deferredQuestions ? DEFER_CHOICE : undefined,
-    });
+    const { choice, deferred } = await askUnlessDeferred(deferredQuestions, listOpen,
+      () => askUser(`Answer the ${open} open question(s) in the application popup (the answers are saved to qa.lino)`, {
+        skip: deferredQuestions ? DEFER_CHOICE : undefined,
+      }));
     await saveTyped();
+    if (deferred) {
+      return deferModal(deferred);
+    }
     if (choice === 'skip') {
       return deferModal(await listOpen());
     }

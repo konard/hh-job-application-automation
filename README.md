@@ -254,6 +254,8 @@ have to wait for them:
 - At the open-questions prompt type `s`: the vacancy is skipped for now, and its ID is kept under
   each open question in `data/deferred-questions.lino`.
 - A later form whose open question matches a deferred one is skipped right away and added there.
+- A question added to the file while its form waits at the prompt skips that form too: only that
+  question is kept for it, not the form's other open questions.
 - `--skip-question "<text>"` skips forms that ask a matching question (a part of it is enough),
   answered or not. Repeat it for several questions, or pass several values after it:
 

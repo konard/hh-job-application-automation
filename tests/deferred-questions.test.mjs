@@ -5,7 +5,9 @@ import { describe, test, assert } from 'test-anywhere';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { createDeferredQuestions, matchQuestion } from '../src/deferred-questions.mjs';
+import { PassThrough } from 'stream';
+import { askUser, disableConfirmations, enableConfirmations } from '../src/confirmations.mjs';
+import { askUnlessDeferred, createDeferredQuestions, matchQuestion } from '../src/deferred-questions.mjs';
 
 const PORTFOLIO = 'Какой портфель автоматизаций и AI-продуктов вам удалось реализовать? Как считали эффекты для бизнеса?';
 const TEAM = 'Приходилось ли вам руководить командой? Сколько человек было в подчинении и какие это были роли?';
@@ -97,5 +99,46 @@ describe('createDeferredQuestions', () => {
     const store = createDeferredQuestions(await tempFile());
     assert.equal((await store.read()).size, 0);
     assert.equal((await store.pendingVacancyIds(new Map())).size, 0);
+  });
+});
+
+describe('a question deferred while its form waits', () => {
+  const waitFor = async (check) => {
+    for (let i = 0; i < 100 && !check(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  };
+
+  test('watchOpen reports the form\'s open questions added to the file', async () => {
+    const file = await tempFile();
+    const store = createDeferredQuestions(file);
+    await store.defer([TEAM], '1');
+    let reported = null;
+    const stop = store.watchOpen(async () => [PORTFOLIO], (questions) => { reported = questions; }, { intervalMs: 10 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(reported, null);
+    await store.defer([PORTFOLIO], '2');
+    await waitFor(() => reported);
+    stop();
+    assert.deepEqual(reported, [PORTFOLIO]);
+  });
+
+  test('askUnlessDeferred withdraws the waiting prompt and returns the deferred questions', async () => {
+    const store = createDeferredQuestions(await tempFile());
+    await store.defer([TEAM], '1');
+    const watchOpen = store.watchOpen;
+    store.watchOpen = (open, onDeferred) => watchOpen(open, onDeferred, { intervalMs: 10 });
+    enableConfirmations({ steps: [], onStop: () => {}, input: new PassThrough() });
+    try {
+      setTimeout(() => store.defer([PORTFOLIO], '2'), 50);
+      const result = await askUnlessDeferred(store, async () => [PORTFOLIO], () => askUser('Answer the open question(s)'));
+      assert.deepEqual(result, { choice: 'deferred', deferred: [PORTFOLIO] });
+    } finally {
+      disableConfirmations();
+    }
+  });
+
+  test('askUnlessDeferred without a store only asks', async () => {
+    assert.deepEqual(await askUnlessDeferred(null, async () => [], async () => 'continue'), { choice: 'continue' });
   });
 });

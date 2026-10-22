@@ -7,6 +7,8 @@
  * - a form whose open question was deferred before is skipped right away
  * - `--skip-question "<text>"` (repeatable) skips forms that ask a matching question,
  *   answered or not
+ * - a question added to the file while its form waits at the open-questions prompt skips that
+ *   form too (askUnlessDeferred)
  *
  * File format (Links Notation, like qa.lino):
  *   Какой портфель автоматизаций и AI-продуктов вам удалось реализовать?
@@ -17,7 +19,9 @@
  */
 
 import { createQADatabase, findBestMatch, normalizeQuestion } from './qa-database.mjs';
+import { stat } from 'fs/promises';
 import { createMutex } from './helpers/mutex.mjs';
+import { withdrawPrompt } from './confirmations.mjs';
 
 /** What `s` does at an open-questions prompt */
 export const DEFER_CHOICE = 'skip this vacancy until the open question(s) are answered in qa.lino';
@@ -147,5 +151,78 @@ export function createDeferredQuestions(filePath, { skipQuestions = [] } = {}) {
     return pending;
   }
 
-  return { read, defer, forget, questionsToSkip, pendingVacancyIds, skipQuestions, filePath };
+  /**
+   * Watch the file while a form waits for the user: once it changes and one of the form's open
+   * questions is deferred in it, onDeferred gets those questions (once)
+   * @param {() => Promise<string[]>} openQuestions - The form's questions still open
+   * @param {(questions: string[]) => void} onDeferred
+   * @param {Object} [options]
+   * @param {number} [options.intervalMs=2000] - How often the file's time is checked
+   * @returns {() => void} Stops watching
+   */
+  function watchOpen(openQuestions, onDeferred, { intervalMs = 2000 } = {}) {
+    let seen = null;
+    let busy = false;
+    let stopped = false;
+    const modified = async () => (await stat(filePath).catch(() => null))?.mtimeMs ?? 0;
+    const check = async () => {
+      if (busy || stopped) {
+        return;
+      }
+      busy = true;
+      try {
+        const time = await modified();
+        if (time === seen) {
+          return;
+        }
+        seen = time;
+        const deferred = [...(await read()).keys()];
+        const matched = (await openQuestions()).filter((question) => matchQuestion(question, deferred));
+        if (matched.length > 0 && !stopped) {
+          stop();
+          onDeferred(matched);
+        }
+      } catch {
+        // The page or the file is busy now: the next check tries again
+      } finally {
+        busy = false;
+      }
+    };
+    const timer = setInterval(check, intervalMs);
+    timer.unref?.();
+    const stop = () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+    modified().then((time) => { seen ??= time; });
+    return stop;
+  }
+
+  return { read, defer, forget, questionsToSkip, pendingVacancyIds, watchOpen, skipQuestions, filePath };
+}
+
+/**
+ * Ask at the open-questions prompt while watching deferred-questions.lino: a question of the
+ * form deferred meanwhile withdraws the prompt, so the vacancy is skipped like with `s`, under
+ * those questions only
+ * @param {Object|null} deferredQuestions - createDeferredQuestions(), or null
+ * @param {() => Promise<string[]>} openQuestions - The form's questions still open
+ * @param {() => Promise<string>} ask - The prompt (askUser)
+ * @returns {Promise<{choice: string, deferred?: string[]}>} choice 'deferred' with the questions
+ */
+export async function askUnlessDeferred(deferredQuestions, openQuestions, ask) {
+  if (!deferredQuestions) {
+    return { choice: await ask() };
+  }
+  let deferred = null;
+  const stop = deferredQuestions.watchOpen(openQuestions, (questions) => {
+    deferred = questions;
+    withdrawPrompt('a question of this form was added to deferred-questions.lino');
+  });
+  try {
+    const choice = await ask();
+    return deferred ? { choice: 'deferred', deferred } : { choice };
+  } finally {
+    stop();
+  }
 }

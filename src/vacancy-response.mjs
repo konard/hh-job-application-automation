@@ -23,7 +23,7 @@ import { answersInContexts, loadAnswerContexts, plainSalaryAnswer, sameButSums, 
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { resumeVisibility } from './resume-visibility.mjs';
-import { DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
+import { askUnlessDeferred, DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
@@ -514,9 +514,14 @@ export async function handleVacancyResponsePage({
         return;
       }
       do {
-        const choice = await askUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)', {
-          skip: deferredQuestions ? DEFER_CHOICE : undefined,
-        });
+        const { choice, deferred } = await askUnlessDeferred(deferredQuestions,
+          () => listOpenQuestions({ evaluate: commander.evaluate }),
+          () => askUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)', {
+            skip: deferredQuestions ? DEFER_CHOICE : undefined,
+          }));
+        if (deferred) {
+          return deferVacancy(deferred);
+        }
         if (choice === 'withdrawn') {
           return;
         }

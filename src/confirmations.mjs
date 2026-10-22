@@ -50,9 +50,10 @@ export class PromptWithdrawnError extends Error {
 
 /**
  * Withdraw every prompt that waits on stdin, e.g. when the form was sent or left in the browser
+ * @param {string} [reason='the page changed in the browser'] - Printed with the withdrawal
  */
-export function withdrawPrompt() {
-  pendingPrompts.forEach((withdraw) => withdraw());
+export function withdrawPrompt(reason = 'the page changed in the browser') {
+  pendingPrompts.forEach((withdraw) => withdraw(reason));
 }
 
 /**
@@ -92,7 +93,7 @@ export async function askUser(description, { skip } = {}) {
   }
   let withdraw;
   const withdrawn = new Promise((resolve) => {
-    withdraw = () => resolve(null);
+    withdraw = (reason) => resolve({ withdrawn: reason });
   });
   pendingPrompts.add(withdraw);
   // Only answers typed after this question was shown count: one meant for a withdrawn prompt
@@ -107,8 +108,8 @@ export async function askUser(description, { skip } = {}) {
       ask = true;
       pendingLine ??= nextLine();
       const line = await Promise.race([pendingLine, withdrawn]);
-      if (line === null) {
-        console.log('↪️  Prompt withdrawn: the page changed in the browser');
+      if (line.withdrawn) {
+        console.log(`↪️  Prompt withdrawn: ${line.withdrawn}`);
         return 'withdrawn';
       }
       pendingLine = null;
