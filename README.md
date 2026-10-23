@@ -81,10 +81,12 @@ keeps them for every persistent profile by default: browser-commander #187).
 resume and applies to the vacancies hh.ru suggests for it:
 
 - **Alerts** - on macOS, whenever the run waits for you (a question to answer or confirm, a
-  login, a captcha the AI did not read within 30 s, a form to fill by hand), it plays a sound,
-  posts a notification and opens an alert window naming what is needed. The sound and the window
-  show with Do Not Disturb or a Focus on; the sound repeats every 5 minutes while the run waits,
-  and the window closes by itself once the wait is over. `NOTIFY=0` turns them off.
+  login, a captcha the AI did not read within 30 s, a form to fill by hand), it plays a sound and
+  posts a standard notification naming what is needed. When that notification would not show (a
+  Focus or Do Not Disturb is on, or Script Editor's notifications are not allowed: `osascript`
+  posts them as Script Editor) an alert window opens instead, and closes by itself once the wait
+  is over. The sound is heard with a Focus on too and repeats every 5 minutes while the run waits.
+  `NOTIFY=0` turns them off.
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names
   are counted). The hh.ru session of any browser you use (Google Chrome, Safari, Firefox, Edge,
