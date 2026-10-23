@@ -4,6 +4,7 @@
  */
 
 import { isNavigationError, isTimeoutError } from 'browser-commander';
+import { alertUser } from './notify.mjs';
 import { allAnswersExact, countUnansweredQuestions, extractPageQuestions, listOpenQuestions } from './qa.mjs';
 import { askUnlessDeferred, DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
@@ -692,7 +693,12 @@ async function handlePostClickNavigation({ commander, waitForUrlCondition, START
   console.log('💡 Please fill out the form manually. Take as much time as you need.');
   console.log('💡 Once done, navigate back to:', START_URL);
 
-  await waitForUrlCondition(START_URL, 'Waiting for you to return to the target page');
+  const endAlert = alertUser('Fill out the application form in the automation browser, then go back to the vacancy list');
+  try {
+    await waitForUrlCondition(START_URL, 'Waiting for you to return to the target page');
+  } finally {
+    endAlert();
+  }
 
   if (pageClosedByUser()) {
     return { onTargetPage: false, status: 'page_closed' };

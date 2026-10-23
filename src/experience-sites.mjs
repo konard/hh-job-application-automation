@@ -7,6 +7,7 @@
  */
 
 import { formatMonthYear } from './experience.mjs';
+import { alertUser } from './notify.mjs';
 import { waitForCaptcha } from './form-slots.mjs';
 import { pageLanguage } from './hh-words.mjs';
 import { importUserSession } from './user-sessions.mjs';
@@ -169,19 +170,24 @@ export async function waitForLinkedInLogin(page, { url, port = 9350, waitMinutes
   await page.goto(`https://www.linkedin.com/login?session_redirect=${encodeURIComponent(url)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
   const deadline = Date.now() + waitMinutes * 60000;
   let reported = Date.now();
-  while (!(await hasLinkedInSession(page) && page.url().startsWith(url))) {
-    if (Date.now() > deadline) {
-      throw new Error(`Not logged in to LinkedIn after ${waitMinutes} minutes`);
+  const endAlert = alertUser(`Log in to LinkedIn in the slot window (port ${port})`);
+  try {
+    while (!(await hasLinkedInSession(page) && page.url().startsWith(url))) {
+      if (Date.now() > deadline) {
+        throw new Error(`Not logged in to LinkedIn after ${waitMinutes} minutes`);
+      }
+      // Logged in (the session cookie is there) but landed elsewhere, e.g. the feed: open `url`
+      if (await hasLinkedInSession(page) && !isLinkedInLoginPage(page.url()) && !page.url().startsWith(url)) {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+      }
+      if (Date.now() - reported > 60000) {
+        console.log('⏳ Still waiting for the LinkedIn login in the slot window...');
+        reported = Date.now();
+      }
+      await sleep(3000);
     }
-    // Logged in (the session cookie is there) but landed elsewhere, e.g. the feed: open `url`
-    if (await hasLinkedInSession(page) && !isLinkedInLoginPage(page.url()) && !page.url().startsWith(url)) {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-    }
-    if (Date.now() - reported > 60000) {
-      console.log('⏳ Still waiting for the LinkedIn login in the slot window...');
-      reported = Date.now();
-    }
-    await sleep(3000);
+  } finally {
+    endAlert();
   }
   console.log('✅ Logged in to LinkedIn');
 }

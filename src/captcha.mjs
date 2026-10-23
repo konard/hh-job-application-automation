@@ -10,6 +10,7 @@
  */
 
 import { log } from './logging.mjs';
+import { alertUser } from './notify.mjs';
 import { recordEvent } from './stats.mjs';
 import { CAPTCHA_TEXTS } from './hh-words.mjs';
 
@@ -25,6 +26,8 @@ export const CAPTCHA_SELECTORS = [
 ];
 const CAPTCHA_URL = /\/(?:account\/)?captcha/i;
 const POLL_MS = 5000;
+/** A captcha still shown after this long is yours to solve: the alert sounds */
+const CAPTCHA_ALERT_MS = 30000;
 const NAVIGATION_RETRIES = 5;
 const NAVIGATION_RETRY_MS = 1000;
 
@@ -108,9 +111,15 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha } = {}
     const episode = {};
     console.log('🛑 hh.ru shows a captcha. Solve it in the browser; the automation touches nothing until it is gone.');
     const started = Date.now();
-    while (await isCaptchaShown(commander)) {
-      onCaptcha?.(commander, episode);
-      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    // Not at once: the AI may read it first
+    const endAlert = alertUser('hh.ru shows a captcha: solve it in the automation browser', { delayMs: CAPTCHA_ALERT_MS });
+    try {
+      while (await isCaptchaShown(commander)) {
+        onCaptcha?.(commander, episode);
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+    } finally {
+      endAlert();
     }
     console.log(`✅ Captcha solved after ${Math.round((Date.now() - started) / 1000)} s, continuing`);
     // Solved by AI: its reading was sent and hh.ru showed no new picture after it

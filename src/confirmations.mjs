@@ -16,6 +16,7 @@
  */
 
 import readline from 'readline';
+import { alertUser } from './notify.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 
 export const CONFIRM_STEPS = ['answers', 'cover-letter', 'send', 'popup'];
@@ -100,6 +101,8 @@ export async function askUser(description, { skip } = {}) {
   // must not confirm the next step
   const shownAt = Date.now();
   let ask = true;
+  // A sound and a window, so a run waiting for you is noticed outside the terminal
+  const endAlert = alertUser(description);
   try {
     for (;;) {
       if (ask) {
@@ -131,6 +134,7 @@ export async function askUser(description, { skip } = {}) {
       }
     }
   } finally {
+    endAlert();
     pendingPrompts.delete(withdraw);
   }
 }

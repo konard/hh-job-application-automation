@@ -34,6 +34,7 @@ import { createTracing } from './tracing.mjs';
 import { dismissOverlays } from './helpers/page-helpers.mjs';
 import { log } from './logging.mjs';
 import { importUserSession } from './user-sessions.mjs';
+import { alertUser } from './notify.mjs';
 
 const HH_DOMAIN = 'hh.ru';
 // Shows the login card inline when logged out and the profile when logged in
@@ -225,12 +226,17 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
 
   console.log('🙋 Please log in to hh.ru in this or any other hh.ru window of the automation; the login is copied to the others and the automation continues.');
   await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
-  for (let round = 1; !isPageClosed() && !await isLoggedIn(commander).catch(() => false); round++) {
-    // A login made in a slot window (chat, forms) is taken from there
-    if (round % 5 === 0) {
-      await shareHhSession({ ports: sessionPorts(argv.browserPort) }).catch(() => {});
+  const endAlert = alertUser('Log in to hh.ru in the automation browser window');
+  try {
+    for (let round = 1; !isPageClosed() && !await isLoggedIn(commander).catch(() => false); round++) {
+      // A login made in a slot window (chat, forms) is taken from there
+      if (round % 5 === 0) {
+        await shareHhSession({ ports: sessionPorts(argv.browserPort) }).catch(() => {});
+      }
+      await commander.wait({ ms: 2000, reason: 'waiting for manual login' });
     }
-    await commander.wait({ ms: 2000, reason: 'waiting for manual login' });
+  } finally {
+    endAlert();
   }
   // And the slots still signed out get this login
   await shareHhSession({ ports: sessionPorts(argv.browserPort) }).catch(() => {});
