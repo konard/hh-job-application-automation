@@ -579,7 +579,14 @@ bun run experience -- export              # hh.ru and LinkedIn work experience �
 bun run experience -- diff                # differences per job, report in logs/experience/
 bun run experience -- sync --to linkedin  # prefill LinkedIn from hh.ru (or --to hh)
 bun run experience -- sync --to hh --auto # export again, diff and sync in one go
+bun run experience -- edit --company Evirma --stack "PHP 8, Symfony 7, Go, ClickHouse"
 ```
+
+- **Edit one job's technologies**: `edit` opens that job's hh.ru edit form (company in Cyrillic or
+  Latin, «ООО "ЕВИРМА"» is found by `Evirma`) in the hh.ru slot (port 9351) and sets its
+  «Используемые технологии:» list under the description, the rest of the text kept as hh.ru has it.
+  It is saved only when you type `y`, or when you click «Сохранить» in the slot window yourself. The
+  technologies missing from the resume's «Навыки» (one list for the whole resume) are listed.
 
 - **Export**: hh.ru jobs come from `bun run resume` (`data/resume/resume.json`, exported first when
   missing, `--refresh-hh` exports again). LinkedIn's experience page

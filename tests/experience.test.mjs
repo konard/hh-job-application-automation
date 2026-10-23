@@ -6,7 +6,7 @@ import { describe, test, assert } from 'test-anywhere';
 import {
   applySyncDecision, companyKey, companySimilarity, detectLanguage, diffExperience, formatChange, formatDiffReport,
   companyWebsite, linkedInItemsFromText, matchJobs, withEditLinks, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
-  textSimilarity,
+  findJob, textSimilarity, withStack,
 } from '../src/experience.mjs';
 import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl, linkedInFormOutcome, mediaTitle } from '../src/experience-sites.mjs';
 
@@ -367,5 +367,26 @@ describe('LinkedIn media title', () => {
   test('is the link itself, not the company name (Deep.Foundation is also a domain)', () => {
     assert.equal(mediaTitle('https://github.com/deep-foundation'), 'github.com/deep-foundation');
     assert.equal(mediaTitle('https://www.kaiten.ru/'), 'kaiten.ru');
+  });
+});
+
+describe('A job\'s technology list', () => {
+  test('added under its heading after the text', () => {
+    assert.equal(withStack('Разработка сервисов.', 'PHP 8, Go'), 'Разработка сервисов.\n\nИспользуемые технологии:\nPHP 8, Go');
+  });
+
+  test('replaced when the job has one, the text kept', () => {
+    const description = 'Разработка торговой системы.\n\nИспользуемые технологии:\nGitLab, Rust\nVue.js';
+    assert.equal(withStack(description, 'Rust, ClickHouse'), 'Разработка торговой системы.\n\nИспользуемые технологии:\nRust, ClickHouse');
+  });
+
+  test('a list on the heading line is replaced too', () => {
+    assert.equal(withStack('Боты.\nИспользовавшиеся навыки: C#, WPF', 'C#'), 'Боты.\n\nИспользуемые технологии:\nC#');
+  });
+
+  test('the job found by its company in Latin letters', () => {
+    const jobs = [{ company: 'Capico LLC' }, { company: 'ООО "ЕВИРМА"' }];
+    assert.equal(findJob(jobs, 'Evirma'), jobs[1]);
+    assert.equal(findJob(jobs, 'Kaiten'), null);
   });
 });

@@ -13,6 +13,10 @@
  *   you type `y`; `s` skips it, `q` stops and leaves the current form prefilled for you.
  *   `--auto` runs the export, the diff and the sync in one go, still asking before each save.
  *
+ * - edit --company <name> --stack <list>: the technology list of one hh.ru job («Используемые
+ *   технологии:» under its description) prefilled in the hh.ru slot; saved on `y`, or by you with
+ *   «Сохранить» in the slot window. The rest of the description is kept as hh.ru has it.
+ *
  * Formal AI failures are reported to its repository (deduplicated), see translation.mjs.
  */
 
@@ -24,22 +28,27 @@ import { openSlot, tracingEnabled } from './browser-slots.mjs';
 import { seedHhSession } from './login.mjs';
 import { enableConfirmations, askUser, withdrawPrompt } from './confirmations.mjs';
 import {
-  applySyncDecision, detectLanguage, diffExperience, formatChange, formatDiffReport, linkedInItemsFromText, normalizeHhJobs, normalizeLinkedInJobs,
+  applySyncDecision, detectLanguage, diffExperience, findJob, formatChange, formatDiffReport, linkedInItemsFromText, normalizeHhJobs, normalizeLinkedInJobs,
   planSync, withEditLinks,
 } from './experience.mjs';
 import {
   closeLinkedInFollowUp, discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, linkedInFormOutcome, watchLinkedInSave,
-  prefillHhExperience, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
+  hhExperienceFormOpen, prefillHhExperience, prefillHhStack, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
 } from './experience-sites.mjs';
 import { createTranslator, reportFormalAiFailures, TRANSLATORS, FORMAL_AI_REPO } from './translation.mjs';
 
-const USAGE = `Usage: bun run experience -- <export|diff|sync> [options]
+const USAGE = `Usage: bun run experience -- <export|diff|sync|edit> [options]
 
   export                   Export work experience of hh.ru and LinkedIn to data/resume/experience.json
   diff                     Show the differences (exports first when there is no export yet)
   sync --to linkedin|hh    Prefill the changes on that site, saving each only after you type y
+  edit --company <name> --stack <list>
+                           Prefill the technology list of that hh.ru job (Cyrillic or Latin name), saving it only
+                           after you type y or click «Сохранить» in the slot window
 
   --to <linkedin|hh>       The side to change (sync)
+  --company <name>         The job to edit (edit), such as Evirma
+  --stack <list>           Its technologies, comma-separated (edit), such as "PHP 8, Symfony 7, Go"
   --auto                   Export again, diff and sync in one go (still asks before every save)
   --refresh-hh             Export the hh.ru resume again (bun run resume) instead of reading resume.json
   --skip-linkedin          Use the LinkedIn part of the last export
@@ -56,7 +65,7 @@ const USAGE = `Usage: bun run experience -- <export|diff|sync> [options]
 /** Plain flags: the command, and the options above */
 function parseArgs(args) {
   const parsed = {
-    command: null, to: null, auto: false, refreshHh: false, skipLinkedin: false, profile: LINKEDIN_PROFILE,
+    command: null, to: null, company: null, stack: null, auto: false, refreshHh: false, skipLinkedin: false, profile: LINKEDIN_PROFILE,
     translators: TRANSLATORS, reportFormalAi: true, dryRunIssues: false, linkedinPort: 9350, hhPort: 9351,
     hhBrowserPort: 9322, keepOpenHours: 24, trace: tracingEnabled(),
   };
@@ -65,6 +74,8 @@ function parseArgs(args) {
     const value = () => inline ?? args[++i];
     const options = {
       '--to': () => (parsed.to = value()),
+      '--company': () => (parsed.company = value()),
+      '--stack': () => (parsed.stack = value()),
       '--auto': () => (parsed.auto = true),
       '--refresh-hh': () => (parsed.refreshHh = true),
       '--skip-linkedin': () => (parsed.skipLinkedin = true),
@@ -89,12 +100,15 @@ function parseArgs(args) {
       throw new Error(`Unknown option ${args[i]}\n\n${USAGE}`);
     }
   }
-  if (!['export', 'diff', 'sync'].includes(parsed.command)) {
+  if (!['export', 'diff', 'sync', 'edit'].includes(parsed.command)) {
     console.log(USAGE);
     process.exit(1);
   }
   if (parsed.command === 'sync' && !['linkedin', 'hh'].includes(parsed.to)) {
     throw new Error('sync needs --to linkedin or --to hh');
+  }
+  if (parsed.command === 'edit' && (!parsed.company || !parsed.stack?.trim())) {
+    throw new Error('edit needs --company and --stack');
   }
   const unknown = parsed.translators.filter((name) => !TRANSLATORS.includes(name));
   if (unknown.length > 0) {
@@ -300,8 +314,78 @@ async function runSync(argv, data, diff, translator) {
   return { changes, planText, done };
 }
 
+/** One job's technology list prefilled in the hh.ru slot; saved on `y` or by you in the browser */
+async function runEdit(argv) {
+  const resume = (await exportHh(argv)) && await readJson(path.join(RESUME_DIR, 'resume.json'));
+  const job = findJob(resume.jobs ?? [], argv.company);
+  if (!job) {
+    throw new Error(`No job of ${argv.company} in the hh.ru resume: ${(resume.jobs ?? []).map((item) => item.company).join(', ')}`);
+  }
+  const session = await openSlot({ name: 'hh-experience-slot', port: argv.hhPort, keepOpenHours: argv.keepOpenHours, trace: argv.trace });
+  const { page } = session;
+  // Only the hh.ru cookies are copied; the automation browser keeps running untouched
+  await seedHhSession({ page, fromPort: argv.hhBrowserPort });
+  enableConfirmations({
+    steps: [],
+    onStop: async () => {
+      console.log('⏹️  Stopped: the form stays prefilled in the slot window for you to review and save yourself');
+      await session.release();
+      process.exit(0);
+    },
+  });
+  console.log(`✏️  ${job.company} (${job.position}): technologies «${argv.stack.trim()}»`);
+  const { notes, before, after } = await prefillHhStack(page, {
+    resumeHash: resume.hash, job: { company: job.company, title: job.position }, stack: argv.stack, port: argv.hhPort,
+  });
+  notes.forEach((note) => console.log(`   ℹ️  ${note}`));
+  if (after === null) {
+    await session.release();
+    return;
+  }
+  console.log(`\n${after}\n`);
+  // The resume's «Навыки» are one list for the whole resume, edited on its own
+  const skills = new Set((resume.keySkills ?? []).map((skill) => skill.toLowerCase()));
+  const missing = argv.stack.split(',').map((item) => item.trim()).filter((item) => item && !skills.has(item.toLowerCase()));
+  if (missing.length > 0) {
+    console.log(`ℹ️  Not in the resume's «Навыки» (key skills): ${missing.join(', ')}`);
+  }
+  if (after === before) {
+    console.log('✅ hh.ru already has this list: nothing to save');
+    await discardHhExperience(page).catch(() => {});
+    await session.release();
+    return;
+  }
+  // «Сохранить» or «Отменить» clicked in the slot window answers the question too
+  let closedInBrowser = false;
+  const watch = setInterval(async () => {
+    if (!closedInBrowser && !await hhExperienceFormOpen(page)) {
+      closedInBrowser = true;
+      clearInterval(watch);
+      withdrawPrompt('the form was closed in the slot window');
+    }
+  }, 2000);
+  const answer = await askUser(`Prefilled on hh.ru (slot window on port ${argv.hhPort}): check it, then save it?`, {
+    skip: 'leave it unsaved', port: argv.hhPort,
+  }).finally(() => clearInterval(watch));
+  if (answer === 'continue') {
+    await saveHhExperience(page);
+    console.log('💾 Saved');
+  } else if (closedInBrowser) {
+    const saved = await page.waitForFunction((stack) => document.body.innerText.includes(stack), argv.stack.trim(), { timeout: 10000 })
+      .then(() => true, () => false);
+    console.log(saved ? '💾 Saved by you in the browser' : '↪️  Closed in the browser: not saved');
+  } else {
+    await discardHhExperience(page).catch(() => {});
+    console.log('↪️  Not saved');
+  }
+  await session.release();
+}
+
 async function main() {
   const argv = parseArgs(process.argv.slice(2));
+  if (argv.command === 'edit') {
+    return runEdit(argv);
+  }
   let data = argv.command === 'export' || argv.auto ? null : await readJson(EXPORT_FILE);
   data ??= await runExport(argv);
   if (argv.command === 'export') {

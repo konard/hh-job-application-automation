@@ -6,7 +6,7 @@
  * @module experience-sites
  */
 
-import { formatMonthYear } from './experience.mjs';
+import { formatMonthYear, withStack } from './experience.mjs';
 import { alertUser } from './notify.mjs';
 import { waitForCaptcha } from './form-slots.mjs';
 import { pageLanguage } from './hh-words.mjs';
@@ -668,16 +668,16 @@ export function clickHhExperienceEdit({ company, title, editButton, card }) {
 }
 
 /**
- * Open hh.ru's form for a job of the resume (its edit form, or a new one) and prefill it
+ * Open hh.ru's form for a job of the resume: the edit form of a company's job (with its title, when
+ * given), or a new one when no company is given
  * @param {Object} page
- * @param {Object} change - Of planSync
  * @param {Object} options
  * @param {string} options.resumeHash
+ * @param {{company: string, title?: string}|null} options.job - null opens a new job's form
  * @param {number} [options.port=9351] - The slot's port, which a captcha alert brings forward
- * @returns {Promise<string[]>} Notes: fields that could not be set
+ * @returns {Promise<string[]>} Notes: what went wrong; empty when the form is open
  */
-export async function prefillHhExperience(page, change, { resumeHash, port = 9351 }) {
-  const notes = [];
+export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 }) {
   await page.goto(`https://hh.ru/resume/${resumeHash}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // While hh.ru shows a captcha nothing is touched: the user solves it in the slot
   if (!await waitForCaptcha(page, console.log, 'slot', port)) {
@@ -688,12 +688,12 @@ export async function prefillHhExperience(page, change, { resumeHash, port = 935
   await page.evaluate(() => [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button')]
     .filter((button) => /развернуть|показать (все|ещё)|show (all|more)|expand/i.test(button.innerText)).forEach((button) => button.click()));
   await sleep(1000);
-  if (change.kind === 'update') {
+  if (job) {
     const found = await page.evaluate(clickHhExperienceEdit, {
-      company: change.target.company, title: change.target.title, editButton: HH.editButton, card: HH.experienceCard,
+      company: job.company, title: job.title ?? '', editButton: HH.editButton, card: HH.experienceCard,
     });
     if (!found) {
-      return [`hh.ru: no experience card of ${change.target.company} found on the resume page`];
+      return [`hh.ru: no experience card of ${job.company} found on the resume page`];
     }
   } else {
     const added = await page.evaluate(() => {
@@ -706,8 +706,23 @@ export async function prefillHhExperience(page, change, { resumeHash, port = 935
       return ['hh.ru: the «Добавить» button of the experience list was not found'];
     }
   }
-  await page.waitForSelector(HH.position, { timeout: 30000 }).catch(() => notes.push('hh.ru: the experience form did not open'));
-  await sleep(1000);
+  return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => sleep(1000).then(() => []), () => ['hh.ru: the experience form did not open']);
+}
+
+/**
+ * Open hh.ru's form for a job of the resume (its edit form, or a new one) and prefill it
+ * @param {Object} page
+ * @param {Object} change - Of planSync
+ * @param {Object} options
+ * @param {string} options.resumeHash
+ * @param {number} [options.port=9351] - The slot's port, which a captcha alert brings forward
+ * @returns {Promise<string[]>} Notes: fields that could not be set
+ */
+export async function prefillHhExperience(page, change, { resumeHash, port = 9351 }) {
+  const notes = await openHhExperienceForm(page, { resumeHash, job: change.kind === 'update' ? change.target : null, port });
+  if (notes.some((note) => !note.endsWith('did not open'))) {
+    return notes;
+  }
   const fill = async (selector, value) => {
     const field = page.locator(selector).first();
     if (await field.count() === 0) {
@@ -776,6 +791,9 @@ async function chooseHhMonth(page, index, date, notes) {
   }
 }
 
+/** Whether hh.ru's experience form is open in the page */
+export const hhExperienceFormOpen = (page) => page.locator(HH.position).count().then((count) => count > 0, () => false);
+
 /**
  * Save hh.ru's open experience form (only after the user's `y`), then wait for it to close
  * @param {Object} page
@@ -816,4 +834,27 @@ export async function discardLinkedInPosition(page) {
   if (await discard.waitFor({ timeout: 3000 }).then(() => true, () => false)) {
     await discard.click();
   }
+}
+
+/**
+ * Prefill the technology list of a job in hh.ru's edit form (withStack): the rest of its
+ * description is kept as the form has it
+ * @param {Object} page
+ * @param {Object} options
+ * @param {string} options.resumeHash
+ * @param {{company: string, title?: string}} options.job
+ * @param {string} options.stack - Comma-separated
+ * @param {number} [options.port=9351]
+ * @returns {Promise<{notes: string[], before: string|null, after: string|null}>}
+ */
+export async function prefillHhStack(page, { resumeHash, job, stack, port = 9351 }) {
+  const notes = await openHhExperienceForm(page, { resumeHash, job, port });
+  const field = page.locator(HH.description).first();
+  if (notes.length > 0 || await field.count() === 0) {
+    return { notes: notes.length > 0 ? notes : ['hh.ru: no description field in the experience form'], before: null, after: null };
+  }
+  const before = await field.inputValue();
+  const after = withStack(before, stack);
+  await field.fill(after);
+  return { notes, before, after };
 }

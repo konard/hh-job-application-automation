@@ -678,3 +678,28 @@ export function formatChange(change, to) {
   lines.push(...change.notes.map((note) => `   ℹ️  ${note}`));
   return lines.join('\n');
 }
+
+/** The heading of a job's technology list on hh.ru, as the other jobs of the resume have it */
+export const STACK_HEADING = 'Используемые технологии:';
+const STACK_BLOCK = /\n*^(?:используемые технологии|использовавшиеся навыки|технологии|стек(?: технологий)?)\s*:[^\n]*(?:\n(?!\s*\n)[^\n]*)*/imu;
+
+/**
+ * A job description with its technology list set: the list under the heading is replaced, or the
+ * heading and the list are added after the text
+ * @param {string} description
+ * @param {string} stack - Comma-separated, such as "PHP 8, Symfony 7, Go"
+ * @returns {string}
+ */
+export function withStack(description, stack) {
+  const text = String(description ?? '').replace(STACK_BLOCK, '').trimEnd();
+  return `${text}${text ? '\n\n' : ''}${STACK_HEADING}\n${stack.trim()}`;
+}
+
+/**
+ * The job of an hh.ru resume export by company name, in Cyrillic or Latin ("Evirma" finds
+ * «ООО "ЕВИРМА"»)
+ * @param {Array<{company: string}>} jobs - resume.json's
+ * @param {string} company
+ * @returns {Object|null}
+ */
+export const findJob = (jobs, company) => jobs.find((job) => companySimilarity(job.company, company) === 1) ?? null;
