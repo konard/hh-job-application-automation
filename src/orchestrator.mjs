@@ -23,8 +23,8 @@ import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
-import { nextVacancyAt } from './pacing.mjs';
-import { recordEvent } from './stats.mjs';
+import { ADAPTIVE_PACE, adaptivePace, nextVacancyAt } from './pacing.mjs';
+import { paceLine, readEvents, recordEvent } from './stats.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-attach.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
@@ -53,7 +53,15 @@ export function createOrchestrator({
 }) {
   let START_URL = argv.url;
   const MESSAGE = argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message;
-  const BUTTON_CLICK_INTERVAL = argv.jobApplicationInterval * 1000;
+  // A fixed pace when --job-application-interval is given, else the adaptive one (pacing.mjs)
+  const FIXED_INTERVAL_MS = argv.jobApplicationInterval > 0 ? argv.jobApplicationInterval * 1000 : null;
+  const intervalNow = () => FIXED_INTERVAL_MS ?? adaptivePace(readEvents()).intervalMs;
+  if (FIXED_INTERVAL_MS === null) {
+    if (!readEvents().some((event) => event.type === 'pacing_reset')) {
+      recordEvent('pacing_reset', { intervalMs: ADAPTIVE_PACE.startMs });
+    }
+    console.log(paceLine(readEvents()));
+  }
 
   let pageClosedByUser = false;
   let isOnVacancyPageFromResponse = false;
@@ -98,14 +106,17 @@ export function createOrchestrator({
   /**
    * Schedule the next vacancy (see pacing.mjs), so the load on hh.ru stays low
    * @param {string} reason - What was just done, for the log
+   * @returns {number} The pace used (ms)
    */
   function scheduleNextApplication(reason) {
     // A vacancy opened, then its application sent: one piece of work
     lastWorkStartedAt = workStartedAt ?? lastWorkStartedAt ?? Date.now();
     workStartedAt = null;
-    nextApplicationAt = Math.max(nextApplicationAt, nextVacancyAt({ startedAt: lastWorkStartedAt, intervalMs: BUTTON_CLICK_INTERVAL }));
+    const intervalMs = intervalNow();
+    nextApplicationAt = Math.max(nextApplicationAt, nextVacancyAt({ startedAt: lastWorkStartedAt, intervalMs }));
     const took = Math.round((Date.now() - lastWorkStartedAt) / 1000);
-    console.log(`⏳ ${reason} (${took} s of work); next vacancy in ${Math.round((nextApplicationAt - Date.now()) / 1000)} seconds`);
+    console.log(`⏳ ${reason} (${took} s of work); next vacancy in ${Math.round((nextApplicationAt - Date.now()) / 1000)} seconds (pace ${Math.round(intervalMs / 1000)} s${FIXED_INTERVAL_MS ? ', fixed' : ''})`);
+    return intervalMs;
   }
 
   /**
@@ -127,8 +138,8 @@ export function createOrchestrator({
     }
     await attachLetterOnVacancyPage(vacancyId);
     await checkpoint('application-sent');
-    scheduleNextApplication('Application sent');
-    recordEvent('application_sent', { vacancyId, ms: Date.now() - lastWorkStartedAt });
+    const intervalMs = scheduleNextApplication('Application sent');
+    recordEvent('application_sent', { vacancyId, ms: Date.now() - lastWorkStartedAt, intervalMs });
     // The questions in its chat (a recruiter bot asks at once) come before the next vacancy
     followUp = answerInstantChat(vacancyId)
       .catch((error) => console.log(`⚠️  Answering the chat after the application failed: ${error.message}`));

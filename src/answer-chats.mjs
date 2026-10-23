@@ -245,13 +245,13 @@ async function openChatPage() {
     await page.goto('https://hh.ru/chat', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
     const shown = await page.waitForSelector('[data-qa^="chatik-open-chat-"], input[data-qa="chatik-checkbox-only-unread"]', { state: 'attached', timeout: 20000 })
       .then(() => true, () => false);
-    if (shown || attempt >= 3 || !await waitForCaptcha(page, console.log)) {
+    if (shown || attempt >= 3 || !await waitForCaptcha(page, console.log, 'chat')) {
       break;
     }
     console.log(`🔄 The chat page did not load (attempt ${attempt} of 3): opening it again`);
     await humanPause(5000, 10000);
   }
-  return waitForCaptcha(page, console.log);
+  return waitForCaptcha(page, console.log, 'chat');
 }
 
 const sources = await loadAnswerSources();
@@ -392,7 +392,7 @@ async function openChat(id) {
 /** Prefill the reply to the waiting message; returns the id of the message it answers, or null */
 async function prefillChat(id, depth = 0) {
   await openChat(id);
-  if (!await waitForCaptcha(page, console.log)) {
+  if (!await waitForCaptcha(page, console.log, 'chat')) {
     return null;
   }
   await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
@@ -540,7 +540,7 @@ async function learnFromAllChats() {
       return false;
     }
     await openChat(chat.id);
-    if (!await waitForCaptcha(page, console.log)) {
+    if (!await waitForCaptcha(page, console.log, 'chat')) {
       return true;
     }
     await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
@@ -579,7 +579,7 @@ async function clearRejections() {
       return false;
     }
     await openChat(chat.id);
-    if (!await waitForCaptcha(page, console.log)) {
+    if (!await waitForCaptcha(page, console.log, 'chat')) {
       return true;
     }
     if (template) {

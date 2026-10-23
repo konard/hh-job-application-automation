@@ -13,6 +13,9 @@ import { formVacancy, isAssignmentLinkQuestion, readAssignment, readAssignments 
 import { openSlot, slotDir } from './browser-slots.mjs';
 import { seedHhSession } from './login.mjs';
 import { isBrowserRunning } from './browser-session.mjs';
+import { CAPTCHA_ALERT_MS, captchaPlace } from './captcha.mjs';
+import { alertUser } from './notify.mjs';
+import { recordEvent } from './stats.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { startFormWatch } from './form-answers.mjs';
 import { createQADatabase } from './qa-database.mjs';
@@ -36,21 +39,37 @@ async function readProfileOverrides() {
   return Object.fromEntries([...entries].map(([key, value]) => [key, key === 'links' ? [value].flat() : [value].flat().join('\n')]));
 }
 
-export async function waitForCaptcha(page, log) {
+/**
+ * Wait while the page shows a captcha (up to 30 min), written to the stats
+ * @param {Object} page
+ * @param {(message: string) => void} log
+ * @param {string} [window='slot'] - The window, for the stats: slot or chat
+ * @returns {Promise<boolean>} False when the captcha is still shown
+ */
+export async function waitForCaptcha(page, log, window = 'slot') {
   const started = Date.now();
-  let told = false;
-  while (CAPTCHA_URL.test(page.url()) && Date.now() - started < CAPTCHA_WAIT_MS) {
-    if (!told) {
-      log('🛑 The site shows a captcha: solve it in this slot\'s browser, the prefill goes on after it');
-      told = true;
+  let where = null;
+  let endAlert = () => {};
+  try {
+    while (CAPTCHA_URL.test(page.url()) && Date.now() - started < CAPTCHA_WAIT_MS) {
+      if (!where) {
+        log(`🛑 The site shows a captcha: solve it in the ${window} window, the work there goes on after it`);
+        where = captchaPlace(page.url(), window);
+        recordEvent('captcha_shown', where);
+        endAlert = alertUser(`The site shows a captcha in the ${window} window: solve it there`, { delayMs: CAPTCHA_ALERT_MS });
+      }
+      await sleep(2000);
     }
-    await sleep(2000);
+  } finally {
+    endAlert();
   }
-  if (told) {
-    log(CAPTCHA_URL.test(page.url()) ? '⚠️  The captcha is still shown, giving up on this form' : '✅ Captcha passed');
+  const passed = !CAPTCHA_URL.test(page.url());
+  if (where) {
+    log(passed ? '✅ Captcha passed' : '⚠️  The captcha is still shown, giving up on this form');
+    recordEvent('captcha', { ms: Date.now() - started, ai: false, ...where, solved: passed, shown: true });
     await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
   }
-  return !CAPTCHA_URL.test(page.url());
+  return passed;
 }
 
 async function fill(field) {

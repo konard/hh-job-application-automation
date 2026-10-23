@@ -157,8 +157,8 @@ export function createConfig() {
         })
         .option('job-application-interval', {
           type: 'number',
-          description: 'Seconds between opened vacancies; a random extra of up to a quarter is added (default fits 200 applications a day)',
-          default: getenv('JOB_APPLICATION_INTERVAL', 240),
+          description: 'Seconds between opened vacancies, a fixed pace (a random extra of up to a quarter is added); 0, the default: the adaptive pace of 1-7 min, as fast as hh.ru allows without captchas',
+          default: getenv('JOB_APPLICATION_INTERVAL', 0),
         })
         .option('message', {
           alias: 'm',

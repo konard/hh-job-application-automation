@@ -1,10 +1,8 @@
 /**
- * Pauses between vacancies: one even pace, sized so that hh.ru's limit of 200 applications
- * a day still fits into a day of continuous work.
- *
- * With the default 240 s interval a pause is 240-300 s, counted from the start of work on a
- * vacancy: 240-300 s per vacancy when its work is shorter, 288-360 applications a day, which leaves
- * room for skipped vacancies, captchas and forms that wait for the user.
+ * Pauses between vacancies. By default the pace adapts (ADAPTIVE_PACE below): as fast as hh.ru
+ * allows without captchas, between 1 and 7 min. A fixed --job-application-interval is used as is.
+ * Either way a pause is the interval plus a random extra of up to a quarter of it, counted from the
+ * start of work on a vacancy.
  *
  * @module pacing
  */
@@ -53,3 +51,77 @@ export function worstCaseApplicationsPerDay(intervalMs) {
   const longestCycleMs = intervalMs * (1 + RANDOM_SHARE);
   return Math.floor((24 * 60 * 60 * 1000) / longestCycleMs);
 }
+
+/**
+ * The adaptive pace (the default): the interval between vacancies looks for the fastest pace hh.ru
+ * accepts without captchas. It starts at 2 min; each application sent takes 10-20 s off it (down to
+ * 1 min), each captcha on hh.ru adds twice that (20-40 s, up to 7 min). After a captcha the pace is
+ * held for a while before it is tried faster again: 15 min, doubled while captchas keep coming within
+ * one more hold after the last one, and never longer than a day, so a faster pace is tried at least
+ * once a day.
+ */
+export const ADAPTIVE_PACE = {
+  minMs: 60000,
+  maxMs: 7 * 60000,
+  startMs: 2 * 60000,
+  stepMs: [10000, 20000],
+  penalty: 2,
+  holdMs: 15 * 60000,
+  maxHoldMs: 24 * 60 * 60000,
+};
+
+/** A step of 10-20 s, drawn from the event itself, so the same history always gives the same pace */
+function stepOf(event, [least, most]) {
+  let hash = 0;
+  for (const char of `${event.at}${event.vacancyId ?? ''}`) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  const seconds = Math.round((most - least) / 1000);
+  return least + (hash % (seconds + 1)) * 1000;
+}
+
+/** A captcha that counts for the pace: one on hh.ru (the older events name no site: the main window's) */
+const onHh = (event) => !event.host || /(^|\.)hh\.ru$/.test(event.host);
+
+/**
+ * The adaptive pace now, from the stats events since the last pacing_reset
+ * @param {Array<Object>} events - stats.jsonl events (stats.mjs)
+ * @param {Object} [pace=ADAPTIVE_PACE]
+ * @returns {{intervalMs: number, holdUntil: number, holdMs: number, applications: number, captchas: number, since: string|null}}
+ */
+export function adaptivePace(events, pace = ADAPTIVE_PACE) {
+  const resetAt = events.findLastIndex((event) => event.type === 'pacing_reset');
+  const reset = events[resetAt];
+  const state = { intervalMs: reset?.intervalMs ?? pace.startMs, holdUntil: 0, holdMs: 0, applications: 0, captchas: 0, since: reset?.at ?? null };
+  if (!reset) {
+    return state;
+  }
+  let lastCaptchaAt = null;
+  const later = events.slice(resetAt + 1).map((event) => ({ event, at: Date.parse(event.at) - (event.type === 'captcha' ? event.ms ?? 0 : 0) }))
+    .sort((a, b) => a.at - b.at);
+  for (const { event, at } of later) {
+    if (event.type === 'application_sent') {
+      state.applications += 1;
+      if (at >= state.holdUntil) {
+        state.intervalMs = Math.max(pace.minMs, state.intervalMs - stepOf(event, pace.stepMs));
+      }
+    } else if (isCaptchaEpisode(event) && onHh(event)) {
+      state.captchas += 1;
+      state.intervalMs = Math.min(pace.maxMs, state.intervalMs + pace.penalty * stepOf(event, pace.stepMs));
+      // Captchas again soon after the last hold: the faster pace is tried less often
+      const again = lastCaptchaAt !== null && at - lastCaptchaAt < 2 * state.holdMs;
+      state.holdMs = again ? Math.min(pace.maxHoldMs, state.holdMs * 2) : pace.holdMs;
+      state.holdUntil = at + state.holdMs;
+      lastCaptchaAt = at;
+    }
+  }
+  return state;
+}
+
+/**
+ * One event per captcha: captcha_shown when it was seen, or (older events, and a run that wrote no
+ * captcha_shown) the captcha event written once it was gone
+ * @param {Object} event
+ * @returns {boolean}
+ */
+export const isCaptchaEpisode = (event) => event.type === 'captcha_shown' || (event.type === 'captcha' && !event.shown);

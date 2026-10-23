@@ -4,9 +4,13 @@
  *
  * Each event is one JSON line in logs/stats.jsonl (personal: logs/ stays out of git), written by
  * the application loop and the chat window alike:
- *   application_sent  {vacancyId, ms}        ms: from the start of work on the vacancy to the send
+ *   application_sent  {vacancyId, ms, intervalMs}  ms: from the start of work on the vacancy to the
+ *                                            send; intervalMs: the pace then (the pause after it)
  *   vacancy_skipped   {vacancyId, reason}
- *   captcha           {ms, ai}               ai: Haiku's reading was sent (else the user solved it)
+ *   captcha_shown     {host, path, window}   a captcha seen (window: main, chat or slot)
+ *   captcha           {ms, ai, host, window, solved, shown}  the captcha gone (or given up on);
+ *                                            ai: Haiku's reading was sent (else the user solved it)
+ *   pacing_reset      {intervalMs}           the adaptive pace starts again from here (pacing.mjs)
  *   rejection_read    {chatId, live}         live: read as it showed in the chat window
  *   letter_attached   {vacancyId, via}
  *   limit_reached     {}                     hh.ru's daily limit of applications
@@ -17,6 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { adaptivePace, isCaptchaEpisode } from './pacing.mjs';
 
 export const STATS_FILE = path.join(process.cwd(), 'logs', 'stats.jsonl');
 /** An application should take less than this, its pause before the next one included */
@@ -95,7 +100,7 @@ export function summarizeByDay(events) {
       typicalMs: times.length ? times[Math.floor(times.length / 2)] : null,
       longestMs: times.length ? times.at(-1) : null,
       overTarget: gaps.filter((gap) => gap > APPLICATION_TARGET_MS).length,
-      captchas: of('captcha').length,
+      captchas: list.filter(isCaptchaEpisode).length,
       captchasByAi: of('captcha').filter((event) => event.ai).length,
       skipped: of('vacancy_skipped').filter((event) => event.reason !== 'letter_not_attached').length,
       rejections: of('rejection_read').length,
@@ -118,11 +123,45 @@ export function formatDays(days) {
     day.perHour === null ? null : `${day.perHour.toFixed(1)}/h`,
     `work on one ${minutes(day.typicalMs)} typical, ${minutes(day.longestMs)} longest`,
     `${day.overTarget} over 7 min with the pause`,
-    `${day.captchas} captcha(s) (${day.captchasByAi} by AI)`,
+    `${day.captchas} captcha(s) (${day.captchasByAi} by AI${day.applications ? `, ${(100 * day.captchas / day.applications).toFixed(1)} per 100 applications` : ''})`,
     `${day.skipped} skipped`,
     `${day.rejections} rejection(s) read (${day.rejectionsLive} as they came)`,
     day.letters ? `${day.letters} letter(s) attached later` : null,
   ].filter(Boolean).join(', '));
+}
+
+/** The pace of the applications sent before it was written: the fixed default of then */
+const FIXED_PACE_BEFORE_MS = 240000;
+
+/**
+ * Captchas by pace: each application with the pace then (intervalMs), and the hh.ru captchas seen
+ * from its send to the next one, in 30 s steps of the pace. Older applications, sent before the
+ * pace was written, had the fixed default of then: 240 s
+ * @param {Array<Object>} events
+ * @returns {Array<{fromMs: number, applications: number, captchas: number}>} Slowest pace last
+ */
+export function captchasByPace(events) {
+  const sent = events.filter((event) => event.type === 'application_sent').map((event) => ({ ...event, time: Date.parse(event.at) }))
+    .sort((a, b) => a.time - b.time);
+  const captchas = events.filter((event) => isCaptchaEpisode(event) && (!event.host || /(^|\.)hh\.ru$/.test(event.host)))
+    .map((event) => Date.parse(event.at) - (event.type === 'captcha' ? event.ms ?? 0 : 0));
+  const buckets = new Map();
+  sent.forEach((event, index) => {
+    const until = sent[index + 1]?.time ?? Infinity;
+    const fromMs = Math.floor((event.intervalMs ?? FIXED_PACE_BEFORE_MS) / 30000) * 30000;
+    const bucket = buckets.get(fromMs) ?? { fromMs, applications: 0, captchas: 0 };
+    bucket.applications += 1;
+    bucket.captchas += captchas.filter((at) => at > event.time && at <= until).length;
+    buckets.set(fromMs, bucket);
+  });
+  return [...buckets.values()].sort((a, b) => a.fromMs - b.fromMs);
+}
+
+/** The adaptive pace now, for the log */
+export function paceLine(events) {
+  const pace = adaptivePace(events);
+  const held = pace.holdUntil > Date.now() ? `, held until ${new Date(pace.holdUntil).toLocaleTimeString()} after a captcha` : '';
+  return `🐇 Pace: ${minutes(pace.intervalMs)} between vacancies (adaptive, 1-7 min${held}; since ${pace.since ? pace.since.slice(0, 16).replace('T', ' ') : 'now'}: ${pace.applications} application(s), ${pace.captchas} captcha(s))`;
 }
 
 /** The line for today, printed when a run starts */
@@ -136,4 +175,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const days = Number(args.includes('--days') ? args[args.indexOf('--days') + 1] : 14);
   const summary = summarizeByDay(readEvents()).slice(-days);
   console.log(summary.length ? formatDays(summary).join('\n') : `📊 No stats yet (${path.relative(process.cwd(), STATS_FILE)})`);
+  const byPace = captchasByPace(readEvents());
+  if (byPace.length) {
+    console.log(`${paceLine(readEvents())}\n🐇 Captchas by pace:`);
+    byPace.forEach((bucket) => console.log(`   ${minutes(bucket.fromMs)}-${minutes(bucket.fromMs + 30000)}: ${bucket.applications} application(s), ${bucket.captchas} captcha(s), ${(100 * bucket.captchas / bucket.applications).toFixed(1)} per 100`));
+  }
 }

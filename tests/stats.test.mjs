@@ -5,7 +5,7 @@ import { describe, test, assert } from 'test-anywhere';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { formatDays, readEvents, recordEvent, summarizeByDay } from '../src/stats.mjs';
+import { captchasByPace, formatDays, readEvents, recordEvent, summarizeByDay } from '../src/stats.mjs';
 
 describe('stats', () => {
   test('events are written as lines and read back', () => {
@@ -40,5 +40,36 @@ describe('stats', () => {
     assert.equal(day.rejectionsLive, 1);
     assert.equal(day.perHour, 8);
     assert.ok(formatDays([day])[0].includes('3 application(s)'));
+  });
+});
+
+describe('captcha stats', () => {
+  const at = (minutes) => new Date(Date.UTC(2026, 9, 24, 6) + minutes * 60000).toISOString();
+
+  test('a captcha written when shown and once gone counts once a day; one only gone counts too', () => {
+    const [day] = summarizeByDay([
+      { at: at(0), type: 'application_sent', vacancyId: '1', ms: 1000 },
+      { at: at(1), type: 'captcha_shown', host: 'hh.ru', window: 'main' },
+      { at: at(2), type: 'captcha', ms: 60000, ai: true, shown: true },
+      { at: at(5), type: 'captcha', ms: 60000, ai: false },
+    ]);
+    assert.equal(day.captchas, 2);
+    assert.equal(day.captchasByAi, 1);
+    assert.ok(formatDays([day])[0].includes('200.0 per 100 applications'));
+  });
+
+  test('captchas by pace: those after each send, by its pace; older sends at the old 240 s', () => {
+    const events = [
+      { at: at(0), type: 'application_sent', vacancyId: '1' },
+      { at: at(4), type: 'application_sent', vacancyId: '2', intervalMs: 65000 },
+      { at: at(5), type: 'captcha_shown', host: 'hh.ru', window: 'chat' },
+      { at: at(5.5), type: 'captcha', ms: 30000, shown: true, host: 'hh.ru' },
+      { at: at(6), type: 'application_sent', vacancyId: '3', intervalMs: 80000 },
+      { at: at(7), type: 'captcha_shown', host: 'forms.yandex.ru', window: 'slot' },
+    ];
+    assert.deepEqual(captchasByPace(events), [
+      { fromMs: 60000, applications: 2, captchas: 1 },
+      { fromMs: 240000, applications: 1, captchas: 0 },
+    ]);
   });
 });

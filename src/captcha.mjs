@@ -27,7 +27,7 @@ export const CAPTCHA_SELECTORS = [
 const CAPTCHA_URL = /\/(?:account\/)?captcha/i;
 const POLL_MS = 5000;
 /** A captcha still shown after this long is yours to solve: the alert sounds */
-const CAPTCHA_ALERT_MS = 30000;
+export const CAPTCHA_ALERT_MS = 30000;
 const NAVIGATION_RETRIES = 5;
 const NAVIGATION_RETRY_MS = 1000;
 
@@ -111,6 +111,9 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha } = {}
     const episode = {};
     console.log('🛑 hh.ru shows a captcha. Solve it in the browser; the automation touches nothing until it is gone.');
     const started = Date.now();
+    const where = captchaPlace(commander.getUrl?.(), 'main');
+    // Written at once: a run stopped before the captcha is gone still counts it
+    recordEvent('captcha_shown', where);
     // Not at once: the AI may read it first
     const endAlert = alertUser('hh.ru shows a captcha: solve it in the automation browser', { delayMs: CAPTCHA_ALERT_MS });
     try {
@@ -123,12 +126,28 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha } = {}
     }
     console.log(`✅ Captcha solved after ${Math.round((Date.now() - started) / 1000)} s, continuing`);
     // Solved by AI: its reading was sent and hh.ru showed no new picture after it
-    recordEvent('captcha', { ms: Date.now() - started, ai: Boolean(episode.sent && !episode.reported) });
+    recordEvent('captcha', { ms: Date.now() - started, ai: Boolean(episode.sent && !episode.reported), ...where, solved: true, shown: true });
     return true;
   })().finally(() => {
     waiting = null;
   });
   return waiting;
+}
+
+/**
+ * Where a captcha shows, for the stats: the site and page (no query, which may hold personal data)
+ * and the window
+ * @param {string} [url]
+ * @param {string} window - main, chat or slot
+ * @returns {{host: string, path: string, window: string}}
+ */
+export function captchaPlace(url, window) {
+  try {
+    const { host, pathname } = new URL(url);
+    return { host, path: pathname, window };
+  } catch {
+    return { host: 'hh.ru', path: '', window };
+  }
 }
 
 /**

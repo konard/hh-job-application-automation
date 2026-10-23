@@ -3,7 +3,7 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import {
-  CAPTCHA_SELECTORS, CAPTCHA_TEXTS, isCaptchaShown, pageShowsCaptcha, waitWhileCaptcha, withCaptchaGuard,
+  CAPTCHA_SELECTORS, CAPTCHA_TEXTS, captchaPlace, isCaptchaShown, pageShowsCaptcha, waitWhileCaptcha, withCaptchaGuard,
 } from '../src/captcha.mjs';
 
 /** Minimal document: body text plus elements by selector, each visible or not */
@@ -108,5 +108,12 @@ describe('captcha guard', () => {
     await Promise.all([guarded.clickButton({}), guarded.goto({})]);
     assert.equal(commander.calls.length, 2);
     assert.ok(commander.calls.every(([, left]) => left < 0));
+  });
+});
+
+describe('captchaPlace', () => {
+  test('the site, page and window, never the query', () => {
+    assert.deepEqual(captchaPlace('https://hh.ru/account/captcha?backurl=%2Fsearch%3Ftext%3Dme', 'main'), { host: 'hh.ru', path: '/account/captcha', window: 'main' });
+    assert.deepEqual(captchaPlace(undefined, 'chat'), { host: 'hh.ru', path: '', window: 'chat' });
   });
 });

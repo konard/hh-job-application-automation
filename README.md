@@ -103,9 +103,14 @@ resume and applies to the vacancies hh.ru suggests for it:
   is given. The update dates come from hh.ru's own state embedded in the resumes page (the page shows
   none), so choosing costs no extra request; the log names the resume and why it was chosen. A
   kept-open browser already on a search page keeps its filters and only switches the resume.
-- **Pace** - `--job-application-interval` seconds (default 240) plus a random extra of up to a
-  quarter of it pass between opened vacancies: 4-5 minutes, which still fits hh.ru's 200
-  applications a day (261-320 a day of continuous work).
+- **Pace** - the pause between opened vacancies adapts: it starts at 2 minutes, each application
+  sent takes 10-20 s off it (down to 1 minute), and each hh.ru captcha adds twice that (up to 7
+  minutes). After a captcha the pace is held for 15 minutes before it is tried faster again; the
+  hold doubles while captchas keep coming, but never passes a day, so a faster pace is tried at
+  least once a day. A random extra of up to a quarter is added to each pause. The pace is worked
+  out from `logs/stats.jsonl`, so it carries over restarts; `bun run stats` shows it and the
+  captchas per 100 applications at each pace. `--job-application-interval <seconds>` sets a fixed
+  pace instead.
 - **One tab** - the automation browser keeps a single tab: when a run attaches, every other
   tab is closed (the tab the automation used last is kept, else an hh.ru one), and tabs opened
   during the run are closed as they appear. Turn it off with `--no-single-tab`.
@@ -649,9 +654,11 @@ because it holds personal data:
   all, under 7: a long form or a captcha is not followed by a whole pause, only by 30-60 s.
 - **Stats**: `bun run stats` (`-- --days <n>`, 14 by default) shows each day: applications, per
   hour, the time of work on one (typical and longest), how many took over 7 minutes with the pause,
-  captchas (how many AI solved), skipped vacancies, rejections read (how many as they came) and
-  letters attached later. A run prints today's line when it starts. The events are kept in
-  `logs/stats.jsonl` (not in git).
+  captchas (how many AI solved, and per 100 applications), skipped vacancies, rejections read (how
+  many as they came) and letters attached later; then the pace and the captchas per 100
+  applications at each pace. A captcha is written when it shows, in any window (the main one, the
+  chat window, a form slot), with the site, page and window, and again once it is gone. A run
+  prints today's line when it starts. The events are kept in `logs/stats.jsonl` (not in git).
 - **Chat panel**: hh.ru opens the employer chat after an application; the run closes it. When the
   employer turns the conversation off («Работодатель отключил переписку по данной вакансии») while
   the run waits for your answer there, the panel is closed and the run goes on.
