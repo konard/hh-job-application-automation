@@ -318,6 +318,15 @@ describe('Rejections read as they show in the chat window', () => {
     assert.deepEqual(visibleRejections(chats).map((chat) => chat.id), ['1']);
   });
 
+  test('a chat drawn whole in the list counts, whatever its offset in the virtual list after the ad card', async () => {
+    const { chatsShown } = await import('../src/chat-answers.mjs');
+    // The list scrolled by 45 px: the first chats and an ad card, then a virtual list whose offsets start at 0
+    const at = { top: 45, view: 390, y: 225 };
+    const row = (id, top, screenTop) => ({ id, top, height: 80, screen: { top: screenTop, bottom: screenTop + 80, window: 633 } });
+    const rows = [row('cut', 0, 180), row('first', 1, 260), row('rejection', 0, 444), row('next', 80, 524), row('below', 160, 604)];
+    assert.deepEqual(chatsShown(rows, at).map((chat) => chat.id), ['first', 'rejection', 'next']);
+  });
+
   test('in any language: the word, or a red status in place of the last message', async () => {
     const { isApplication, isRejection, isRejectionCell, learnedPairs, visibleRejections } = await import('../src/chat-answers.mjs');
     const chats = [

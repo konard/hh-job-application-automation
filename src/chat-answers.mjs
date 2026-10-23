@@ -145,6 +145,20 @@ export function readChatList() {
 }
 
 /**
+ * The chats of the list drawn whole inside it and the window, from the top: a cell cut by its
+ * edge is not clicked. Where a cell is drawn tells, not its offset in the list: the rows after the
+ * first ones and an ad card are a virtual list of their own, whose offsets start at 0 again
+ * @param {Array} rows - readChatList
+ * @param {{y: number, view: number}|null} at - scrollChatList: where the list is drawn
+ * @returns {Array}
+ */
+export function chatsShown(rows, at) {
+  const shown = (chat) => !chat.screen || (chat.screen.top >= (at?.y ?? 0) - 2 &&
+    chat.screen.bottom <= Math.min(at ? at.y + at.view : Infinity, chat.screen.window) + 2);
+  return rows.filter(shown).sort((a, b) => (a.screen?.top ?? a.top) - (b.screen?.top ?? b.top));
+}
+
+/**
  * Runs in the page: the user's own activity in the chat window (keys, clicks, the pointer, the
  * wheel), and whether a reply is being typed. The tool's own clicks are left out while it sets
  * window.__chatAutomating
