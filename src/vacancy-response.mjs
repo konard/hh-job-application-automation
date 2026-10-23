@@ -41,6 +41,7 @@ import {
 
 const COVER_LETTER_SELECTORS = [SELECTORS.coverLetterTextareaPopup, SELECTORS.coverLetterTextareaForm];
 const COVER_LETTER_DATA_QA = ['vacancy-response-popup-form-letter-input', 'vacancy-response-form-letter-input'];
+const COVER_LETTER_TOGGLE_ATTEMPTS = 3;
 const DEFAULT_RETURN_URL = 'https://hh.ru/search/vacancy?from=resumelist';
 const SUBMIT_CONFIRMATION_TIMEOUT_MS = 15000;
 
@@ -234,23 +235,36 @@ export async function readQAPairs({ commander }) {
  * Find the cover letter textarea, expanding its section if needed
  * @returns {Promise<string|null>} Visible textarea selector or null
  */
-async function prepareCoverLetterTextarea({ commander }) {
+export async function prepareCoverLetterTextarea({ commander }) {
   const visibleSelector = await findFirstSelector(commander, COVER_LETTER_SELECTORS, { visible: true });
 
   if (visibleSelector) {
     console.log('Cover letter section already expanded, textarea visible');
   } else {
+    // A click on a page still loading can be lost (the toggle stays as it was): checked, and clicked again
     const toggleSelector = await findCoverLetterToggle(commander, {
       texts: ['Добавить', 'Add', ...COVER_LETTER_TEXTS],
       elementTypes: ['a', 'button', 'span', 'div'],
     });
-    if (toggleSelector) {
+    if (!toggleSelector) {
+      console.log('Toggle button not found, cover letter section may already be expanded');
+    }
+    // The same toggle again, while it is there: no other «Add» button is clicked
+    for (let attempt = 1; toggleSelector && attempt <= COVER_LETTER_TOGGLE_ATTEMPTS; attempt++) {
+      if (attempt > 1 && typeof toggleSelector === 'string' && await commander.count({ selector: toggleSelector }) === 0) {
+        break;
+      }
       console.log('Cover letter section is collapsed, clicking toggle to expand...');
       await commander.clickButton({ selector: toggleSelector, scrollIntoView: true });
       await commander.wait({ ms: 1700, reason: 'expand animation to complete' });
-      console.log('Cover letter section expanded');
-    } else {
-      console.log('Toggle button not found, cover letter section may already be expanded');
+      if (await findFirstSelector(commander, COVER_LETTER_SELECTORS, { visible: true })) {
+        console.log('Cover letter section expanded');
+        break;
+      }
+      if (attempt < COVER_LETTER_TOGGLE_ATTEMPTS) {
+        console.log(`Cover letter section did not open (attempt ${attempt} of ${COVER_LETTER_TOGGLE_ATTEMPTS}): clicking its toggle again`);
+        await commander.wait({ ms: 2000, reason: 'the page to finish loading' });
+      }
     }
   }
 
