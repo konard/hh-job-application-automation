@@ -4303,3 +4303,157 @@ Is your speaking English B2 or higher?
   "От {{salary_gross}} в месяц до вычета {{salary_tax}} ({{salary_net}} на руки)."
 Какой формат работы готовы рассматривать?
   Удаленный
+"Был ли у вас опыт интеграций через REST API? Если да, кратко опишите 1–2 примера: какие системы связывали"
+  Да. С системами туроператоров, с платёжными шлюзами, и многими другими системами.
+Проверка рекомендаций — обязательный этап нашего отбора. Готовы ли вы на финальном этапе предоставить контакты 1–2 руководителей с предыдущих мест работы для подтверждения опыта?
+  Да
+Подходит ли оформление по контракту? ИП/самозанятость/крипта
+  да
+"Есть ли у вас опыт с чем-то из списка ниже? Отметьте, с чем работали, и коротко напишите, что именно делали:
+
+классическая frontend-, backend- или fullstack-разработкаGit, Docker, CI/CDn8n, Make, Zapier или другие инструменты автоматизацииплатёжные, финансовые или другие операционные системы"
+  "- классическая frontend, backend и fullstack-разработка
+- Git, Docker, CI/CD
+- Zapier
+- платёжные, финансовые или другие операционные системы"
+Как вы оцениваете свой уровень JavaScript? Для каких задач использовали
+  Для frontend и backend задач. По JavaScript я эксперт, это язык программирования с которым у меня больше всего опыта.
+"Оцените свой уровень владения SQL:
+базовый (простые выборки), уверенный (JOIN, агрегации, изменение данных) или продвинутый (сложные запросы, оптимизация, проектирование структуры БД).
+С какими СУБД работали и для каких задач?"
+  "Продвинутый.
+Я работал с PostgreSQL, ClickHouse, MSSQL, MySQL, SQLite,   они использовались для хранения всех данных продукта, сбора аналитики, хранения сделок, транзакций и т.п."
+"Есть ли у вас практический опыт работы с Budibase либо с похожими low-code платформами: Retool, Appsmith, ToolJet, Superblocks или Power Apps? 
+Опишите 1–2 проекта: что это была за система, для кого, что именно делали вы и в каком масштабе (команда, количество пользователей)."
+  Мы разрабатывали свою собственную low-code/no-code платформу Deep.Foundation, она была спроектирована похожим образом на n8n ещё до его появления.
+"На какую сумму з.п. ориентируешься?
+(будет здорово, если напишешь 2 цифры: min и комфорт)"
+  От {{salary_net}} в месяц на руки.
+"Для более оперативной связи мы используем telegram.
+Напиши свой тг-аккаунт :)"
+  {{telegram}}
+Был ли опыт построения асинхронных процессов?
+  Да
+"Отметь всё, что знаешь-умеешь-практикуешь:"
+  "Понимаю принципы объектно-ориентированного программирования (ООП)"
+  Знаю основные коллекции Java Collections Framework
+  "Владею SQL на уровне написания запросов (SELECT, INSERT, UPDATE, DELETE, JOINs)"
+  Знаю принципы HTTP-запросов и ответов
+  Умею создавать юнит-тесты
+  Есть опыт работы с elasticsearch и/или понимания как он устроен
+What AWS/Azure/GCP services have you used in production?
+  "I have experience with all: AWS, Azure and GCP."
+Are you comfortable conducting technical interviews and having daily work conversations in English?
+  "Yes, I'm."
+Have you ever been part of a project from the very beginning — before the product was built?
+  Yes, I was.
+How do you use AI tools in your daily work as a developer? Which tools do you use, and for what?
+  I developed my own system called Hive Mind to fully automate bugs fixing and features delivery by making deep integration of AI with GitHub. That means, it is now just enough to create an issue on GitHub for bug or feature, and Hive Mind produces pull request to deliver that. So it feels like a team of developers that work highly autonomously.
+How many years of commercial hands-on experience do you have with Node.JS?
+  More than 6 years.
+How many years of commercial full-stack development experience do you have? What front-end and back-end frameworks have you worked with?
+  Around 18 years. I mostly worked with React.js and Node.js, yet I also used other technologies and languages.
+Are you ready to move to Minsk, Belarus, if you live in another country?
+  "I prefer working remotely, and I'm now in Nha Trang, Vietnam."
+What metrics do you track to know if your product is successful?
+  Revenue - Expenses = Profit. The more profit product generates with highest user satisfaction, the more successful the project.
+How many years of commercial hands-on experience do you have as a Technical Product Manager, Technical Project Manager, or Business Analyst?
+  I mostly worked as Tech Lead, Team Lead or CTO, not specifically produce manager or project manager or business analyst. Yet I was participating in all the same processes to define the direction of product development.
+Do you have payment processing experience? If so, please describe your payment processing experience
+  Only as user, most of companies where I was working use payment processing to receive payments, and payment processing itself was usually delegated to other companies.
+Have you independently managed a product from start to finish?
+  Yes.
+Are you comfortable with interviews and daily interactions in English?
+  Yes.
+Укажите, пожалуйста, Ваши зарплатные ожидания
+  От {{salary_net}} на руки в месяц.
+Кратко опишите свой опыт использования ИИ. Какие задачи решали, чем пользовались?
+  "Я разработал свой инструмент для полной автоматизации доставки исправлений и новых возможностей в ПО — Hive Mind (github.com/link-assistant/hive-mind). Он с открытым исходным кодом и глубоко интегрирован с GitHub: ИИ-агенты на основе Claude Code и Codex превращают описания задач в pull request'ы с кодом и тестами. Ощущается как дополнительная команда разработчиков, которая работает максимально автономно. Каждый день пользуюсь Claude Code и Codex для написания кода и тестов, анализа логов и ошибок, разбора задач."
+Знаете, как работают LLM?
+  Да
+Готовы заниматься промт-инжинирингом?
+  Да
+Можете развернуть LLM агента, решающего какую-то задачу?
+  Да
+Пользуетесь ли вы LLM?
+  Постоянно
+"Вам дали неясную задачу: «сделать матчмейкинг лучше». Ваши первые действия?"
+  "Сначала уточню, что значит «лучше»: время поиска матча, честность матчей (доля побед около 50%), удержание игроков, число жалоб. Затем соберу данные и найду, где сейчас главная проблема.
+
+Скорее всего, это про баланс: соперники должны быть близки по уровню. Если игра слишком лёгкая — скучно, если слишком сложная — игрок теряет надежду на победу и сдаётся. Если игрок каждый раз чувствует, что у него есть справедливые шансы, то даже после близкого поражения он попробует ещё раз.
+
+Поэтому хороший матчмейкинг увеличивает число матчей за игровую сессию и удовлетворённость игроков. Помимо рейтинга, при подборе можно учитывать и другие метрики навыка, например, использует ли игрок те или иные игровые механики. Гипотезы проверю через CustDev, опросы и A/B-тесты."
+"Нравятся ли вам игры жанра RTS? В какие игры этого жанра вы играли (PC, мобильные)? Опишите свой опыт в них."
+  "Да, RTS — один из моих любимых жанров. На PC играл в StarCraft, Warcraft, Command & Conquer, The Settlers, Dune. Больше всего ценю в них баланс сторон, экономику и тактику: выигрывает тот, кто лучше планирует и быстрее принимает решения"
+В какие мобильные игры вы играли за последние 3 месяца?
+  Genshin Impact
+После внесения изменений в критический модуль продукта нужно быстро удостовериться, что он не упал. Что выберете?
+  Выполнить smoke-тестирование основного сценария использования модуля
+Изменение в одном модуле потенциально затронуло связанные системы. Какой следующий шаг в стратегии тестирования будет приоритетным для минимизации рисков?
+  Провести целенаправленное регрессионное тестирование затронутых интеграций и смежных функций
+"Вы анализируете внутреннюю структуру кода, покрытие ветвлений и взаимодействие классов для поиска дефектов. Это методология:"
+  "Тестирование белого ящика (структурное тестирование)"
+Какой инструмент или практика напрямую направлена на оптимизацию тестового набора при сохранении высокого покрытия?
+  "Применение техник тест-дизайна (эквивалентное разделение, попарное тестирование)"
+"Пользователь сообщает о некорректной работе функции внутри приложения. Ваши первые действия:"
+  "Соберу данные (логи, видео, шаги), проанализирую логи для локализации проблемы и заведу детализированный тикет"
+Новая функция добавлена в приложение. Что тестируете в первую очередь?
+  Основной сценарий использования функции в production-like окружении
+Функция с бонусами иногда срабатывает неправильно. Как вы подойдете к тестированию?
+  "Создам матрицу тестов: проверю корректность работы с разными входными данными, включая граничные значения и невалидные комбинации условий"
+"После обновления приложения оно начало падать на некоторых устройствах. Что предпримите в первую очередь:"
+  Проанализирую логи крашей, проверю, связана ли проблема с конкретными моделями устройств, ОС или данными, локализую баг
+"На каком этапе работы над новой фичей вы, как QA, должны подключиться к работе с техническим описанием (ТО)?"
+  На этапе проработки ТО, до его утверждения — чтобы сразу заложить в него критерии тестирования и избежать проблем в архитектуре
+"Напишите функцию и автотесты к ней на любом языке программирования.
+
+Функция должна выполнять следующую задачу:
+
+Принимать массив чисел и возвращать новый массив, в котором удалены подряд идущие дубликаты.
+Например: [1, 1, 2, 2, 3] → [1, 2, 3] [0, 0, 1, 1, 0] → [0, 1, 0]
+
+Требования к решению
+
+Реализовать функцию compress_numbers (или аналогичное название на вашем языке).
+
+Написать набор автотестов, покрывающих различные случаи"
+  "const isSameNumber = (first, second) => first === second || (Number.isNaN(first) && Number.isNaN(second));
+
+function compressNumbers(numbers) {
+  return numbers.filter((number, index) => !isSameNumber(number, numbers[index - 1]));
+}
+
+const isSameArray = (first, second) => first.length === second.length && first.every((number, index) => isSameNumber(number, second[index]));
+
+function test(name, passed) {
+  console.log(`${passed ? 'passed' : 'FAILED'}: ${name}`);
+}
+
+test('removes consecutive duplicates', isSameArray(compressNumbers([1, 1, 2, 2, 3]), [1, 2, 3]));
+test('keeps equal numbers that are not next to each other', isSameArray(compressNumbers([0, 0, 1, 1, 0]), [0, 1, 0]));
+test('returns an empty array for an empty array', isSameArray(compressNumbers([]), []));
+test('keeps a single number', isSameArray(compressNumbers([5]), [5]));
+test('keeps an array without duplicates as it is', isSameArray(compressNumbers([1, 2, 3]), [1, 2, 3]));
+test('turns an array of equal numbers into one number', isSameArray(compressNumbers([7, 7, 7, 7]), [7]));
+test('works with negative and fractional numbers', isSameArray(compressNumbers([-1, -1, 0.5, 0.5, -1]), [-1, 0.5, -1]));
+test('works with Infinity', isSameArray(compressNumbers([Infinity, Infinity, -Infinity]), [Infinity, -Infinity]));
+test('treats NaN as equal to NaN', isSameArray(compressNumbers([NaN, NaN, 1]), [NaN, 1]));
+test('treats 0 and -0 as the same number', isSameArray(compressNumbers([0, -0, 1]), [0, 1]));
+
+const original = [1, 1, 2];
+test('returns a new array', compressNumbers(original) !== original);
+test('does not change the original array', isSameArray(original, [1, 1, 2]));"
+Как QA наиболее эффективно участвовать в разработке фичи?
+  Участвовать на ранних стадиях и в ходе разработки, предлагая тестовые сценарии, оценивая риски и влияя на качество требований
+Как минимизировать время прогона автотестов при сохранении качества?
+  Разделить тесты по уровням и оптимизировать пирамиду тестирования, при этом сокращая время прогона на верхних уровнях, не теряя критического покрытия
+Как определить приоритет автоматизации тестов?
+  Выбирать тесты, которые одновременно часто используются и оказывают существенное влияние на бизнес-результаты, чтобы оптимизировать время и покрытие рисков
+Как понять, что фича готова к релизу?
+  Все заранее определённые критерии успешности выполнены, а запланированные уровни тестирования пройдены без критичных рисков
+Когда и какие автотесты целесообразно писать при разработке новой фичи?
+  Параллельно с разработкой — фокусируясь сначала на юнит и API тестах, а UI-автотесты добавлять после стабилизации функционала
+Если вы читали текст вакансии, опишите кратко, что из предстоящих обязанностей вас наиболее заинтересовало и как понимаете предстоящую роль?
+  "Больше всего меня заинтересовало сочетание кода, автоматизации и ИИ. Это близко к тому, чем я занимаюсь сам: я разработал Hive Mind (github.com/link-assistant/hive-mind) — открытый инструмент, в котором ИИ-агенты автономно пишут код и тесты по описанию задачи.
+
+Роль я понимаю как инженерную: не проверять руками, а строить автоматизацию и инструменты качества — автотесты в CI/CD с отчётами, алерты и дашборды по метрикам, чтобы проблемы находились раньше, чем их заметят игроки. А то, что я сам люблю игры, особенно RTS, помогает смотреть на продукт глазами игрока."
