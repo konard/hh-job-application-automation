@@ -82,11 +82,17 @@ resume and applies to the vacancies hh.ru suggests for it:
 
 - **Alerts** - on macOS, whenever the run waits for you (a question to answer or confirm, a
   login, a captcha the AI did not read within 30 s, a form to fill by hand), it plays a sound and
-  posts a standard notification naming what is needed. When that notification would not show (a
-  Focus or Do Not Disturb is on, or Script Editor's notifications are not allowed: `osascript`
-  posts them as Script Editor) an alert window opens instead, and closes by itself once the wait
-  is over. The sound is heard with a Focus on too and repeats every 5 minutes while the run waits.
-  `NOTIFY=0` turns them off.
+  shows a notification naming what is needed, with two buttons: «Show browser» brings the window
+  that waits for you to the front (un-minimized, on its tab), «Later» shows it again in 15 minutes
+  if the run still waits. The notification comes from a small app of the automation, «hh.ru
+  automation», built from `src/notifier/notifier.swift` into `~/.hh-automation/notifier` on the
+  first run (Xcode Command Line Tools); allow its notifications in System Settings →
+  Notifications, and pick the «Alerts» style to keep them on screen. When it cannot be shown (a
+  Focus or Do Not Disturb is on, the app is not allowed or not built) an alert window with the
+  same buttons opens instead; «Show browser» is its default button, so a Return typed by mistake
+  only brings the browser forward. The sound is heard with a Focus on too; an alert not answered
+  is shown again every 5 minutes, and it is taken away once the wait is over. `NOTIFY=0` turns
+  them off.
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names
   are counted). The hh.ru session of any browser you use (Google Chrome, Safari, Firefox, Edge,

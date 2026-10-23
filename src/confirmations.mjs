@@ -86,9 +86,11 @@ export const isInteractive = () => interactive;
  * @param {string} description
  * @param {Object} [options]
  * @param {string} [options.skip] - What `s` does; without it `s` is not offered
+ * @param {number} [options.port] - The browser window that waits for you (its DevTools port; the
+ *   automation browser by default), brought forward by the alert's «Show browser»
  * @returns {Promise<'continue'|'skip'|'withdrawn'>} 'withdrawn' when the page changed meanwhile
  */
-export async function askUser(description, { skip } = {}) {
+export async function askUser(description, { skip, port } = {}) {
   if (!interactive) {
     return 'continue';
   }
@@ -102,7 +104,7 @@ export async function askUser(description, { skip } = {}) {
   const shownAt = Date.now();
   let ask = true;
   // A sound and a window, so a run waiting for you is noticed outside the terminal
-  const endAlert = alertUser(description);
+  const endAlert = alertUser(description, { port });
   try {
     for (;;) {
       if (ask) {

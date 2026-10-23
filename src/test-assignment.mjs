@@ -116,7 +116,7 @@ async function loadVacancy(vacancy) {
   const previous = session.page.url();
   try {
     await session.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    if (!await waitForCaptcha(session.page, console.log)) {
+    if (!await waitForCaptcha(session.page, console.log, 'chat', 9340)) {
       return null;
     }
     await session.page.waitForSelector('[data-qa="vacancy-description"]', { timeout: 20000 }).catch(() => {});

@@ -1,8 +1,5 @@
 import { describe, test, assert } from 'test-anywhere';
-import { alertScripts, alertsEnabled, alertUser, appleScriptString, focusActive, senderAllowed } from '../src/notify.mjs';
-
-const app = (bundleId, auth) => `\t\t<dict>\n${auth === undefined ? '' : `\t\t\t<key>auth</key>\n\t\t\t<integer>${auth}</integer>\n`}\t\t\t<key>bundle-id</key>\n\t\t\t<string>${bundleId}</string>\n\t\t\t<key>src</key>\n\t\t\t<array>\n\t\t\t\t<dict>\n\t\t\t\t\t<key>auth</key>\n\t\t\t\t\t<integer>7</integer>\n\t\t\t\t</dict>\n\t\t\t</array>\n\t\t</dict>`;
-const prefs = (...apps) => `<plist><dict>\n\t<key>apps</key>\n\t<array>\n${apps.join('\n')}\n\t</array>\n</dict></plist>`;
+import { WINDOW_SCRIPT, alertText, alertsEnabled, alertUser, focusActive, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
 
 describe('alerts when the run waits for you', () => {
   test('on on macOS unless NOTIFY=0; never in tests or elsewhere', () => {
@@ -13,12 +10,9 @@ describe('alerts when the run waits for you', () => {
     assert.equal(alertsEnabled({}, 'linux'), false);
   });
 
-  test('the text cannot break out of the AppleScript string', () => {
-    assert.equal(appleScriptString('Ответьте "да" \\ нет'), '"Ответьте \\"да\\" \\\\ нет"');
-    const { notification, window } = alertScripts('Answer the open question(s)\n   in the browser');
-    assert.equal(notification, 'display notification "Answer the open question(s) in the browser" with title "hh.ru automation"');
-    assert.ok(window.startsWith('display alert "hh.ru automation" message "Answer the open question(s) in the browser"'));
-    assert.ok(window.endsWith('giving up after 3600'));
+  test('the text is one line of at most 300 characters', () => {
+    assert.equal(alertText('Answer the open question(s)\n   in the browser'), 'Answer the open question(s) in the browser');
+    assert.equal(alertText('x'.repeat(400)).length, 300);
   });
 
   test('a Focus is on while one of its assertions is not ended', () => {
@@ -30,18 +24,24 @@ describe('alerts when the run waits for you', () => {
     assert.equal(focusActive({}), false);
   });
 
-  test('notifications of an app are allowed only with its own auth entry', () => {
-    const xml = prefs(app('ru.keepcoder.Telegram', 7), app('com.apple.ScriptEditor2'), app('com.apple.mail', 0));
-    assert.equal(senderAllowed(xml, 'ru.keepcoder.Telegram'), true);
-    assert.equal(senderAllowed(xml), false);
-    assert.equal(senderAllowed(xml, 'com.apple.mail'), false);
-    assert.equal(senderAllowed(xml, 'com.example.missing'), false);
-    assert.equal(senderAllowed(prefs(app('com.apple.ScriptEditor2', 7))), true);
+  test('the notification app tells its pid, that it is up, and the button pressed', () => {
+    assert.deepEqual(readNotifierOutput(''), { pid: null, posted: false, failed: false, answer: null });
+    assert.deepEqual(readNotifierOutput('pid 42\nposted\n'), { pid: 42, posted: true, failed: false, answer: null });
+    assert.equal(readNotifierOutput('pid 42\nposted\nshow\n').answer, 'show');
+    assert.equal(readNotifierOutput('pid 42\nposted\nlater\n').answer, 'later');
+    assert.equal(readNotifierOutput('pid 42\ndenied Notifications are not allowed for this application\n').failed, true);
   });
 
-  test('nothing is shown in tests, and ending it is safe', () => {
-    const end = alertUser('Log in to hh.ru');
+  test('the window offers Show browser (the default, so a stray Return only brings the browser forward) and Later', () => {
+    assert.ok(WINDOW_SCRIPT.includes("buttons: ['Later', 'Show browser'], defaultButton: 'Show browser'"));
+    // The text comes in as an argument, never inside the script
+    assert.ok(WINDOW_SCRIPT.startsWith('function run([title, message, pid])'));
+  });
+
+  test('nothing is shown or built in tests, and ending it is safe', async () => {
+    const end = alertUser('Log in to hh.ru', { port: 9340 });
     end();
     end();
+    assert.equal(await prepareAlerts(), false);
   });
 });

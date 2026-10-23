@@ -245,7 +245,7 @@ async function runSync(argv, data, diff, translator) {
     }
     const notes = argv.to === 'linkedin'
       ? await prefillLinkedInPosition(page, change, { profileUrl: argv.profile, port: argv.linkedinPort }).catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`])
-      : await prefillHhExperience(page, change, { resumeHash: data.hh.hash }).catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`]);
+      : await prefillHhExperience(page, change, { resumeHash: data.hh.hash, port: argv.hhPort }).catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`]);
     notes.forEach((note) => console.log(`   ℹ️  ${note}`));
     if (change.unchanged) {
       // Nothing could be filled (e.g. skills the profile does not have): no question, the form is closed
@@ -268,6 +268,7 @@ async function runSync(argv, data, diff, translator) {
     }, 2000) : null;
     const answer = await askUser(`Prefilled on ${site} (slot window on port ${argv.to === 'linkedin' ? argv.linkedinPort : argv.hhPort}): check it, then save it?`, {
       skip: 'skip it (nothing is saved)',
+      port: argv.to === 'linkedin' ? argv.linkedinPort : argv.hhPort,
     }).finally(() => clearInterval(watch));
     if (answer === 'withdrawn' && inBrowser === 'broken' && rebuilt < 2) {
       rebuilt++;

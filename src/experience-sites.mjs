@@ -170,7 +170,7 @@ export async function waitForLinkedInLogin(page, { url, port = 9350, waitMinutes
   await page.goto(`https://www.linkedin.com/login?session_redirect=${encodeURIComponent(url)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
   const deadline = Date.now() + waitMinutes * 60000;
   let reported = Date.now();
-  const endAlert = alertUser(`Log in to LinkedIn in the slot window (port ${port})`);
+  const endAlert = alertUser(`Log in to LinkedIn in the slot window (port ${port})`, { port });
   try {
     while (!(await hasLinkedInSession(page) && page.url().startsWith(url))) {
       if (Date.now() > deadline) {
@@ -673,13 +673,14 @@ export function clickHhExperienceEdit({ company, title, editButton, card }) {
  * @param {Object} change - Of planSync
  * @param {Object} options
  * @param {string} options.resumeHash
+ * @param {number} [options.port=9351] - The slot's port, which a captcha alert brings forward
  * @returns {Promise<string[]>} Notes: fields that could not be set
  */
-export async function prefillHhExperience(page, change, { resumeHash }) {
+export async function prefillHhExperience(page, change, { resumeHash, port = 9351 }) {
   const notes = [];
   await page.goto(`https://hh.ru/resume/${resumeHash}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // While hh.ru shows a captcha nothing is touched: the user solves it in the slot
-  if (!await waitForCaptcha(page, console.log)) {
+  if (!await waitForCaptcha(page, console.log, 'slot', port)) {
     return ['hh.ru: the captcha was not solved, nothing prefilled'];
   }
   await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});

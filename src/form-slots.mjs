@@ -44,9 +44,10 @@ async function readProfileOverrides() {
  * @param {Object} page
  * @param {(message: string) => void} log
  * @param {string} [window='slot'] - The window, for the stats: slot or chat
+ * @param {number} [port] - The window's DevTools port, which the alert's «Show browser» brings forward
  * @returns {Promise<boolean>} False when the captcha is still shown
  */
-export async function waitForCaptcha(page, log, window = 'slot') {
+export async function waitForCaptcha(page, log, window = 'slot', port = undefined) {
   const started = Date.now();
   let where = null;
   let endAlert = () => {};
@@ -56,7 +57,7 @@ export async function waitForCaptcha(page, log, window = 'slot') {
         log(`🛑 The site shows a captcha: solve it in the ${window} window, the work there goes on after it`);
         where = captchaPlace(page.url(), window);
         recordEvent('captcha_shown', where);
-        endAlert = alertUser(`The site shows a captcha in the ${window} window: solve it there`, { delayMs: CAPTCHA_ALERT_MS });
+        endAlert = alertUser(`The site shows a captcha in the ${window} window: solve it there`, { delayMs: CAPTCHA_ALERT_MS, port, log });
       }
       await sleep(2000);
     }
@@ -116,7 +117,7 @@ async function prefillSlot(url, slot, { qaMap, qaDatabase, profile, resume }, { 
   if (page.url() !== url) {
     await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 }).catch((error) => log(`⚠️  ${error.message.split('\n')[0]}`));
   }
-  if (!await waitForCaptcha(page, log)) {
+  if (!await waitForCaptcha(page, log, 'slot', port)) {
     return { url, slot, fields: [] };
   }
   await sleep(2000);
