@@ -91,8 +91,9 @@ resume and applies to the vacancies hh.ru suggests for it:
   Notifications, and pick the «Alerts» style to keep them on screen. When it cannot be shown (a
   Focus or Do Not Disturb is on, the app is not allowed or not built) an alert window with the
   same buttons opens instead; «Show browser» is its default button, so a Return typed by mistake
-  only brings the browser forward. The sound is heard with a Focus on too; an alert not answered
-  is shown again every 5 minutes, and it is taken away once the wait is over. `NOTIFY=0` turns
+  only brings the browser forward. No alert is shown while the browser window that waits for you
+  is the app in front (checked again every 5 minutes). The sound is heard with a Focus on too; an
+  alert not answered is shown again every 5 minutes, and it is taken away once the wait is over. `NOTIFY=0` turns
   them off.
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names

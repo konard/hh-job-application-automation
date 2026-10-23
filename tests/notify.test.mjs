@@ -1,5 +1,5 @@
 import { describe, test, assert } from 'test-anywhere';
-import { ALERT_TEXT, WINDOW_SCRIPT, alertsEnabled, alertUser, focusActive, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
+import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUser, focusActive, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
 
 describe('alerts when the run waits for you', () => {
   test('on on macOS unless NOTIFY=0; never in tests or elsewhere', () => {
@@ -35,6 +35,13 @@ describe('alerts when the run waits for you', () => {
     assert.ok(WINDOW_SCRIPT.includes("buttons: ['Later', 'Show browser'], defaultButton: 'Show browser'"));
     // The text comes in as an argument, never inside the script
     assert.ok(WINDOW_SCRIPT.startsWith('function run([title, message, pid])'));
+  });
+
+  test('no alert while the browser that waits for you is the app in front', () => {
+    assert.equal(alertNeeded(19883, 19883), false);
+    assert.equal(alertNeeded(19883, 49284), true);
+    assert.equal(alertNeeded(19883, null), true);
+    assert.equal(alertNeeded(null, 49284), true);
   });
 
   test('nothing is shown or built in tests, and ending it is safe', async () => {

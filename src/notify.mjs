@@ -7,8 +7,10 @@
  * not allowed or not built yet) an alert window with the same buttons opens instead; its default
  * button is «Show browser», so a Return typed by mistake only brings the browser forward.
  *
- * The sound is played directly, so it is heard with a Focus on too. An alert not answered is
- * shown again every 5 minutes; once the wait is over it is taken away. Nothing is shown on other
+ * No alert while the browser window that waits for you is the app in front: you are at it
+ * already (it is checked again every 5 minutes). The sound is played directly, so it is heard
+ * with a Focus on too. An alert not answered is shown again every 5 minutes; once the wait is
+ * over it is taken away. Nothing is shown on other
  * systems, in tests, or with NOTIFY=0
  *
  * @module notify
@@ -168,6 +170,25 @@ function browserPid(port) {
   }
 }
 
+/** The pid of the app in front of the screen, or null */
+function frontmostPid() {
+  try {
+    return Number(execFileSync('osascript', ['-l', 'JavaScript', '-e', 'ObjC.import("AppKit"); $.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier'],
+      { encoding: 'utf8', timeout: 5000 }).trim()) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the alert is needed: not while the browser that waits for you is the app in front (you
+ * are at it already)
+ * @param {number|null} browser - The browser's pid
+ * @param {number|null} front - The pid of the app in front
+ * @returns {boolean}
+ */
+export const alertNeeded = (browser, front) => !browser || browser !== front;
+
 /**
  * The browser window on a port un-minimized and its tab shown (the app itself is brought forward
  * by the notification app or the window, which macOS lets do it right after your click)
@@ -303,8 +324,14 @@ export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS,
     }
     stopShown();
     shown.delete(stopShown);
+    const pid = browserPid(port);
+    // You are at the browser already: checked again at the next reminder
+    if (!alertNeeded(pid, frontmostPid())) {
+      schedule(remindMs);
+      return;
+    }
     spawn('afplay', [SOUND], { stdio: 'ignore' }).on('error', () => {}).unref();
-    const options = { text, pid: browserPid(port), onAnswer, log };
+    const options = { text, pid, onAnswer, log };
     stopShown = notifierReady && !focusOn() ? postNotification(options) : openWindow(options);
     shown.add(stopShown);
     schedule(remindMs);
