@@ -109,6 +109,16 @@ describe('Context-aware answers everywhere', () => {
     assert.equal((await knownReplyInContexts(asked, { ...sources, known: [] })).answer, 'От 450 000 ₽ на руки или эквивалент.');
   });
 
+  test('chats: a salary question not saved word for word gets its answer by pattern, to prefill', async () => {
+    const saved = withContacts({ readQADatabase: async () => new Map([['Ваша вилка ЗП?', 'От {{salary_net}} в месяц на руки.']]) }, values);
+    const sources = { readTemplates: async () => new Map(), readQADatabase: saved.readQADatabase, contexts };
+    const asked = { title: 'Робот-рекрутер', text: 'Добрый день! Спасибо за отклик.Напишите,пожалуйста,уровень дохода,который Вы рассматриваете. Спасибо!' };
+    const reply = await knownReplyInContexts(asked, { ...sources, known: ['Team Lead'] });
+    assert.match(reply.answer, /450 000 ₽/);
+    assert.equal(reply.perfect, false);
+    assert.equal(reply.source, 'salary question by pattern');
+  });
+
   test('forms prefilled in slots take the answers of each question\'s contexts', async () => {
     const inContexts = answersInContexts(qa.readQADatabase, contexts);
     const fields = [{ id: '1', kind: 'text', title: 'Ваши зарплатные ожидания мин - комфорт?' }];

@@ -373,7 +373,7 @@ const sameText = (a, b) => !isPattern(b) && normalizeQuestion(a) === normalizeQu
 export const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
 
 /** A request for the user's facts without a question mark: «Расскажите о вашем опыте с Kafka.», «Проживаете в РФ» */
-const REQUEST = /(?:^|[.!:]\s+)(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите)(?!\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\p{L})/iu;
+const REQUEST = /(?:^|[.!:,]\s*)(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите|напишите|укажите|сообщите)(?!\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\p{L})/iu;
 
 /** Words of a pattern itself, its gaps aside */
 const patternOwnWords = (pattern) => pattern.replace(PATTERN_PREFIX, '').split(' ').filter((token) => token && token !== GAP).length;
@@ -465,11 +465,12 @@ export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(t
  * @param {Object} sources
  * @param {Map} sources.templates - data/chat-templates.lino: template message -> reply
  * @param {Map} sources.qaMap - data/qa.lino with contacts filled in
+ * @param {string|null} [sources.byPattern] - The answer of a salary question by pattern (salary-questions.mjs)
  * @returns {{answer: string, noReply?: boolean, perfect: boolean, source: string, matched: string}|null}
  *   perfect: the saved question or template is the message itself (or a template is contained in it word for
  *   word, or a learned pattern says all of it: patternSays)
  */
-export function knownReply(message, { templates, qaMap }) {
+export function knownReply(message, { templates, qaMap, byPattern = null }) {
   // The offer to reuse earlier answers is decided by comparing them (compareReusedAnswers)
   if (isReuseOffer(message.text)) {
     return null;
@@ -515,6 +516,10 @@ export function knownReply(message, { templates, qaMap }) {
     return reply;
   }
   if (asksSomething(core) || asksSomething(questionCore(core))) {
+    // A salary question not saved word for word: its answer by pattern (salary-questions.mjs), to prefill
+    if (byPattern) {
+      return { answer: answerText(byPattern), perfect: false, source: 'salary question by pattern', matched: message.text };
+    }
     const asked = questionCore(core);
     const saved = findBestMatch(asked, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
     if (saved) {
@@ -541,9 +546,13 @@ export function knownReply(message, { templates, qaMap }) {
 export async function knownReplyInContexts(message, { readTemplates, readQADatabase, contexts, known = [], vacancyTexts }) {
   const templates = answersInContexts(readTemplates, contexts);
   const qaMaps = answersInContexts(readQADatabase, contexts);
-  const replyIn = async (texts) => knownReply(message, {
-    templates: await templates(message.text, texts), qaMap: await qaMaps(message.text, texts),
-  });
+  // A message not saved word for word that has an answer under itself: a salary question answered by pattern
+  const savedAsIs = (await readQADatabase()).has(message.text);
+  const replyIn = async (texts) => {
+    const qaMap = await qaMaps(message.text, texts);
+    const byPattern = !savedAsIs && qaMap.has(message.text) ? qaMap.get(message.text) : null;
+    return knownReply(message, { templates: await templates(message.text, texts), qaMap, byPattern });
+  };
   const reply = await replyIn(known);
   if (!reply || reply.noReply || !vacancyTexts || showsContext(contexts, [message.text, ...known])) {
     return reply;
