@@ -802,6 +802,9 @@ async function chooseHhMonth(page, index, date, notes) {
   }
 }
 
+/** The description in hh.ru's open experience form; null when it is not open */
+export const hhExperienceDescription = (page) => page.locator(HH.description).first().inputValue({ timeout: 1000 }).catch(() => null);
+
 /** Whether hh.ru's experience form is open in the page */
 export const hhExperienceFormOpen = (page) => page.locator(HH.position).count().then((count) => count > 0, () => false);
 

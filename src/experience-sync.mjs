@@ -33,7 +33,7 @@ import {
 } from './experience.mjs';
 import {
   closeLinkedInFollowUp, discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, linkedInFormOutcome, watchLinkedInSave,
-  hhExperienceFormOpen, prefillHhExperience, prefillHhStack, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
+  hhExperienceDescription, hhExperienceFormOpen, prefillHhExperience, prefillHhStack, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
 } from './experience-sites.mjs';
 import { createTranslator, reportFormalAiFailures, TRANSLATORS, FORMAL_AI_REPO } from './translation.mjs';
 
@@ -355,9 +355,12 @@ async function runEdit(argv) {
     await session.release();
     return;
   }
-  // «Сохранить» or «Отменить» clicked in the slot window answers the question too
+  // «Сохранить» or «Отменить» clicked in the slot window answers the question too; the text as
+  // the form had it last (you may change it before saving) is looked for on the resume page after
   let closedInBrowser = false;
+  let lastText = after;
   const watch = setInterval(async () => {
+    lastText = await hhExperienceDescription(page) ?? lastText;
     if (!closedInBrowser && !await hhExperienceFormOpen(page)) {
       closedInBrowser = true;
       clearInterval(watch);
@@ -371,7 +374,8 @@ async function runEdit(argv) {
     await saveHhExperience(page);
     console.log('💾 Saved');
   } else if (closedInBrowser) {
-    const saved = await page.waitForFunction((stack) => document.body.innerText.includes(stack), argv.stack.trim(), { timeout: 10000 })
+    const stackLine = lastText.trim().split('\n').at(-1).trim();
+    const saved = await page.waitForFunction((line) => document.body.textContent.includes(line), stackLine, { timeout: 10000 })
       .then(() => true, () => false);
     console.log(saved ? '💾 Saved by you in the browser' : '↪️  Closed in the browser: not saved');
   } else {
