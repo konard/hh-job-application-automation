@@ -115,7 +115,8 @@ describe('draftPrompt', () => {
 describe('plain text drafts', () => {
   test('Markdown marks are taken out, lists become dashes', () => {
     const draft = '**Проект:** ИИ-роутер — единая точка доступа.\n\n## Итог\n- первый пункт\n* второй, с `кодом`\n[GitHub](https://github.com/konard)';
-    assert.equal(plainText(draft), 'Проект: ИИ-роутер — единая точка доступа.\n\nИтог\n— первый пункт\n— второй, с кодом\nGitHub (https://github.com/konard)');
+    assert.equal(plainText(draft), 'Проект: ИИ-роутер - единая точка доступа.\n\nИтог\n- первый пункт\n- второй, с кодом\nGitHub (https://github.com/konard)');
+    assert.equal(plainText('— первый пункт\nRust—Go'), '- первый пункт\nRust-Go');
   });
 });
 
