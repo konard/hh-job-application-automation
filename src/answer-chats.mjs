@@ -685,20 +685,24 @@ async function userIsInTheWindow() {
 
 /** How long the user has not touched the chat window before a shown rejection is read */
 const USER_IDLE_MS = 15000;
+// A chat whose click did not open it is tried again after this
+const LIVE_RETRY_MS = 5 * 60 * 1000;
 
 /**
  * The unread rejections read as they show in the chat window, and the saved templates answered
  * (answerTemplate): hh.ru adds them to the list as they come (the page is only read, no request). Each is opened by a click on its cell, then the window
- * goes back (browser history, no reload) to the chat the user had open. It waits while a reply is
+ * goes back (browser history, no reload) to the chat the user had open; one out of sight in the list is
+ * wheeled to first, and the list wheeled back after. It waits while a reply is
  * typed or the user has done something in the window in the last 15 s
  * @param {{leaveAlone: () => boolean}} options - leaveAlone: the chat pass has the window now
  */
 function readRejectionsAsTheyShow({ leaveAlone }) {
   let busy = false;
-  // A chat with its last message: a new message in a chat handled before (a rejection after a
-  // template was answered) is read too
-  const tried = new Set();
+  // A chat with its last message, when it was tried: a new message in a chat handled before (a
+  // rejection after a template was answered) is read too, and one whose click failed is tried again
+  const tried = new Map();
   const triedKey = (chat) => `${chat.id}\n${chat.last}`;
+  const triedLately = (chat) => Date.now() - (tried.get(triedKey(chat)) ?? 0) < LIVE_RETRY_MS;
   const timer = setInterval(async () => {
     if (busy || leaveAlone() || page.isClosed() || !/^https:\/\/hh\.ru\/chat(\/|$|\?)/.test(page.url())) {
       return;
@@ -706,20 +710,37 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
     busy = true;
     const userUrl = page.url();
     let moves = 0;
+    // How far the list was wheeled to a rejection out of sight: wheeled back after
+    let wheeled = 0;
     try {
       for (;;) {
         // A rejection, or a saved template to answer (--auto-send) or only read
-        const onScreen = (await chatsOnScreen()).filter((chat) => !tried.has(triedKey(chat)));
+        const onScreen = (await chatsOnScreen()).filter((chat) => !triedLately(chat));
         const templates = await templatesDb.readQADatabase();
         const template = (chat) => (chat.unread && !isRejectionCell(chat) ? templateCell(chat, templates) : null);
+        // A rejection in the list but out of sight (above or below the part shown) is wheeled to
+        const hidden = () => page.evaluate(readChatList).then((chats) => visibleRejections(chats.filter((chat) => !triedLately(chat))), () => []);
         const rejection = visibleRejections(onScreen)[0] ??
-          onScreen.find((chat) => { const reply = template(chat); return reply && (reply.noReply || argv.autoSend); });
+          onScreen.find((chat) => { const reply = template(chat); return reply && (reply.noReply || argv.autoSend); }) ??
+          (await hidden())[0];
         const user = await page.evaluate(readUserActivity).catch(() => null);
         if (!rejection || !user || user.typing || Date.now() - user.at < USER_IDLE_MS || leaveAlone()) {
           break;
         }
-        tried.add(triedKey(rejection));
+        tried.set(triedKey(rejection), Date.now());
         await page.evaluate(() => { window.__chatAutomating = true; });
+        if (!onScreen.includes(rejection)) {
+          const at = await listPosition();
+          if (!at || !rejection.screen) {
+            break;
+          }
+          const by = Math.round(rejection.screen.top - (at.y + (at.view - (rejection.screen.bottom - rejection.screen.top)) / 2));
+          await wheelChatList(by);
+          wheeled += by;
+          if (!(await chatsOnScreen()).some((chat) => chat.id === rejection.id)) {
+            continue;
+          }
+        }
         const cell = page.locator(`[data-qa="chatik-open-chat-${rejection.id}"]`).first();
         if (!await human.click(cell) ||
           !await page.waitForURL((url) => url.href.startsWith(chatUrl(rejection.id)), { timeout: 15000 }).then(() => true, () => false)) {
@@ -743,6 +764,10 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
         // Back to where the user was
         await page.evaluate((steps) => window.history.go(-steps), moves).catch(() => {});
         await page.waitForURL(userUrl, { timeout: 10000 }).catch(() => {});
+      }
+      if (wheeled !== 0 && !page.isClosed()) {
+        await sleep(1000);
+        await wheelChatList(-wheeled).catch(() => {});
       }
       await page.evaluate(() => { window.__chatAutomating = false; }).catch(() => {});
       // The window moved by the tool, not by the user
