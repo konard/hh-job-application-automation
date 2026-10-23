@@ -6,7 +6,7 @@ import { describe, test, assert } from 'test-anywhere';
 import {
   applySyncDecision, companyKey, companySimilarity, detectLanguage, diffExperience, formatChange, formatDiffReport,
   companyWebsite, linkedInItemsFromText, matchJobs, withEditLinks, normalizeHhJobs, normalizeLinkedInJobs, parseLinkedInPosition, parseMonthYear, parsePeriod, planSync,
-  findJob, textSimilarity, withStack,
+  findJob, stackOf, textSimilarity, withStack,
 } from '../src/experience.mjs';
 import { hasFillableFields, isLinkedInLoginPage, linkedInExperienceUrl, linkedInFormOutcome, mediaTitle } from '../src/experience-sites.mjs';
 
@@ -382,6 +382,14 @@ describe('A job\'s technology list', () => {
 
   test('a list on the heading line is replaced too', () => {
     assert.equal(withStack('Боты.\nИспользовавшиеся навыки: C#, WPF', 'C#'), 'Боты.\n\nИспользуемые технологии:\nC#');
+  });
+
+  test('appended to the list it has, without the ones already in it', () => {
+    const description = 'Разработка торговой системы.\n\nИспользуемые технологии:\nGitLab, Rust\nVue.js';
+    assert.deepEqual(stackOf(description), ['GitLab', 'Rust', 'Vue.js']);
+    assert.equal(withStack(description, 'rust, Claude Code', { add: true }),
+      'Разработка торговой системы.\n\nИспользуемые технологии:\nGitLab, Rust, Vue.js, Claude Code');
+    assert.equal(withStack('Боты.', 'C#', { add: true }), 'Боты.\n\nИспользуемые технологии:\nC#');
   });
 
   test('the job found by its company in Latin letters', () => {

@@ -10,6 +10,8 @@
  * @module experience
  */
 
+import { splitList } from './resume-stack.mjs';
+
 const MONTHS = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
   янв: 1, фев: 2, мар: 3, апр: 4, май: 5, мая: 5, июн: 6, июл: 7, авг: 8, сен: 9, окт: 10, ноя: 11, дек: 12,
@@ -684,15 +686,30 @@ export const STACK_HEADING = 'Используемые технологии:';
 const STACK_BLOCK = /\n*^(?:используемые технологии|использовавшиеся навыки|технологии|стек(?: технологий)?)\s*:[^\n]*(?:\n(?!\s*\n)[^\n]*)*/imu;
 
 /**
- * A job description with its technology list set: the list under the heading is replaced, or the
- * heading and the list are added after the text
+ * The technologies listed under a job description's heading
+ * @param {string} description
+ * @returns {string[]}
+ */
+export function stackOf(description) {
+  const block = STACK_BLOCK.exec(String(description ?? ''))?.[0] ?? '';
+  return splitList(block.trim().replace(/^[^:]*:/, '').replace(/\n/g, ', ')).map((item) => item.trim()).filter(Boolean);
+}
+
+/**
+ * A job description with its technology list set: the list under the heading is replaced (or, with
+ * add, the new technologies appended to it), or the heading and the list are added after the text
  * @param {string} description
  * @param {string} stack - Comma-separated, such as "PHP 8, Symfony 7, Go"
+ * @param {{add?: boolean}} [options]
  * @returns {string}
  */
-export function withStack(description, stack) {
+export function withStack(description, stack, { add = false } = {}) {
   const text = String(description ?? '').replace(STACK_BLOCK, '').trimEnd();
-  return `${text}${text ? '\n\n' : ''}${STACK_HEADING}\n${stack.trim()}`;
+  const items = splitList(stack).map((item) => item.trim()).filter(Boolean);
+  const listed = add ? stackOf(description) : [];
+  const known = new Set(listed.map((item) => item.toLowerCase()));
+  const all = [...listed, ...items.filter((item) => !known.has(item.toLowerCase()))];
+  return `${text}${text ? '\n\n' : ''}${STACK_HEADING}\n${all.join(', ')}`;
 }
 
 /**

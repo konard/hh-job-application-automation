@@ -858,17 +858,18 @@ export async function discardLinkedInPosition(page) {
  * @param {string} options.resumeHash
  * @param {{company: string, title?: string}} options.job
  * @param {string} options.stack - Comma-separated
+ * @param {boolean} [options.add=false] - Append to the job's list instead of replacing it
  * @param {number} [options.port=9351]
  * @returns {Promise<{notes: string[], before: string|null, after: string|null}>}
  */
-export async function prefillHhStack(page, { resumeHash, job, stack, port = 9351 }) {
+export async function prefillHhStack(page, { resumeHash, job, stack, add = false, port = 9351 }) {
   const notes = await openHhExperienceForm(page, { resumeHash, job, port });
   const field = page.locator(HH.description).first();
   if (notes.length > 0 || await field.count() === 0) {
     return { notes: notes.length > 0 ? notes : ['hh.ru: no description field in the experience form'], before: null, after: null };
   }
   const before = await field.inputValue();
-  const after = withStack(before, stack);
+  const after = withStack(before, stack, { add });
   await field.fill(after);
   return { notes, before, after };
 }

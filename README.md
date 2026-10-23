@@ -580,11 +580,13 @@ bun run experience -- diff                # differences per job, report in logs/
 bun run experience -- sync --to linkedin  # prefill LinkedIn from hh.ru (or --to hh)
 bun run experience -- sync --to hh --auto # export again, diff and sync in one go
 bun run experience -- edit --company Evirma --stack "PHP 8, Symfony 7, Go, ClickHouse"
+bun run experience -- edit --company Capico --add "OpenAI Codex CLI"  # appended to its list
 ```
 
 - **Edit one job's technologies**: `edit` opens that job's hh.ru edit form (company in Cyrillic or
   Latin, «ООО "ЕВИРМА"» is found by `Evirma`) in the hh.ru slot (port 9351) and sets its
-  «Используемые технологии:» list under the description, the rest of the text kept as hh.ru has it.
+  «Используемые технологии:» list under the description, the rest of the text kept as hh.ru has it
+  (`--add` appends to the list the job has, skipping what it lists already).
   It is saved only when you type `y`, or when you click «Сохранить» in the slot window yourself. The
   technologies missing from the resume's «Навыки» (one list for the whole resume) are listed.
 

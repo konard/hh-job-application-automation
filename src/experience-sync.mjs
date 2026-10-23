@@ -13,8 +13,8 @@
  *   you type `y`; `s` skips it, `q` stops and leaves the current form prefilled for you.
  *   `--auto` runs the export, the diff and the sync in one go, still asking before each save.
  *
- * - edit --company <name> --stack <list>: the technology list of one hh.ru job («Используемые
- *   технологии:» under its description) prefilled in the hh.ru slot; saved on `y`, or by you with
+ * - edit --company <name> --stack <list> (or --add <list>): the technology list of one hh.ru job
+ *   («Используемые технологии:» under its description) set (or added to) in the hh.ru slot; saved on `y`, or by you with
  *   «Сохранить» in the slot window. The rest of the description is kept as hh.ru has it.
  *
  * Formal AI failures are reported to its repository (deduplicated), see translation.mjs.
@@ -43,12 +43,13 @@ const USAGE = `Usage: bun run experience -- <export|diff|sync|edit> [options]
   diff                     Show the differences (exports first when there is no export yet)
   sync --to linkedin|hh    Prefill the changes on that site, saving each only after you type y
   edit --company <name> --stack <list>
-                           Prefill the technology list of that hh.ru job (Cyrillic or Latin name), saving it only
+                           Prefill the technology list of that hh.ru job (--add <list> appends to its list instead) (Cyrillic or Latin name), saving it only
                            after you type y or click «Сохранить» in the slot window
 
   --to <linkedin|hh>       The side to change (sync)
   --company <name>         The job to edit (edit), such as Evirma
   --stack <list>           Its technologies, comma-separated (edit), such as "PHP 8, Symfony 7, Go"
+  --add <list>             Technologies added to the job's list as hh.ru has it (edit), the ones it has skipped
   --auto                   Export again, diff and sync in one go (still asks before every save)
   --refresh-hh             Export the hh.ru resume again (bun run resume) instead of reading resume.json
   --skip-linkedin          Use the LinkedIn part of the last export
@@ -65,7 +66,7 @@ const USAGE = `Usage: bun run experience -- <export|diff|sync|edit> [options]
 /** Plain flags: the command, and the options above */
 function parseArgs(args) {
   const parsed = {
-    command: null, to: null, company: null, stack: null, auto: false, refreshHh: false, skipLinkedin: false, profile: LINKEDIN_PROFILE,
+    command: null, to: null, company: null, stack: null, add: false, auto: false, refreshHh: false, skipLinkedin: false, profile: LINKEDIN_PROFILE,
     translators: TRANSLATORS, reportFormalAi: true, dryRunIssues: false, linkedinPort: 9350, hhPort: 9351,
     hhBrowserPort: 9322, keepOpenHours: 24, trace: tracingEnabled(),
   };
@@ -76,6 +77,7 @@ function parseArgs(args) {
       '--to': () => (parsed.to = value()),
       '--company': () => (parsed.company = value()),
       '--stack': () => (parsed.stack = value()),
+      '--add': () => { parsed.stack = value(); parsed.add = true; },
       '--auto': () => (parsed.auto = true),
       '--refresh-hh': () => (parsed.refreshHh = true),
       '--skip-linkedin': () => (parsed.skipLinkedin = true),
@@ -108,7 +110,7 @@ function parseArgs(args) {
     throw new Error('sync needs --to linkedin or --to hh');
   }
   if (parsed.command === 'edit' && (!parsed.company || !parsed.stack?.trim())) {
-    throw new Error('edit needs --company and --stack');
+    throw new Error('edit needs --company and --stack (or --add)');
   }
   const unknown = parsed.translators.filter((name) => !TRANSLATORS.includes(name));
   if (unknown.length > 0) {
@@ -333,9 +335,9 @@ async function runEdit(argv) {
       process.exit(0);
     },
   });
-  console.log(`✏️  ${job.company} (${job.position}): technologies «${argv.stack.trim()}»`);
+  console.log(`✏️  ${job.company} (${job.position}): technologies ${argv.add ? 'added' : 'set'}: «${argv.stack.trim()}»`);
   const { notes, before, after } = await prefillHhStack(page, {
-    resumeHash: resume.hash, job: { company: job.company, title: job.position }, stack: argv.stack, port: argv.hhPort,
+    resumeHash: resume.hash, job: { company: job.company, title: job.position }, stack: argv.stack, add: argv.add, port: argv.hhPort,
   });
   notes.forEach((note) => console.log(`   ℹ️  ${note}`));
   if (after === null) {
