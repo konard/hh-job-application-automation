@@ -640,6 +640,9 @@ export async function closeLinkedInFollowUp(page) {
 const HH = {
   experienceCard: '[data-qa="profile-experience-company-card"]',
   editButton: '[data-qa^="edit-experience-button-"]',
+  // The resume page without edit buttons on its cards: «Редактировать» opens the list of jobs,
+  // where a card opens its form
+  viewAll: '[data-qa="profile-experience-viewAll"]',
   company: 'input[name="company"]',
   position: 'input[name="position"]',
   startYear: '[data-qa="resume-editor-experience-start-year-input"]',
@@ -653,7 +656,8 @@ const HH = {
 
 /**
  * Runs in the page: click the edit button of the hh.ru experience card of a company and title
- * (cards hold "company / duration / title / period"), after expanding the list
+ * (cards hold "company / duration / title / period"), after expanding the list; a card without
+ * one opens its form itself
  * @param {{company: string, title: string, editButton: string, card: string}} target
  * @returns {boolean}
  */
@@ -662,7 +666,7 @@ export function clickHhExperienceEdit({ company, title, editButton, card }) {
   const cards = [...document.querySelectorAll(card)];
   const match = cards.find((element) => norm(element.innerText).includes(norm(company)) && norm(element.innerText).includes(norm(title))) ??
     cards.find((element) => norm(element.innerText).includes(norm(company)));
-  const button = match?.querySelector(editButton) ?? match?.parentElement?.querySelector(editButton);
+  const button = match?.querySelector(editButton) ?? match?.parentElement?.querySelector(editButton) ?? match;
   button?.click();
   return Boolean(button);
 }
@@ -688,6 +692,13 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
   await page.evaluate(() => [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button')]
     .filter((button) => /развернуть|показать (все|ещё)|show (all|more)|expand/i.test(button.innerText)).forEach((button) => button.click()));
   await sleep(1000);
+  const viewAll = page.locator(HH.viewAll).first();
+  if (await page.locator(HH.editButton).count() === 0 && await viewAll.count() > 0) {
+    await viewAll.click();
+    await page.waitForURL(/\/experience(\?|$)/, { timeout: 30000 }).catch(() => {});
+    await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
+    await sleep(1000);
+  }
   if (job) {
     const found = await page.evaluate(clickHhExperienceEdit, {
       company: job.company, title: job.title ?? '', editButton: HH.editButton, card: HH.experienceCard,
@@ -697,8 +708,8 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
     }
   } else {
     const added = await page.evaluate(() => {
-      const button = [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button, [data-qa="resume-list-card-experience"] a')]
-        .find((element) => /^(добавить|add)/i.test(element.innerText.trim()));
+      const add = (selector) => [...document.querySelectorAll(selector)].find((element) => /^(добавить|add)/i.test(element.innerText.trim()));
+      const button = add('[data-qa="resume-list-card-experience"] button, [data-qa="resume-list-card-experience"] a') ?? add('main button');
       button?.click();
       return Boolean(button);
     });
