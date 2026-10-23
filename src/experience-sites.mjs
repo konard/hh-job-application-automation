@@ -170,7 +170,7 @@ export async function waitForLinkedInLogin(page, { url, port = 9350, waitMinutes
   await page.goto(`https://www.linkedin.com/login?session_redirect=${encodeURIComponent(url)}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
   const deadline = Date.now() + waitMinutes * 60000;
   let reported = Date.now();
-  const endAlert = alertUser(`Log in to LinkedIn in the slot window (port ${port})`, { port });
+  const endAlert = alertUser({ port });
   try {
     while (!(await hasLinkedInSession(page) && page.url().startsWith(url))) {
       if (Date.now() > deadline) {

@@ -63,8 +63,8 @@ function focusOn() {
   }
 }
 
-/** The text of an alert: one line, at most 300 characters */
-export const alertText = (message) => String(message).replace(/\s+/g, ' ').trim().slice(0, 300);
+/** The text of every alert: short, what is needed is told in the terminal */
+export const ALERT_TEXT = 'The job application automation needs your attention.';
 
 /**
  * What the notification app printed: its pid, whether the notification is up, and the answer
@@ -262,8 +262,7 @@ function postNotification({ text, pid, onAnswer, log }) {
 }
 
 /**
- * Tell the user the run waits for them
- * @param {string} message - What is needed («Answer the open question(s) in the browser»)
+ * Tell the user the run waits for them (what is needed is told in the terminal)
  * @param {Object} [options]
  * @param {number} [options.delayMs=0] - Only when the wait still goes on after this long (a captcha the AI may read)
  * @param {number} [options.port=9322] - The DevTools port of the browser window that waits for you
@@ -271,12 +270,12 @@ function postNotification({ text, pid, onAnswer, log }) {
  * @param {(message: string) => void} [options.log]
  * @returns {() => void} Ends the alert: no more sound, the notification or window taken away
  */
-export function alertUser(message, { delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS, log = console.log } = {}) {
+export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS, log = console.log } = {}) {
   if (!alertsEnabled()) {
     return () => {};
   }
   prepareAlerts(log);
-  const text = alertText(message);
+  const text = ALERT_TEXT;
   let ended = false;
   let stopShown = () => {};
   let timer = null;

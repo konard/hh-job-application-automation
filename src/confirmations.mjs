@@ -104,7 +104,7 @@ export async function askUser(description, { skip, port } = {}) {
   const shownAt = Date.now();
   let ask = true;
   // A sound and a window, so a run waiting for you is noticed outside the terminal
-  const endAlert = alertUser(description, { port });
+  const endAlert = alertUser({ port });
   try {
     for (;;) {
       if (ask) {

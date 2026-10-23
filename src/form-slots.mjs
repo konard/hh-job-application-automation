@@ -57,7 +57,7 @@ export async function waitForCaptcha(page, log, window = 'slot', port = undefine
         log(`🛑 The site shows a captcha: solve it in the ${window} window, the work there goes on after it`);
         where = captchaPlace(page.url(), window);
         recordEvent('captcha_shown', where);
-        endAlert = alertUser(`The site shows a captcha in the ${window} window: solve it there`, { delayMs: CAPTCHA_ALERT_MS, port, log });
+        endAlert = alertUser({ delayMs: CAPTCHA_ALERT_MS, port, log });
       }
       await sleep(2000);
     }

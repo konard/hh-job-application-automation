@@ -693,7 +693,7 @@ async function handlePostClickNavigation({ commander, waitForUrlCondition, START
   console.log('💡 Please fill out the form manually. Take as much time as you need.');
   console.log('💡 Once done, navigate back to:', START_URL);
 
-  const endAlert = alertUser('Fill out the application form in the automation browser, then go back to the vacancy list');
+  const endAlert = alertUser();
   try {
     await waitForUrlCondition(START_URL, 'Waiting for you to return to the target page');
   } finally {

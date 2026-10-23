@@ -1,5 +1,5 @@
 import { describe, test, assert } from 'test-anywhere';
-import { WINDOW_SCRIPT, alertText, alertsEnabled, alertUser, focusActive, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
+import { ALERT_TEXT, WINDOW_SCRIPT, alertsEnabled, alertUser, focusActive, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
 
 describe('alerts when the run waits for you', () => {
   test('on on macOS unless NOTIFY=0; never in tests or elsewhere', () => {
@@ -10,9 +10,8 @@ describe('alerts when the run waits for you', () => {
     assert.equal(alertsEnabled({}, 'linux'), false);
   });
 
-  test('the text is one line of at most 300 characters', () => {
-    assert.equal(alertText('Answer the open question(s)\n   in the browser'), 'Answer the open question(s) in the browser');
-    assert.equal(alertText('x'.repeat(400)).length, 300);
+  test('the text is one short line: what is needed is told in the terminal', () => {
+    assert.ok(ALERT_TEXT.length < 80);
   });
 
   test('a Focus is on while one of its assertions is not ended', () => {
@@ -39,7 +38,7 @@ describe('alerts when the run waits for you', () => {
   });
 
   test('nothing is shown or built in tests, and ending it is safe', async () => {
-    const end = alertUser('Log in to hh.ru', { port: 9340 });
+    const end = alertUser({ port: 9340 });
     end();
     end();
     assert.equal(await prepareAlerts(), false);

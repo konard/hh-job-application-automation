@@ -226,7 +226,7 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
 
   console.log('🙋 Please log in to hh.ru in this or any other hh.ru window of the automation; the login is copied to the others and the automation continues.');
   await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
-  const endAlert = alertUser('Log in to hh.ru in the automation browser window');
+  const endAlert = alertUser();
   try {
     for (let round = 1; !isPageClosed() && !await isLoggedIn(commander).catch(() => false); round++) {
       // A login made in a slot window (chat, forms) is taken from there

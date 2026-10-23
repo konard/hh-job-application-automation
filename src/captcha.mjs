@@ -115,7 +115,7 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha } = {}
     // Written at once: a run stopped before the captcha is gone still counts it
     recordEvent('captcha_shown', where);
     // Not at once: the AI may read it first
-    const endAlert = alertUser('hh.ru shows a captcha: solve it in the automation browser', { delayMs: CAPTCHA_ALERT_MS });
+    const endAlert = alertUser({ delayMs: CAPTCHA_ALERT_MS });
     try {
       while (await isCaptchaShown(commander)) {
         onCaptcha?.(commander, episode);

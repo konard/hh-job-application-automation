@@ -82,7 +82,8 @@ resume and applies to the vacancies hh.ru suggests for it:
 
 - **Alerts** - on macOS, whenever the run waits for you (a question to answer or confirm, a
   login, a captcha the AI did not read within 30 s, a form to fill by hand), it plays a sound and
-  shows a notification naming what is needed, with two buttons: «Show browser» brings the window
+  shows a short notification («The job application automation needs your attention»; what is
+  needed is told in the terminal) with two buttons: «Show browser» brings the window
   that waits for you to the front (un-minimized, on its tab), «Later» shows it again in 15 minutes
   if the run still waits. The notification comes from a small app of the automation, «hh.ru
   automation», built from `src/notifier/notifier.swift` into `~/.hh-automation/notifier` on the
