@@ -1,0 +1,211 @@
+resume
+  language ru
+  name 'Дьяченко Константин Константинович'
+  title 'Программист/Разработчик/Руководитель'
+  skills
+    'SQL'
+    'PHP'
+    'Java'
+    'Pascal'
+    'C'
+    'C++'
+    'Rust'
+    'Go'
+    'Kotlin'
+    'BASIC'
+    'GraphQL'
+    'TypeScript'
+    'JavaScript'
+    'CSS'
+    'HTML'
+    'C#'
+    'Git'
+    'GitHub'
+    'MongoDB'
+    'PostgreSQL'
+    'Windows'
+    'Linux'
+    'Mac Os'
+    'iOS'
+    'Android'
+    'GitHub Actions'
+    'MS Office'
+    'Shell Scripting'
+    'Python'
+    'Docker'
+  about
+    'Я программист, разработчик, руководитель. Программировать я начал в 10-ти летнем возрасте, то есть в 2000 году. За это время мне удалось испытать на практике широкий спектр языков и технологий. Могу выполнять роли технического директора и архитектора ПО. Предпочитаю общаться текстом, имею значительный опыт в коммуникации между людьми и разрешении конфликтов, могу координировать разработку внутри команды и между командами, обучаю программированию. Могу вести социальные сети и взаимодействовать с аудиторией. Пишу статьи по программированию и математике. Активно интересуюсь математикой, физикой, психологией и философией.'
+    ' '
+    'Технические навыки'
+    'Платформы:'
+    'Windows, Linux (Gentoo, Ubuntu), macOS, iOS, Android'
+    'Языки:'
+    'Rust, C#, C/C++, Makefile, SQL, GraphQL, WebAssembly, Assembly, Java, TypeScript, JavaScript, Kotlin, PHP, Python, Go, Nemerle, Visual Basic, Basic, Pascal, VBA, Unix shell, Lisp, Haskell, Lua, LaTeX, Wolfram Language'
+    'Инструменты:'
+    'TFS, SourceSafe, Subversion, Git, Visual Studio, Visual Studio Code, IntelliJ IDEA, Rider, WebStorm, CLion, PHPStorm, PyCharm, phpMyAdmin, Travis CI, GitHub Actions, GitLab CI/CD, Resharper, Microsoft Server Management Studio, SQL Profiler, IDA, Cuter, PVS-Studio, NetBeans, OBS-Studio, NuGet, NPM, Cargo, PyPi, Conan, Excel, Access, Word, PowerPoint, Project, InfoPath, Active Directory, ABBYY FineReader Engine, Adobe Reader, Adobe Flash, Silverlight, 1C:Документооборот, Docker, Kubernetes, Grafana, Prometheus, draw.io, Wolfram Mathematica, TeX, Jupyter Notebook, Elasticsearch, Fiddler, Google Chrome, Safari, Firefox, Internet Explorer, Opera, Hashcat, Android Studio, XCode, Apache, nginx, Azure, Selectel, Drupal, WordPress, Google, Bing, pytorch, tensorflow, GPT-4o, Midjourney, Blender, Inkscape, Gimp, Total Commander, ssh, ftp, git, cmd, calc, notepad, nano, paint, ping, curl, wget, selenium, Telegram, VK, GitHub, GitLab'
+    'Методологии:'
+    'Kanban, Scrum, Agile, Extreme programming'
+    'Технологии:'
+    '.NET Framework, .NET Core, ASP.NET WebForms, ASP.NET MVC, WCF, Silverlight, WinForms, WPF, HTML, CSS, jQuery, Bootstrap, DevExpress, Teleric, Stimulsoft, Aspose, Node.js, SQL SR, React.js, Vue.js, Angular, Next.js, Electron, Capacitor, Apache Cordova, Firebase, Hasura, Minio, Hasura Storage'
+    'Базы данных:'
+    'MS SQL, SQLite, MS SQL CE, MySQL, MariaDB, PostgreSQL, MongoDB, VistaDB, Links Platform (Doublets, Triplets)'
+    'Личные:'
+    'Слепая десятипальцевая печать на клавиатурах Английской и Русской раскладки от 335 зн/мин.'
+  jobs
+    job
+      company 'ООО "ЕВИРМА"'
+      position 'Tech Lead'
+      start 2026-05
+      end present
+      description
+        'Автоматизация программирования сервисов на PHP и GO c использованием ИИ через Claude Code, Codex, автоматизация CI/CD, разработка тестового стенда, исправление ошибок, автоматизация исправления ошибок в sentry через ИИ. Поддержка продукта и разработка новых фичей. Разработка блока управления расписанием рекламных компаний. Разработка сервиса по парсингу данных с Wildberries. Разработка ИИ роутера для упрощения доступа к ИИ провайдерам для автономных агентов и сотрудников компании.'
+        ' '
+        'Используемые технологии:'
+        'PHP 8, Symfony 7, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker, GitHub Actions, Sentry, Anthropic Claude Code CLI, OpenAI Codex CLI'
+    job
+      company 'Capico LLC'
+      position 'Senior software engineer'
+      start 2025-11
+      end 2026-05
+      description
+        'Разработка торговой системы Grid для бирж ByBit и BitGet. Поддержка и улучшения UI/UX для торгового терминала и других компонентов системы торгового агрегатора.'
+        ' '
+        'Используемые технологии:'
+        'GitLab, GitLab CI/CD, Git, PostgreSQL, InfluxDB, Redis, Rust, Vue.js, TradingView, Anthropic Claude Code CLI, OpenAI Codex CLI'
+    job
+      company 'Kaiten'
+      position 'Руководитель команды разработки'
+      start 2024-07
+      end 2025-11
+      description
+        'Руководство командой из 5-ти старших разработчиков.'
+        ' '
+        'Разработка и поддержка системы управления бизнес процессами Kaiten.ru, добавление новых фичей, исправление ошибок, улучшение инструментария для разработчиков компании. Участие в разработке мобильных приложений Kaiten для iOS и Android. Участие в разработки системе биллинга Kaiten.'
+        ' '
+        'Участие в разработке подсистемы дополнений и разработка дополнения Яндекс.Диск.'
+        'Участие в разработке приложения Convertinator, в частности конвертация данных из ClickUp в формат для универсального импорта в Kaiten.'
+    job
+      company 'Deep.Foundation'
+      position 'Сооснователь, технический директор'
+      start 2022-09
+      end 2024-06
+      description
+        'Управление командой программистов из множества стран мира, формирование задач, координация выполнения задач, проверка соответствия кода стандартам качества и соглашений о едином стиле, гарантирование покрытия кода документацией, примерами кода, тестами и бенчмарками, проверка работоспособности разрабатываемых программных решений, разработка непрерывной интеграции и доставки.'
+        'Ведение социальных сетей, взаимодействие с аудиторией.'
+        'Разработка дата-ориентированной ассоциативной операционной системы и приложения (super-app), среды разработки для кроссплатформенных мультиязычных мультипарадигменных облачных и локальных ассоциативных приложений.'
+        'Разработка архитектуры экосистемы Глубины.'
+        'Разработка адаптера пакетного менеджера NPM для экосистемы ассоциативных пакетов (на данный момент насчитывается более 330+ пакетов).'
+        'Разработка схемы, миграций и GraphQL API для PostgreSQL c использованием Hasura с гибкими правовыми механиками.'
+        'Разработка интеграции с Amazon AWS S3 совместимым хранилища файлов.'
+        'Разработка экосистемы изолированных исполнителей кода (обработчиков событий со связями на JS, PHP, Python, Rust, C/C++, Kotlin и др.).'
+        'Разработка ассоциативных пакетов для экосистемы Глубины (типов связей, наборов заготовленных связей, и поведения на различных языках).'
+        'Разработка дополнительных библиотек для разработчиков.'
+        'Разработка ассоциативной теории.'
+        'Написание документации и статей для Habr, съёмка обучающих видеороликов.'
+        'Разработка различных способов визуализации сетей связей.'
+        'Проведение исследований и экспериментов.'
+        'Разработка демонстрационных проектов:'
+        '1. GPT-4o Discord бота;'
+        '2. Системы новостной аналитики;'
+        '3. Deep.Memo - приложения для записи данных со всех сенсоров телефона, планшета, компьютера в ассоциативное хранилище;'
+        '4. Deep.Me - личный представитель пользователя в интернете;'
+        '5. Deep.Chain - ассоциативный блокчейн с поддержкой смарт-контрактов;'
+        '6. Бота исполнителя исходного кода на JavaScript;'
+        '7. Telegram бота для умного поиска с использованием комбинации полнотекстового и векторного поиска для действующего законодательства РФ;'
+        '8. Deep.GPT - Telegram бот шлюз к GPT-4o;'
+        '9. Умного магазина с витриной доступной через голосовой и текстовый чат.'
+        ' '
+        'Навыки, технологии и инструменты: Rust, C/C++, Python, PHP, Kotlin, TypeScript, JavaScript, HTML, CSS, React.JS, Next.JS, Express.JS, Visual Studio Code, XCode, Android Studio, Git, GitHub, NPM, PyPi, OBS-Studio, Unix shell, Python, LaTeX, TeX, jsdoc, GitHub Actions, Selectel, Docker, Kubernetes, PostgreSQL, git, GitHub, GitHub Actions, SQL, PostgreSQL, Hasura, GraphQL, minio, HasuraStorage, Elasticsearch, iOS, Android, Linux, Windows, macOS, Electron, Capacitor, Apache Cordova.'
+    job
+      company 'ООО «Абракар»'
+      position 'Программист'
+      start 2020-07
+      end 2022-08
+      description
+        'Разработка и поддержка шеринговой платформы для автомобилей и квартир ShakeApp.'
+        ' '
+        'Использовавшиеся навыки: GitLab, GitLab CI/CD, Git, PostgreSQL, SQL, Hasura, GraphQL, minio, HasuraStorage, Selectel, Docker, Kubernetes, Grafana, Prometheus, draw.io, Visual Studio Code, XCode, Android Studio, TypeScript, JavaScript, Next.JS, React.JS, HTML, CSS, iOS, Android, Capacitor, Apache Cordova'
+    job
+      company 'LinksPlatform'
+      position 'Основатель, технический директор'
+      start 2015-01
+      end 2020-06
+      description
+        'Управление командой программистов из множества стран мира, формирование задач, координация выполнения задач, проверка соответствия кода стандартам качества и соглашений о едином стиле, гарантирование покрытия кода документацией, примерами кода, тестами и бенчмарками, проверка работоспособности разрабатываемых программных решений, разработка непрерывной интеграции и доставки.'
+        'Ведение социальных сетей, взаимодействие с аудиторией.'
+        'Разработка ассоциативных конструкторов движков ассоциативных баз данных (Дуплеты, Триплеты, Последовательности).'
+        'Разработка трансляторов исходного кода между языками на основе правил (C# -> C++, C# -> Python, C++ -> Java, Python -> Nim, C# -> Python, Java -> C++).'
+        'Разработка ботов: VK бот организации взаимодействия внутри сообщества программистов, Discord бот для автоматической регистрации пользователей в GitHub, GitHub бот для генерации репозиториев с исходным кодом и выполнения рутинных задач, торговый бот скальпер торгующий через Tinkoff Invest API.'
+        'Разработка поискового робота (паука), который загружает веб-страницы в ассоциативное хранилище.'
+        'Разработка дополнительных библиотек для разработчиков.'
+        'Разработка ассоциативной теории.'
+        'Разработка нотации связей.'
+        'Разработка различных способов визуализации сетей связей.'
+        'Проведение исследований и экспериментов.'
+        'Разработка демонстрационных проектов.'
+        ' '
+        'Навыки, технологии и инструменты: Rust, C# (.NET Core, .NET Framework), C/C++, JavaScript, HTML, CSS, Visual Studio, Visual Studio Code, Rider, Git, GitHub, NuGet, PVS-Studio, ASP.NET MVC, SQLite, jQuery, OBS-Studio, Unix shell, Python, TeX, DocFX, Travis CI, git, GitHub, GitHub Actions'
+    job
+      company 'АО «ЭЛАР»'
+      position 'Программист'
+      start 2014-05
+      end 2014-12
+      description
+        'Разработка и поддержка Адаптера между СУВ ОАО «Газпромбанк» и системой АО «ЭЛАР» Saperion.'
+        'Разработка компонента для импорта распознанных документов (счёт-фактуры и т.п.).'
+        'Разработка и поддержка системы АИС Архив, используемой государственными архивами.'
+        'Разработка компонента для сжатия PDF документов.'
+        'Разработка и поддержка системы для ФИПС (автоматизация распознавания перечня видов деятельности для регистрации патента).'
+        ' '
+        'Использовавшиеся навыки: TFS, MS SQL, MS Access, Visual Studio, C#, ASP.NET WebForms, WinForms, HTML, CSS, Javascript, jQuery, ABBYY FineReader Engine, Aspose, NetBeans, Java.'
+    job
+      company 'ЗАО «Термика», ЗАО «Термика-плюс»'
+      position 'Программист .net'
+      start 2013-04
+      end 2014-04
+      description
+        'Разработка системы Производственный Контроль для ОАО «НК «Роснефть».'
+        ' '
+        'Использовавшиеся навыки: Subversion, MS SQL, MSSQL CE, SQLite, VistaDB, InfoPath, Visual Studio, C#, WPF, Telerik, Stimulsoft.'
+    job
+      company 'ООО «Пегас»'
+      position 'Программист-разработчик'
+      start 2009-09
+      end 2011-03
+      description
+        'Разработка и поддержка единой системы управления туроператором:'
+        '1. Разработка единой системы управления туроператором для всех сотрудников компании, с возможностью доступа из любой точки мира с разграничением прав, мультиязычностью данных и интерфейса и валидацией форм.'
+        '2. Разработка подсистемы расчёта цен туров, проживания в отелях, авиаперелётов и др.'
+        '3. Разработка подсистемы поиска и бронирования туров для физических и юридических лиц.'
+        ' '
+        'Использовавшиеся навыки: Subversion, MS SQL, Visual Studio, C#, WCF, Silverlight, WinForms, DevExpress, ASP.NET MVC, HTML, CSS, Javascript, jQuery.'
+    job
+      company 'ООО «АльпОнлайн»'
+      position 'Программист-разработчик'
+      start 2008-05
+      end 2009-08
+      description
+        'Разработка системы поиска и бронирования туров для турагентств.'
+        'Автоматизированный сбор предложений туроператоров в единую базу данных для унификации и нормализации данных.'
+        'Разработка поискового движка, позволяющего искать подходящие клиенту туры менее чем за 0.1 секунды по сотням млн. туров (каждый тур состоит из списка перелётов, мест проживания, и дополнительных услуг).'
+        'Разработка системы управления базой данных туров для ввода качественных и унифицированных описаний компонентов тура и синхронизации данных с системами десятков крупнейших туроператоров России.'
+        ' '
+        'Использовавшиеся навыки: SourceSafe, Subversion, MSSQL, Visual Studio, C#, AJAX, ASP.NET WebForms, WinForms, HTML, CSS, JavaScript, Excel.'
+    job
+      company 'Игровой сервер Ragnarok Online «AsgardRo»'
+      position 'Ведущий разработчик'
+      start 2007-09
+      end 2008-04
+      description
+        'Организация совместной разработки, разработка дополнений и расширений ядра игрового сервера, разработка расширений для защиты системы от злоумышленников, помощь в разработке новой версии сайта, разработка скриптов квестов для игроков.'
+        ' '
+        'Использовавшиеся навыки: Subversion, MySQL, Visual Studio, C/C++, IDA, PHP, HTML, CSS, JavaScript, MVC, Lua.'
+    job
+      company 'Интернет магазин подарков «ArtBridge»'
+      position 'Веб-программист'
+      start 2006-11
+      end 2007-08
+      description
+        'Поддержка и разработка дополнений и расширений для сайта магазина, автоматизированный импорт данных через Excel в базу данных.'
+        ' '
+        'Использовавшиеся навыки: MySQL, HTML, CSS, JavaScript, PHP, Excel.'

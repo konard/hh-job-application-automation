@@ -642,6 +642,30 @@ because it holds personal data:
 | `resume.json` | Name, position, update date, key skills, jobs and the collected stack |
 | `stack.md` | Every technology once, key skills, "Технические навыки" categories, and per job the listed technologies ("Используемые технологии", "Использовавшиеся навыки", …) plus those only mentioned in the description |
 
+`bun run resume -- --all` exports every resume of the account, each to `<out>/<hash>/`.
+
+### The Resume as .lino Files (Export and Import)
+
+```bash
+bun run cv -- export                       # every resume to examples/cv.<language>.lino
+bun run cv -- import --lang en             # bring hh.ru in line with examples/cv.en.lino
+bun run cv -- import ~/my-cv.ru.lino --resume <hash>
+```
+
+Each resume becomes one indented file: title, «Навыки», «Обо мне» and the jobs, a text line
+per line (`' '` is an empty line), dates as `2026-05` or `present`. The Russian and English
+files have the same layout, so they compare line by line:
+[examples/cv.ru.lino](examples/cv.ru.lino), [examples/cv.en.lino](examples/cv.en.lino).
+Contacts, salary and birth date are never written: the export stops when a text holds one.
+
+`import` reads the resume again and goes to the one with the file's title (else the only one in
+its language, or `--resume`). Each changed or new job is prefilled in the hh.ru slot (port 9351)
+and saved only when you type `y` or click «Сохранить» there; `s` leaves it unsaved. Then the
+resume is read again and what still differs is shown. hh.ru keeps jobs for the whole profile:
+editing a job that other resumes show changes it there too (it says so), and a new job is shown
+in the target resume only. Title, «Навыки» and «Обо мне» differences are listed for you to
+change.
+
 ### Captcha, Pauses and the Chat Panel
 
 - **Captcha**: when hh.ru shows a captcha, the run touches nothing on the page (no clicks,

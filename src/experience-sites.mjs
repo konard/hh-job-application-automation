@@ -652,6 +652,8 @@ const HH = {
   monthSelect: '[data-qa="magritte-select-activator"]',
   save: '[data-qa="profile-layout-save-button"]',
   cancel: '[data-qa="profile-layout-cancel-button"]',
+  /** Followed by a resume's hash */
+  resumeCheckbox: 'profile-resumes-list-checkbox-',
 };
 
 /**
@@ -807,6 +809,30 @@ export const hhExperienceDescription = (page) => page.locator(HH.description).fi
 
 /** Whether hh.ru's experience form is open in the page */
 export const hhExperienceFormOpen = (page) => page.locator(HH.position).count().then((count) => count > 0, () => false);
+
+/**
+ * The resumes of the profile that show the job of hh.ru's open experience form (its checkboxes):
+ * hh.ru keeps jobs for the whole profile, each resume picks the ones it shows
+ * @param {Object} page
+ * @returns {Promise<Array<{hash: string, checked: boolean}>>}
+ */
+export const hhExperienceResumes = (page) => page.evaluate((prefix) => [...document.querySelectorAll(`[data-qa^="${prefix}"]`)].map((element) => {
+  const input = element.matches('input') ? element : element.querySelector('input[type="checkbox"]');
+  return { hash: element.getAttribute('data-qa').slice(prefix.length), checked: Boolean(input?.checked ?? element.getAttribute('aria-checked') === 'true') };
+}), HH.resumeCheckbox).catch(() => []);
+
+/**
+ * Show the job of hh.ru's open experience form in these resumes only
+ * @param {Object} page
+ * @param {string[]} hashes
+ */
+export async function setHhExperienceResumes(page, hashes) {
+  for (const { hash, checked } of await hhExperienceResumes(page)) {
+    if (checked !== hashes.includes(hash)) {
+      await page.locator(`[data-qa="${HH.resumeCheckbox}${hash}"]`).first().click({ force: true }).catch(() => {});
+    }
+  }
+}
 
 /**
  * Save hh.ru's open experience form (only after the user's `y`), then wait for it to close

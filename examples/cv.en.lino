@@ -1,0 +1,209 @@
+resume
+  language en
+  name 'Дьяченко Константин Константинович'
+  title 'TeamLead/Senior Full-stack Developer'
+  skills
+    'SQL'
+    'PHP'
+    'Java'
+    'Pascal'
+    'C'
+    'C++'
+    'Rust'
+    'Go'
+    'Kotlin'
+    'BASIC'
+    'GraphQL'
+    'TypeScript'
+    'JavaScript'
+    'CSS'
+    'HTML'
+    'C#'
+    'Git'
+    'GitHub'
+    'MongoDB'
+    'PostgreSQL'
+    'Windows'
+    'Linux'
+    'Mac Os'
+    'iOS'
+    'Android'
+    'GitHub Actions'
+    'MS Office'
+    'Shell Scripting'
+    'Python'
+    'Docker'
+  about
+    'I am a programmer and developer. I started programming at the age of 10, in the year 2000. Over this time, I have become familiar with and actively used a wide range of languages and technologies. I can perform the roles of a technical director and software architect. I prefer to communicate in writing, have significant experience in interpersonal communication and conflict resolution, and can coordinate development within and between teams. I also teach programming. I can manage social media and interact with the audience. I write articles on programming and mathematics. I have a strong interest in mathematics, physics, psychology, and philosophy.'
+    ' '
+    'Technical Skills'
+    'Platforms:'
+    'Windows, Linux (Gentoo, Ubuntu), macOS, iOS, Android'
+    'Languages:'
+    'Rust, TypeScript, JavaScript, C#, C/C++, Python, SQL, GraphQL, WebAssembly, Assembly, PHP, Java, Kotlin, Go, Nemerle, Visual Basic, Basic, Pascal, VBA, Unix shell, , Makefile, Lisp, Haskell, Lua, LaTeX, Wolfram Language'
+    'Tools:'
+    'TFS, SourceSafe, Subversion, Git, Visual Studio, Visual Studio Code, IntelliJ IDEA, Rider, WebStorm, CLion, PHPStorm, PyCharm, phpMyAdmin, Travis CI, GitHub Actions, GitLab CI/CD, Resharper, Microsoft Server Management Studio, SQL Profiler, IDA, Cutter, PVS-Studio, NetBeans, OBS-Studio, NuGet, NPM, Cargo, PyPi, Conan, Excel, Access, Word, PowerPoint, Project, InfoPath, Active Directory, ABBYY FineReader Engine, Adobe Reader, Adobe Flash, Silverlight, 1C:Document Management, Docker, Kubernetes, Grafana, Prometheus, draw.io, Wolfram Mathematica, TeX, Jupyter Notebook, Elasticsearch, Fiddler, Google Chrome, Safari, Firefox, Internet Explorer, Opera, Hashcat, Android Studio, XCode, Apache, nginx, Azure, Selectel, Drupal, WordPress, Google, Bing, pytorch, tensorflow, GPT-4o, Midjourney, Blender, Inkscape, Gimp, Total Commander, ssh, ftp, git, cmd, calc, notepad, nano, paint, ping, selenium, Telegram, VK, GitHub, GitLab'
+    'Methods:'
+    'Scrum, Agile, Extreme programming'
+    'Technologies:'
+    '.NET, .NET Framework, .NET Core, ASP.NET WebForms, ASP.NET MVC, WCF, Silverlight, WinForms, WPF, HTML, CSS, jQuery, Bootstrap, DevExpress, Telerik, Stimulsoft, Aspose, Node.js, SQL SR, React.js, Vue.js, Angular, Next.js, Electron, Capacitor, Apache Cordova, Firebase, Hasura, Minio, Hasura Storage'
+    'Databases:'
+    'MS SQL, SQLite, MS SQL CE, MySQL, MariaDB, PostgreSQL, MongoDB, VistaDB, Links Platform (Doublets, Triplets)'
+    'Personal:'
+    'Touch typing in English and Russian keyboard layouts at 335 characters/min.'
+  jobs
+    job
+      company 'ООО "ЕВИРМА"'
+      position 'Tech Lead'
+      start 2026-05
+      end present
+      description
+        'Автоматизация программирования сервисов на PHP и GO c использованием ИИ через Claude Code, Codex, автоматизация CI/CD, разработка тестового стенда, исправление ошибок, автоматизация исправления ошибок в sentry через ИИ. Поддержка продукта и разработка новых фичей. Разработка блока управления расписанием рекламных компаний. Разработка сервиса по парсингу данных с Wildberries. Разработка ИИ роутера для упрощения доступа к ИИ провайдерам для автономных агентов и сотрудников компании.'
+        ' '
+        'Используемые технологии:'
+        'PHP 8, Symfony 7, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker, GitHub Actions, Sentry, Anthropic Claude Code CLI, OpenAI Codex CLI'
+    job
+      company 'Kaiten'
+      position 'Старший инженер-программист'
+      start 2024-07
+      end present
+      description
+        'Development and support of the business process management system Kaiten.ru.'
+        ' '
+        'Participation in the development of the add-ons subsystem and the creation of the Yandex.Disk add-on. Contributed to the development of the Convertinator application, specifically for converting data from ClickUp into a format for universal import into Kaiten.'
+    job
+      company 'Capico LLC'
+      position 'Senior software engineer'
+      start 2025-11
+      end 2026-05
+      description
+        'Разработка торговой системы Grid для бирж ByBit и BitGet. Поддержка и улучшения UI/UX для торгового терминала и других компонентов системы торгового агрегатора.'
+        ' '
+        'Используемые технологии:'
+        'GitLab, GitLab CI/CD, Git, PostgreSQL, InfluxDB, Redis, Rust, Vue.js, TradingView, Anthropic Claude Code CLI, OpenAI Codex CLI'
+    job
+      company 'Deep.Foundation'
+      position 'Co-founder, CTO'
+      start 2022-09
+      end 2024-06
+      description
+        'Managing a team of programmers from various countries, formulating tasks, coordinating task execution, ensuring code quality and adherence to code style conventions, guaranteeing that code is covered with documentation, code examples, tests, and benchmarks, verifying the operability of the developed software solutions, developing continuous integration and delivery.'
+        'Managing social media and interacting with the audience.'
+        'Developing a data-oriented associative operating system and application (super-app), a development environment for cross-platform multilingual multi-paradigm cloud and local associative applications.'
+        'Developing the architecture of the Deep ecosystem.'
+        'Developing schemas, migrations, and GraphQL API for PostgreSQL with Hasura making flexible permissions possible.'
+        'Developing an ecosystem of isolated code executors (event handlers for links events in JS, PHP, Python, Rust, C/C++, Kotlin, etc.).'
+        'Developing an adapter for the NPM package manager for the ecosystem of associative packages (currently over 330+ packages).'
+        'Developing associative packages for the Deep ecosystem (types of links, sets/datasets of prepared links, and behavior as code in various languages stored as links).'
+        'Developing integration with Amazon AWS S3 compatible file storage (HasuraStorage/minio).'
+        'Developing additional libraries for developers.'
+        'Developing an associative theory.'
+        'Writing documentation and articles for Habr community, creating educational videos.'
+        'Developing various ways to visualize link networks.'
+        'Conducting research and experiments.'
+        ' '
+        'Demo projects development:'
+        '1. GPT-4o Discord bot;'
+        '2. News analytics system (RSS loading, words cloud visualization based on frequency of occurrence);'
+        '3. Deep.Memo - an application for recording data from all sensors of a phone, tablet, or computer into associative storage;'
+        '4. Deep.Me - a personal representative/agent of the user on the internet;'
+        '5. Deep.Chain - an associative blockchain with smart contract support for bookkeeping of developers community;'
+        '6. Discord code executor bot for JavaScript;'
+        '7. Telegram bot for smart/intelligent search and questions and answers using a combination of full-text and vector search and GPT-4o for current legislation of the Russian Federation (can be applied to laws of other countries);'
+        '8. Deep.GPT - Telegram bot gateway to GPT-4o;'
+        '9. Smart store as web application with products showcase accessible through voice and text chat using GPT-4o as assistant fundation.'
+        ' '
+        'Skills, technologies, and tools: Rust, C/C++, Python, PHP, Kotlin, TypeScript, JavaScript, HTML, CSS, React.JS, Next.JS, Express.JS, Visual Studio Code, XCode, Android Studio, NPM, PyPi, OBS-Studio, Unix shell, LaTeX, TeX, jsdoc, GitHub Actions, Selectel, Docker, Kubernetes, PostgreSQL, Git, GitHub, GitHub Actions, SQL, PostgreSQL, Hasura, GraphQL, minio, HasuraStorage, Elasticsearch, iOS, Android, Linux, Windows, macOS, Electron, Capacitor, Apache Cordova.'
+    job
+      company 'Abracar LLC'
+      position 'Programmer'
+      start 2020-07
+      end 2022-08
+      description
+        'Developing and maintaining the car and apartment sharing platform ShakeApp.'
+        ' '
+        'Skills used: GitLab, GitLab CI/CD, Git, PostgreSQL, SQL, Hasura, GraphQL, minio, HasuraStorage, Selectel, Docker, Kubernetes, Grafana, Prometheus, draw.io, Visual Studio Code, XCode, Android Studio, TypeScript, JavaScript, Next.JS, React.JS, HTML, CSS, iOS, Android, Capacitor, Apache Cordova'
+    job
+      company 'LinksPlatform'
+      position 'Founder, CTO'
+      start 2015-01
+      end 2020-06
+      description
+        'Managing a team of programmers from multiple countries, tasks formulation and decomposition, coordinating task execution, ensuring code quality and adherence to code style conventions, guidelines and best practices, guaranteeing that code is covered with documentation, code examples, tests, and benchmarks, verifying the operability of the developed software solutions, developing continuous integration and delivery.'
+        'Managing social media and interacting with the audience.'
+        'Developing associative engine constructors for associative databases (Doublets, Triplets, Sequences).'
+        'Developing source code translators between languages based on rules (C# -> C++, C# -> Python, C++ -> Java, Python -> Nim, C# -> Python, Java -> C++).'
+        'Developing bots: VK bot for organizing interactions within the programmer community, Discord bot for automatic GitHub user registration, GitHub bot for generating repositories with source code and performing routine tasks, trading scalping bot trading via Tinkoff Invest API.'
+        'Developing a search robot (web crawler) that loads web pages into associative storage.'
+        'Developing additional libraries for developers.'
+        'Developing associative theory.'
+        'Developing link notation, a data exchange format/protocol.'
+        'Developing various ways to visualize link networks.'
+        'Conducting research and experiments.'
+        'Developing demonstration projects.'
+        ' '
+        'Skills, technologies, and tools: Rust, C# (.NET Core, .NET Framework), C/C++, JavaScript, HTML, CSS, Visual Studio, Visual Studio Code, Rider, Git, GitHub, NuGet, PVS-Studio, ASP.NET MVC, SQLite, jQuery, OBS-Studio, Unix shell, Python, TeX, DocFX, Travis CI, git, GitHub, GitHub Actions.'
+    job
+      company 'ELAR JSC'
+      position 'Programmer'
+      start 2014-05
+      end 2014-12
+      description
+        "Developing and maintaining an adapter between the database management system of Gazprombank and ELAR JSC's Saperion system."
+        'Developing a component for importing automatically recognized documents (invoices, etc.) using OCR.'
+        'Developing and maintaining the AIS Archive system used by state archives.'
+        'Developing a component for compressing PDF documents.'
+        'Developing and maintaining a system for FIPS (automation of activity type recognition for patent registration).'
+        ' '
+        'Skills used: TFS, MS SQL, MS Access, Visual Studio, C#, ASP.NET WebForms, WinForms, HTML, CSS, Javascript, jQuery, ABBYY FineReader Engine, Aspose, NetBeans, Java.'
+    job
+      company 'Termika CJSC, Termika-Plus CJSC'
+      position '.NET Programmer'
+      start 2013-04
+      end 2014-04
+      description
+        'Developing the Production Control system for Rosneft Oil Company.'
+        ' '
+        'Skills used: Subversion, MS SQL, MSSQL CE, SQLite, VistaDB, InfoPath, Visual Studio, C#, WPF, Telerik, Stimulsoft.'
+    job
+      company 'Pegas LLC'
+      position 'Software Developer'
+      start 2009-09
+      end 2011-03
+      description
+        'Developing and maintaining a unified tour operator management system:'
+        '1. Developing a unified tour operator management system for all company employees, with access from anywhere in the world, role-based access control, multilingual data and UI and form validation with guided help.'
+        '2. Developing a subsystem for calculating tour prices, hotel accomodation, flights, etc.'
+        '3. Developing a subsystem for searching and booking tours for individuals and legal entities.'
+        ' '
+        'Skills used: Subversion, MS SQL, Visual Studio, C#, WCF, Silverlight, WinForms, DevExpress, ASP.NET MVC, HTML, CSS, Javascript, jQuery.'
+    job
+      company 'AlpOnline LLC'
+      position 'Software Developer'
+      start 2008-05
+      end 2009-08
+      description
+        'Developing a tour search and booking system for travel agencies.'
+        'Automated aggregation of tour operator offers into a single database for data unification and normalization.'
+        'Developing a search engine that allows finding suitable tours for clients in less than 0.1 seconds across hundreds of millions of tours (each tour consists of a list of flights, accommodations, and additional services).'
+        'Developing a tour database management system for entering high-quality and unified descriptions of tour components and synchronizing data with the systems of dozens of the largest tour operators in Russia.'
+        ' '
+        'Skills used: SourceSafe, Subversion, MSSQL, Visual Studio, C#, AJAX, ASP.NET WebForms, WinForms, HTML, CSS, JavaScript, Excel.'
+    job
+      company 'Ragnarok Online Game Server "AsgardRo"'
+      position 'Lead Developer'
+      start 2007-09
+      end 2008-04
+      description
+        'Organizing collaborative development, developing additions and extensions for the game server core, developing extensions to protect the system from intruders, assisting in the development of a new version of the website, developing quest scripts for players.'
+        ' '
+        'Skills used: Subversion, MySQL, Visual Studio, C/C++, IDA, PHP, HTML, CSS, JavaScript, MVC, Lua.'
+    job
+      company 'Gift Online Store "ArtBridge"'
+      position 'Web Developer'
+      start 2006-11
+      end 2007-08
+      description
+        "Supporting and developing additions and extensions for the store's website, automated data import through Excel into the database."
+        ' '
+        'Skills used: MySQL, HTML, CSS, JavaScript, PHP, Excel, Lua.'

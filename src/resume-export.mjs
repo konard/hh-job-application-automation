@@ -36,6 +36,11 @@ const argv = makeConfig({
         description: 'Resume hash (from https://hh.ru/resume/<hash>); default: the most recently updated resume',
         default: getenv('RESUME', ''),
       })
+      .option('all', {
+        type: 'boolean',
+        description: 'Export every resume of the account, each to <out>/<hash>/',
+        default: false,
+      })
       .option('browser-port', {
         type: 'number',
         description: 'Remote debugging port of the running automation browser to copy the hh.ru login from',
@@ -137,8 +142,8 @@ async function main() {
     const commander = tracingEnabled() ? makeBrowserCommander({ page, enableNetworkTracking: false }) : null;
     tracing = commander ? await createTracing({ commander, page, name: 'resume-export' }).catch(() => null) : null;
 
-    let hash = argv.resume;
-    if (!hash) {
+    let hashes = argv.resume ? [argv.resume] : [];
+    if (hashes.length === 0) {
       await page.goto(RESUMES_URL, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector(SELECTORS.resume, { timeout: 20000 }).catch(() => {});
       const resumes = await readResumes({ evaluate: (fn, arg) => page.evaluate(fn, arg) });
@@ -146,62 +151,74 @@ async function main() {
       if (!choice.resume?.hash) {
         throw new Error(`No resumes found on ${RESUMES_URL}; is the browser on port ${argv.browserPort} logged in to hh.ru?`);
       }
-      hash = choice.resume.hash;
-      console.log(describeChoice(choice, resumes.length));
+      hashes = argv.all ? resumes.map((resume) => resume.hash).filter(Boolean) : [choice.resume.hash];
+      console.log(argv.all ? `📄 ${hashes.length} resume(s)` : describeChoice(choice, resumes.length));
     }
-
-    // Download from inside the page, so the browser's own TLS stack and cookies are used
-    // and no error message can carry the cookie header
-    await page.goto(`https://hh.ru/resume/${hash}`, { waitUntil: 'domcontentloaded' });
-    await fs.mkdir(argv.out, { recursive: true });
-    const saved = {};
-    for (const format of formats) {
-      const download = await page.evaluate(async (url) => {
-        const response = await fetch(url, { credentials: 'include' });
-        if (!response.ok) {
-          return { status: response.status };
-        }
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        let binary = '';
-        for (let index = 0; index < bytes.length; index += 0x8000) {
-          binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-        }
-        return { status: response.status, base64: window.btoa(binary) };
-      }, `/resume_converter/resume.${format}?hash=${hash}&type=${format}`);
-      if (!download.base64) {
-        throw new Error(`Downloading the ${format} export failed: HTTP ${download.status}`);
-      }
-      const file = path.join(argv.out, `resume.${FILE_EXTENSIONS[format]}`);
-      await fs.writeFile(file, Buffer.from(download.base64, 'base64'));
-      saved[format] = file;
-      console.log(`⬇️  ${file}`);
+    for (const hash of hashes) {
+      await exportResume(page, hash, formats, argv.all ? path.join(argv.out, hash) : argv.out);
     }
-
-    const html = await fs.readFile(saved.txt, 'utf8');
-    await page.setContent(html, { waitUntil: 'domcontentloaded' });
-    const resume = { hash, url: `https://hh.ru/resume/${hash}`, ...(await readResumeExport(page)) };
-    const plainText = await page.evaluate(() => document.body.innerText);
-
-    const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-' });
-    turndown.remove(['head', 'style', 'script', 'title']);
-    const stack = collectStack(resume);
-    const outputs = {
-      'resume.md': `${turndown.turndown(html).replace(/\n{3,}/g, '\n\n').trim()}\n`,
-      'resume.txt': `${plainText.replace(/\n{3,}/g, '\n\n').trim()}\n`,
-      'resume.json': `${JSON.stringify({ ...resume, stack }, null, 2)}\n`,
-      'stack.md': formatStackMarkdown(stack, resume),
-    };
-    for (const [name, content] of Object.entries(outputs)) {
-      const file = path.join(argv.out, name);
-      await fs.writeFile(file, content);
-      console.log(`📝 ${file}`);
-    }
-
-    console.log(`\n🧰 ${stack.all.length} technologies: ${stack.all.join(', ')}`);
   } finally {
     await tracing?.stop().catch(() => {});
     await browser.close();
   }
+}
+
+/**
+ * Download one resume in the formats and write its Markdown, text, JSON and stack
+ * @param {import('playwright').Page} page
+ * @param {string} hash
+ * @param {string[]} formats
+ * @param {string} out - Output directory
+ */
+async function exportResume(page, hash, formats, out) {
+  // Download from inside the page, so the browser's own TLS stack and cookies are used
+  // and no error message can carry the cookie header
+  await page.goto(`https://hh.ru/resume/${hash}`, { waitUntil: 'domcontentloaded' });
+  await fs.mkdir(out, { recursive: true });
+  const saved = {};
+  for (const format of formats) {
+    const download = await page.evaluate(async (url) => {
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) {
+        return { status: response.status };
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      let binary = '';
+      for (let index = 0; index < bytes.length; index += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+      }
+      return { status: response.status, base64: window.btoa(binary) };
+    }, `/resume_converter/resume.${format}?hash=${hash}&type=${format}`);
+    if (!download.base64) {
+      throw new Error(`Downloading the ${format} export failed: HTTP ${download.status}`);
+    }
+    const file = path.join(out, `resume.${FILE_EXTENSIONS[format]}`);
+    await fs.writeFile(file, Buffer.from(download.base64, 'base64'));
+    saved[format] = file;
+    console.log(`⬇️  ${file}`);
+  }
+
+  const html = await fs.readFile(saved.txt, 'utf8');
+  await page.setContent(html, { waitUntil: 'domcontentloaded' });
+  const resume = { hash, url: `https://hh.ru/resume/${hash}`, ...(await readResumeExport(page)) };
+  const plainText = await page.evaluate(() => document.body.innerText);
+
+  const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-' });
+  turndown.remove(['head', 'style', 'script', 'title']);
+  const stack = collectStack(resume);
+  const outputs = {
+    'resume.md': `${turndown.turndown(html).replace(/\n{3,}/g, '\n\n').trim()}\n`,
+    'resume.txt': `${plainText.replace(/\n{3,}/g, '\n\n').trim()}\n`,
+    'resume.json': `${JSON.stringify({ ...resume, stack }, null, 2)}\n`,
+    'stack.md': formatStackMarkdown(stack, resume),
+  };
+  for (const [name, content] of Object.entries(outputs)) {
+    const file = path.join(out, name);
+    await fs.writeFile(file, content);
+    console.log(`📝 ${file}`);
+  }
+
+  console.log(`\n🧰 ${stack.all.length} technologies: ${stack.all.join(', ')}`);
 }
 
 main().catch((error) => {

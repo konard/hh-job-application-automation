@@ -16,6 +16,7 @@
     "stats": "bun src/stats.mjs",
     "answer-chats": "bun src/answer-chats.mjs",
     "experience": "bun src/experience-sync.mjs",
+    "cv": "bun src/cv-sync.mjs",
     "test-assignment": "bun src/test-assignment.mjs",
     "contacts-migrate": "bun src/contacts-migrate.mjs",
     "formalize-qa": "node src/formalize-qa.mjs",
