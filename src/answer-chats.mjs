@@ -700,7 +700,10 @@ const USER_IDLE_MS = 15000;
  */
 function readRejectionsAsTheyShow({ leaveAlone }) {
   let busy = false;
+  // A chat with its last message: a new message in a chat handled before (a rejection after a
+  // template was answered) is read too
   const tried = new Set();
+  const triedKey = (chat) => `${chat.id}\n${chat.last}`;
   const timer = setInterval(async () => {
     if (busy || leaveAlone() || page.isClosed() || !/^https:\/\/hh\.ru\/chat(\/|$|\?)/.test(page.url())) {
       return;
@@ -711,7 +714,7 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
     try {
       for (;;) {
         // A rejection, or a saved template to answer (--auto-send) or only read
-        const onScreen = (await chatsOnScreen()).filter((chat) => !tried.has(chat.id));
+        const onScreen = (await chatsOnScreen()).filter((chat) => !tried.has(triedKey(chat)));
         const templates = await templatesDb.readQADatabase();
         const template = (chat) => (chat.unread && !isRejectionCell(chat) ? templateCell(chat, templates) : null);
         const rejection = visibleRejections(onScreen)[0] ??
@@ -720,7 +723,7 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
         if (!rejection || !user || user.typing || Date.now() - user.at < USER_IDLE_MS || leaveAlone()) {
           break;
         }
-        tried.add(rejection.id);
+        tried.add(triedKey(rejection));
         await page.evaluate(() => { window.__chatAutomating = true; });
         const cell = page.locator(`[data-qa="chatik-open-chat-${rejection.id}"]`).first();
         if (!await human.click(cell) ||
