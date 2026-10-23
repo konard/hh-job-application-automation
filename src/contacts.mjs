@@ -16,6 +16,9 @@ import { inferSalaryAnswer, learnSalaryPatterns } from './salary-questions.mjs';
 /** Contacts written back as placeholders when they appear in a saved answer */
 const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd', 'salary_gross_usdt', 'salary_net_usdt', 'salary_gross_eur', 'salary_net_eur'];
 
+/** A link cut at its colon by the .lino reader: only its scheme is left */
+export const cutLink = (value) => typeof value === 'string' && /^(?:https?|ftp|mailto|tg)$/i.test(value.trim());
+
 /**
  * @param {string} filePath - data/contacts.lino
  * @returns {Promise<Object<string, string|string[]>>}
@@ -23,6 +26,14 @@ const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 's
 export async function loadContacts(filePath, { rates = exchangeRates, companyTaxesFile = COMPANY_TAXES_FILE } = {}) {
   const entries = await createQADatabase(filePath).readQADatabase();
   const contacts = Object.fromEntries([...entries].map(([key, value]) => [key, Array.isArray(value) ? value : String(value)]));
+  // A link not in quotes is cut at its colon («https»): left out, or every «https» in an answer
+  // would become its placeholder
+  for (const [key, value] of Object.entries(contacts)) {
+    if (cutLink(value)) {
+      console.log(`⚠️  The ${key} of ${filePath} is cut at its colon: put the link in quotes ("https://…")`);
+      delete contacts[key];
+    }
+  }
   // Salary answers ({{salary_gross}}, …) from the net baselines in rubles, dollars and euros (salary.mjs)
   const amount = (key) => Number(String(contacts[key] ?? '').replace(/\D/g, ''));
   const [netRub, netUsd, netEur] = [amount('salary_net_rub'), amount('salary_net_usd'), amount('salary_net_eur')];

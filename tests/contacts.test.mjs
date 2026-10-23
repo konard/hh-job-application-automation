@@ -2,7 +2,10 @@
  * Tests for contacts as placeholders in saved answers and the cover letter
  */
 import { describe, test, assert } from 'test-anywhere';
-import { contractContacts, expandContacts, withContacts } from '../src/contacts.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { contractContacts, cutLink, expandContacts, loadContacts, withContacts } from '../src/contacts.mjs';
 
 const contacts = {
   telegram: '@petr_dev',
@@ -42,5 +45,21 @@ describe('contacts', () => {
     assert.deepEqual(writes, []);
     await db.addOrUpdateQA('Ваш LinkedIn?', 'https://www.linkedin.com/in/petr');
     assert.deepEqual(writes, [['Ваш LinkedIn?', '{{linkedin}}']]);
+  });
+});
+
+describe('a link not in quotes in contacts.lino', () => {
+  test('is cut at its colon by the reader, so it is left out rather than turn every «https» into a placeholder', async () => {
+    assert.equal(cutLink('https'), true);
+    assert.equal(cutLink('https://www.linkedin.com/in/petr'), false);
+    assert.equal(cutLink(['https']), false);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'contacts-'));
+    const file = path.join(dir, 'contacts.lino');
+    fs.writeFileSync(file, 'telegram\n  "@petr_dev"\nlinkedin\n  https://www.linkedin.com/in/petr\n');
+    const loaded = await loadContacts(file);
+    assert.equal(loaded.linkedin, undefined);
+    assert.equal(contractContacts('https://github.com/petr', loaded), 'https://github.com/petr');
+    fs.writeFileSync(file, 'linkedin\n  "https://www.linkedin.com/in/petr"\n');
+    assert.equal((await loadContacts(file)).linkedin, 'https://www.linkedin.com/in/petr');
   });
 });
