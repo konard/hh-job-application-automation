@@ -23,7 +23,7 @@ import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
-import { ADAPTIVE_PACE, adaptivePace, nextVacancyAt } from './pacing.mjs';
+import { ADAPTIVE_PACE, adaptivePace, limitHeldUntil, nextVacancyAt } from './pacing.mjs';
 import { paceLine, readEvents, recordEvent } from './stats.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-attach.mjs';
@@ -94,8 +94,12 @@ export function createOrchestrator({
 
   // Applications already counted, since one can be detected by several handlers
   const sentVacancyIds = new Set();
-  // The next application waits until then, so the load on hh.ru stays low
-  let nextApplicationAt = 0;
+  // The next application waits until then, so the load on hh.ru stays low; after hh.ru's daily
+  // limit (of this run or one before) until the cooldown is over
+  let nextApplicationAt = limitHeldUntil(readEvents());
+  if (nextApplicationAt > 0) {
+    console.log(`💤 hh.ru's daily limit was reached: no vacancy is opened until ${new Date(nextApplicationAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+  }
   // When work on the vacancy began (the first vacancy looked at once the pause was over): the
   // pause counts from then, so a long form does not add a whole pause on top
   let workStartedAt = null;

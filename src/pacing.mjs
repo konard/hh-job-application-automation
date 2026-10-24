@@ -9,6 +9,22 @@
 
 /** hh.ru allows this many applications a day */
 export const DAILY_APPLICATION_LIMIT = 200;
+/** The wait after hh.ru's daily limit, before the next try */
+export const LIMIT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Until when the daily limit holds: the latest limit_reached event plus LIMIT_COOLDOWN_MS (so a
+ * restarted run waits too); 0 when it is over
+ * @param {Array<Object>} events - Of stats.mjs
+ * @param {number} [now=Date.now()]
+ * @returns {number} Milliseconds since the epoch, or 0
+ */
+export function limitHeldUntil(events, now = Date.now()) {
+  const last = events.filter((event) => event.type === 'limit_reached').at(-1);
+  const until = last ? Date.parse(last.at) + LIMIT_COOLDOWN_MS : 0;
+  return until > now ? until : 0;
+}
+
 /** The random extra is up to this share of the interval */
 const RANDOM_SHARE = 0.25;
 

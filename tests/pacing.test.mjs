@@ -2,7 +2,7 @@
  * Tests for the pause between vacancies
  */
 import { describe, test, assert } from 'test-anywhere';
-import { ADAPTIVE_PACE, DAILY_APPLICATION_LIMIT, adaptivePace, nextVacancyAt, pauseMs, worstCaseApplicationsPerDay } from '../src/pacing.mjs';
+import { ADAPTIVE_PACE, DAILY_APPLICATION_LIMIT, LIMIT_COOLDOWN_MS, adaptivePace, limitHeldUntil, nextVacancyAt, pauseMs, worstCaseApplicationsPerDay } from '../src/pacing.mjs';
 
 const DEFAULT_INTERVAL_MS = 240000;
 
@@ -86,5 +86,18 @@ describe('adaptivePace', () => {
     assert.equal(adaptivePace([reset, { ...captcha(1), host: 'forms.yandex.ru' }]).captchas, 0);
     assert.equal(adaptivePace([captcha(1), reset]).captchas, 0);
     assert.equal(adaptivePace([reset, sent(1)]).intervalMs, adaptivePace([reset, sent(1)]).intervalMs);
+  });
+});
+
+describe('limitHeldUntil', () => {
+  const now = Date.parse('2026-10-24T08:00:00Z');
+  test('2 hours from the latest limit, also for a run started after it', () => {
+    const events = [{ at: '2026-10-23T08:00:00Z', type: 'limit_reached' }, { at: '2026-10-24T07:30:00Z', type: 'limit_reached' }, { at: '2026-10-24T07:40:00Z', type: 'application_sent' }];
+    assert.equal(LIMIT_COOLDOWN_MS, 2 * 60 * 60 * 1000);
+    assert.equal(limitHeldUntil(events, now), Date.parse('2026-10-24T09:30:00Z'));
+  });
+  test('0 once it is over, or without a limit', () => {
+    assert.equal(limitHeldUntil([{ at: '2026-10-24T05:59:00Z', type: 'limit_reached' }], now), 0);
+    assert.equal(limitHeldUntil([], now), 0);
   });
 });

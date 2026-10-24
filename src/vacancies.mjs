@@ -16,13 +16,11 @@ import { findCoverLetterToggle, isButtonEnabled, typeLongText } from './helpers/
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { recordEvent } from './stats.mjs';
+import { LIMIT_COOLDOWN_MS } from './pacing.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
 import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
-
-/** The wait after hh.ru's daily limit, before the next try */
-export const LIMIT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 /**
  * Handle limit error when detected
