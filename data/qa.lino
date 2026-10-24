@@ -4597,7 +4597,7 @@ test('does not change the original array', isSameArray(original, [1, 1, 2]));"
 "Подскажите, где проживаете (страна)?"
   Вьетнам
 "С какими БД ты работал(а)?"
-  "PostgreSQL, ClickHouse, MySQL, MSSQL, SQLite, MongoDB, Redis, InfluxDB, Neo4j. ClickHouse на текущем месте работы (Evirma): аналитика по частотности поисковых запросов и статистике товаров. Также разрабатывал собственный движок ассоциативной СУБД (LinksPlatform)."
+  "PostgreSQL, ClickHouse, MySQL, MSSQL, SQLite, MongoDB, Redis, InfluxDB, Neo4j, ClickHouse. Также разрабатывал собственный движок ассоциативной СУБД (LinksPlatform)."
 Есть ли опыт работы с dbt?
   Нет
 Есть ли опыт с AppsFlyer?
