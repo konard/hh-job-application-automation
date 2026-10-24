@@ -21,17 +21,21 @@ import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
 
+/** The wait after hh.ru's daily limit, before the next try */
+export const LIMIT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
 /**
  * Handle limit error when detected
- * Closes modal, waits 1 hour, and refreshes the page
+ * Closes modal, waits LIMIT_COOLDOWN_MS (2 hours), and refreshes the page
  */
 export async function handleLimitError({ commander, START_URL }) {
   console.log('⚠️  Limit reached: 200 applications in 24 hours');
   recordEvent('limit_reached');
-  console.log('💤 Waiting 1 hour before retrying...');
+  const until = new Date(Date.now() + LIMIT_COOLDOWN_MS).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  console.log(`💤 Waiting ${LIMIT_COOLDOWN_MS / 3600000} hours before retrying (until ${until})...`);
 
   await closeModalIfPresent({ commander });
-  await commander.wait({ ms: 60 * 60 * 1000, reason: '200 application limit cooldown (1 hour)' });
+  await commander.wait({ ms: LIMIT_COOLDOWN_MS, reason: `200 application limit cooldown (${LIMIT_COOLDOWN_MS / 3600000} hours)` });
 
   console.log('🔄 Refreshing the page after wait period...');
   await commander.goto({ url: START_URL });
@@ -361,6 +365,10 @@ export async function processModalApplication({
   if (!confirmed && passing && isPassingError(await popupError(commander))) {
     console.log(`⏭️  Vacancy ${vacancyId}: hh.ru still answers «Произошла ошибка»; set aside, tried again on a later run`);
     return skip('send_error');
+  }
+  // hh.ru answers the click with its daily limit (shown in the popup): nothing was sent
+  if (!confirmed && await hasLimitError({ commander })) {
+    return { success: false, reason: 'limit_reached' };
   }
   if (!confirmed) {
     console.log(`⚠️  hh.ru did not mark vacancy ${vacancyId} as responded, manual check required`);
@@ -906,6 +914,11 @@ export async function findAndProcessVacancyButton({
   if (submitResult.reason === FULL_FORM_OPENED.reason) {
     console.log('📝 hh.ru replaced the popup with the full application form:', commander.getUrl());
     return { status: 'vacancy_response_detected', vacancyId };
+  }
+  if (submitResult.reason === 'limit_reached') {
+    // Nothing was sent: the vacancy is opened again after the cooldown
+    processedVacancyIds.delete(vacancyId);
+    return { status: 'limit_error_after_submit', vacancyId };
   }
   if (!submitResult.success) {
     return { status: 'modal_processing_failed', reason: submitResult.reason, vacancyId };

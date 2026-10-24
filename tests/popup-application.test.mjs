@@ -232,6 +232,27 @@ describe('popup autofill and sending (unattended, --confirm none)', () => {
   });
 });
 
+describe('popup answered with hh.ru\'s daily limit', () => {
+  test('the limit shown after the send click is reported as such, not as an unconfirmed application', async () => {
+    disableConfirmations();
+    const { readQADatabase, addOrUpdateQA } = await context();
+    const popup = fakePopup({ questions: [] });
+    const count = popup.count;
+    let limit = false;
+    popup.count = async (options) => (options.selector === SELECTORS.limitExceededError ? (limit ? 1 : 0) : count(options));
+    // hh.ru keeps the popup open and shows the limit under the letter
+    popup.clickButton = async (options) => {
+      popup.state.clicks.push(options);
+      limit ||= options.selector === SELECTORS.submitButtonPopup;
+    };
+    const result = await processModalApplication({
+      commander: popup, MESSAGE: 'Здравствуйте', vacancyId: '138000020', readQADatabase, addOrUpdateQA, autoSendExact: true,
+    });
+    assert.deepEqual(result, { success: false, reason: 'limit_reached' });
+    assert.equal(sends(popup).length, 1);
+  });
+});
+
 describe('popup in an interactive run without --confirm send', () => {
   test('a popup with a non-exact answer is sent only after y', async () => {
     const input = new PassThrough();
