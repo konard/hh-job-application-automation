@@ -21,6 +21,16 @@ const fixture = async (fn) => {
 };
 
 describe('durable chat recording', () => {
+  test('a transitioning pane cannot change the archive or learned answers', () => fixture(async (dir) => {
+    const history = createChatHistory(path.join(dir, 'history.json'));
+    const qaDatabase = createQADatabase(path.join(dir, 'qa.lino'));
+    const changing = { ...chat('1', 'Wrong pane'), transitioning: true };
+    expect(await history.record(changing)).toBe(false);
+    await learnChatQuestions(changing, { history, qaDatabase, log: () => {} });
+    expect(await history.read()).toEqual({});
+    expect((await qaDatabase.readQADatabase()).size).toBe(0);
+  }));
+
   test('independent writers cannot lose chats or messages when their writes overlap', () => fixture(async (dir) => {
     const file = path.join(dir, 'history.json');
     await Promise.all(Array.from({ length: 12 }, (_, i) => createChatHistory(file).record(chat(String(i + 1), `Answer ${i}`))));
@@ -166,6 +176,35 @@ describe('durable chat recording', () => {
       globalThis.window = previousWindow;
       globalThis.document = previousDocument;
     }
+  });
+
+  test('clearing an unsent draft retries an unchanged choice question and replacing the observer removes its listener', async () => {
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const snapshots = [];
+    const listeners = new Set();
+    let disconnected = 0;
+    try {
+      globalThis.window = {
+        location: { pathname: '/chat/1' },
+        MutationObserver: class { observe() {} disconnect() { disconnected += 1; } },
+        __hhRecordChat: async (snapshot) => { snapshots.push(snapshot); },
+      };
+      globalThis.document = {
+        documentElement: {},
+        addEventListener: (_event, listener) => listeners.add(listener),
+        removeEventListener: (_event, listener) => listeners.delete(listener),
+      };
+      observeChat(() => chat('1', 'Unchanged'), '', 'first');
+      const input = (value) => ({ target: { matches: () => true, value } });
+      for (const listener of listeners) listener(input('My draft'));
+      expect(snapshots).toHaveLength(1);
+      for (const listener of listeners) listener(input(''));
+      expect(snapshots).toHaveLength(2);
+      observeChat(() => chat('1', 'Unchanged'), '', 'second');
+      expect(disconnected).toBe(1);
+      expect(listeners.size).toBe(1);
+    } finally { globalThis.window = previousWindow; globalThis.document = previousDocument; }
   });
 
   test('delivery acknowledgement alone saves a wide reply as an answer, without an employer response', () => fixture(async (dir) => {

@@ -21,6 +21,9 @@ import { isPattern } from './qa-database.mjs';
 const SALARY = /зарплат|заработн|з\s?\/\s?пл?(?!\p{L})|в\s+каком\s+диапазоне|(?<!\p{L})зп(?!\p{L})|оклад|вознагражден|(?:финансов|денежн)\p{L}*\s+(?:ожидани|пожелани|услови)|ожидани\p{L}*\s+по\s+(?:доход|оплат|вознагражд)|(?:уровень|уровня|уровне)\s+дохода|желаем\p{L}*\s+доход|(?:от|на)\s+как\p{L}*\s+сумм|вилк|компенсац|(?:ожидаем|желаем|комфортн)\p{L}*\s+(?:уров\p{L}*\s+)?(?:доход|оплат)|(?:уров|размер)\p{L}*\s+(?:ожидаемого\s+|желаемо\p{L}*\s+)?(?:доход|оплат)|доход\p{L}*\s+для\s+себя|salary|compensation|pay expectation|rate expectation/iu;
 /** Built-in words of a gross sum */
 const GROSS = /gross|гросс|брутто|до\s+(?:вычета|уплаты|налог|ндфл)|before\s+tax/iu;
+const NET = /\bnet\b|нетто|на\s+руки|после\s+(?:вычета|уплаты)|after\s+tax/iu;
+const PRIMARY_NET = /\bnet\s+(?:monthly\s+)?(?:salary|pay|income|compensation)\b/iu;
+export const ambiguousSalaryTax = (question) => NET.test(question) && GROSS.test(question);
 /**
  * Not the expected pay: a past or current job, a given sum or range to agree to, a sum in a year,
  * the pay as a word of something else (a bank card, a 1C module, the way it is paid)
@@ -134,9 +137,21 @@ export function salaryQuestion(question, patterns = null) {
     return null;
   }
   return {
-    shape: GROSS.test(text) || learned(patterns?.grossStems) > 0 ? 'gross' : 'net',
+    shape: PRIMARY_NET.test(text) ? 'net' : GROSS.test(text) || learned(patterns?.grossStems) > 0 ? 'gross' : 'net',
     language: english(text) ? 'en' : 'ru',
   };
+}
+
+/** Keep only compatible plain salary suggestions; the transcript and saved wording stay intact. */
+export function salaryAnswerForQuestion(question, answer) {
+  const asked = salaryQuestion(question);
+  if (!asked || Array.isArray(answer) || (!NET.test(question) && !GROSS.test(question)) ||
+    (ambiguousSalaryTax(question) && !PRIMARY_NET.test(question))) return answer;
+  const compatible = String(answer).split(' | ').filter((variant) => {
+    const shape = answerShape(variant);
+    return !shape?.plain || shape.shape === asked.shape;
+  });
+  return compatible.length ? compatible.join(' | ') : null;
 }
 
 /**

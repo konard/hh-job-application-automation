@@ -57,6 +57,7 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
 
 /** Persist the transcript first, then learn new questions; existing saved answers stay intact. */
 export async function learnChatQuestions(chat, { history, qaDatabase, buttonQuestions = new Set(), log = console.log }) {
+  if (chat?.transitioning) return;
   await history.record(chat);
   if (!chat?.id || isSupportChat(chat)) return;
   const kept = (await history.read())[chat.id] ?? chat;

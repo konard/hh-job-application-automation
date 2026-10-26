@@ -4,7 +4,7 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import { createConfig } from '../src/config.mjs';
-import { isChatAnswered } from '../src/chat-answers.mjs';
+import { isChatAnswered, userIsActive, USER_IDLE_MS } from '../src/chat-answers.mjs';
 
 const configOf = (...args) => {
   const saved = process.argv;
@@ -48,5 +48,24 @@ describe('isChatAnswered', () => {
 
   test('a chat closed for replies needs nothing more', () => {
     assert.equal(isChatAnswered({ canReply: false, messages: [employer] }), true);
+  });
+});
+
+describe('resuming rejection clearing after answering or switching chats', () => {
+  test('an empty reply field resumes clearing after the short idle grace', () => {
+    const sentAt = 100000;
+    const afterSending = { at: sentAt, typing: false };
+    assert.equal(userIsActive(afterSending, sentAt), true);
+    assert.equal(userIsActive(afterSending, sentAt + USER_IDLE_MS - 1), true);
+    assert.equal(userIsActive(afterSending, sentAt + USER_IDLE_MS), false);
+    // A pointer click into a different, closed chat starts the grace again, without pinning
+    // the automation to the previously answered chat or to the two-hour full-list poll.
+    const switched = { at: sentAt + USER_IDLE_MS, typing: false };
+    assert.equal(userIsActive(switched, switched.at + USER_IDLE_MS), false);
+  });
+
+  test('a draft or an unreadable activity state keeps the window with the user', () => {
+    assert.equal(userIsActive({ at: 1, typing: true }, USER_IDLE_MS * 10), true);
+    assert.equal(userIsActive(null), true);
   });
 });

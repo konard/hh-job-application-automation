@@ -70,7 +70,9 @@ export function readChat(turnedOffWords) {
   const header = document.querySelector('[data-qa="chatik-header-sub-header"]');
   const link = clean(header?.querySelector('[data-qa="chatik-header-vacancy-link"]')?.innerText);
   const headerLines = clean(header?.innerText).split('\n').map((line) => line.trim()).filter((line) => line && line !== link);
-  return {
+  const buttons = [...document.querySelectorAll('[class*="buttons-wrapper"]')]
+    .filter((element) => element.getClientRects().length > 0).at(-1);
+  const chat = {
     id: window.location.pathname.match(/\/chat\/(\d+)/)?.[1] ?? '',
     vacancy: headerLines.at(-1) ?? '',
     company: clean(document.querySelector('[data-qa="participant-info-title"]')?.innerText),
@@ -82,7 +84,26 @@ export function readChat(turnedOffWords) {
     // «Работодатель отключил переписку по данной вакансии» under the messages, in place of the field
     turnedOff: [...document.querySelectorAll('span, div')].some((element) => element.childElementCount === 0 &&
       new RegExp(turnedOffWords, 'iu').test(element.textContent)),
+    // Buttons can arrive after their question. Include them in the recorder's change signature
+    // so the live watcher can select a choice even when the message text did not change.
+    options: buttons ? [...buttons.querySelectorAll('button')].map((button) => button.innerText.trim()).filter(Boolean) : [],
   };
+  // SPA navigation changes the address before replacing the conversation. Never attribute the
+  // previous pane (or a mixture of two panes) to the new chat. Message IDs are globally unique.
+  const view = window.__hhChatView ??= { owners: new Map(), headers: new Map(), accepted: null };
+  const fingerprint = JSON.stringify([chat.vacancy, chat.company, chat.vacancyUrl]);
+  const headerReady = Boolean(chat.vacancy && chat.company && chat.vacancyUrl);
+  const conflictingMessage = messages.some(({ id }) => view.owners.has(id) && view.owners.get(id) !== chat.id);
+  const conflictingHeader = headerReady && view.headers.has(chat.id) && view.headers.get(chat.id) !== fingerprint;
+  if (view.accepted && (!messages.length || conflictingMessage || conflictingHeader)) {
+    return { ...view.accepted, transitioning: true };
+  }
+  if (chat.id && messages.length) {
+    messages.forEach(({ id }) => view.owners.set(id, chat.id));
+    if (headerReady) view.headers.set(chat.id, fingerprint);
+    view.accepted = chat;
+  }
+  return chat;
 }
 
 /**
@@ -128,14 +149,15 @@ export function readChatList() {
     // The line under the company: the last message, or the status («Отказ», «Собеседование»),
     // colored: red for a rejection, green for an invitation
     const lines = cell.innerText.split('\n').map((line) => line.trim()).filter(Boolean);
-    const last = lines[lines.indexOf(subtitle) + 1] ?? '';
+    const preview = cell.querySelector('[class*="last-message-color_"]');
+    const last = preview?.innerText.trim() || lines[lines.indexOf(subtitle) + 1] || '';
     const rect = cell.getBoundingClientRect();
     return {
       id: cell.getAttribute('data-qa').replace('chatik-open-chat-', ''),
       title: cell.querySelector('[data-qa="chat-cell-title"]')?.innerText.trim() ?? '',
       subtitle,
       last: /^\d+$/.test(last) ? '' : last,
-      status: /last-message-color_([a-z]+)/.exec(cell.querySelector('[class*="last-message-color_"]')?.className ?? '')?.[1] ?? '',
+      status: /last-message-color_([a-z]+)/.exec(preview?.className ?? '')?.[1] ?? '',
       lastIsMine: Boolean(cell.querySelector('[data-qa^="status-icon"]')),
       unread: Boolean(cell.querySelector('[data-qa*="badge"], [data-qa*="counter"]')),
       top: offset ? Number(offset[1]) : index,
@@ -183,14 +205,25 @@ export function readUserActivity() {
   return { at: window.__chatUserActivity.at, typing: Boolean(field?.value.trim()) };
 }
 
+export const USER_IDLE_MS = 15000;
+/** A sent answer or a chat switch still gets the same short idle grace as typing. */
+export const userIsActive = (activity, now = Date.now()) => !activity || activity.typing || now - activity.at < USER_IDLE_MS;
+
 /**
- * A chat of the list whose status is a rejection: in red, a word or two in place of the last
- * message («Отказ», "Rejection"), in any language
+ * A rejection badge, or an explicit rejection in the full last-message preview. Questions and
+ * requests remain for the user even when the employer also mentions a rejection.
  * @param {{last?: string, status?: string}} chat - readChatList's
  * @returns {boolean}
  */
-export const isRejectionCell = (chat) => REJECTION_WORD.test(chat.last ?? '') ||
-  (chat.status === 'red' && /^\p{L}+(?:[\s-]\p{L}+)?$/u.test(chat.last ?? ''));
+export function isRejectionCell(chat) {
+  if (chat.lastIsMine) return false;
+  const text = chat.last ?? '';
+  if (REJECTION_WORD.test(text) || (chat.status === 'red' && /^\p{L}+(?:[\s-]\p{L}+)?$/u.test(text))) return true;
+  const request = asksSomething(text) ||
+    /(?:^|[.!,:;]\s*)(?:пришлите|отправьте|свяжитесь|позвоните|заполните|пройдите|перейдите|ответьте)(?!\p{L})/iu.test(text) ||
+    /(?:^|[.!]\s+)(?:please\s+)?(?:reply|send|share|provide|confirm|tell us|let us know)\b/i.test(text);
+  return !request && isRejection({ mine: false, text });
+}
 
 /**
  * The unread rejections shown in the chat list
@@ -380,7 +413,8 @@ export const REJECTION_KEY = 'Отказ';
  */
 export function isRejection(message) {
   return (!message.mine && REJECTION_WORD.test(message.heading ?? '')) ||
-    /не готовы пригласить|не можем пригласить|приняли решение (не продолжать|отказать)|выбрали другого кандидата|к сожалению,? (мы )?(не готовы|вынуждены отказать|не можем)/i.test(message.text);
+    /не готовы пригласить|не можем пригласить|приняли решение (не продолжать|отказать)|выбрали другого кандидата|к сожалению,? (мы )?(не готовы|вынуждены отказать|не можем)/i.test(message.text) ||
+    /\bwe (?:have )?(?:chosen|selected) (?:another|other)\b|\bwe (?:will not|cannot|can't|are unable to|won't) (?:proceed|move forward|invite)\b|\byour (?:application|candidacy) (?:was|has been) (?:rejected|declined)\b/i.test(message.text);
 }
 
 /** The same text, apart from case, spacing and punctuation */
@@ -389,7 +423,7 @@ const sameText = (a, b) => !isPattern(b) && normalizeQuestion(a) === normalizeQu
 export const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
 
 /** A request for the user's facts without a question mark: «Расскажите о вашем опыте с Kafka.», «Проживаете в РФ» */
-const REQUEST = /(?:^|[.!:,]\s*)(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите|напишите|укажите|сообщите)(?!\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\p{L})/iu;
+const REQUEST = /(?:^|[.!:,]\s*)(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите|напишите|укажите|сообщите)(?!\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\p{L})|(?:^|[.!:,]\s*)(?:please\s+)?(?:tell|describe|share|specify|provide|indicate|state|enter|select|choose|list|confirm|send|reply|give|let us know)\b/iu;
 
 /** Words of a pattern itself, its gaps aside */
 const patternOwnWords = (pattern) => pattern.replace(PATTERN_PREFIX, '').split(' ').filter((token) => token && token !== GAP).length;
@@ -449,7 +483,9 @@ const BAD_NEWS = /к сожалению|отказ|не готовы|не мож
  * @returns {boolean}
  */
 export function isAcknowledgement(core) {
-  const text = String(core ?? '');
+  // Optional company information is not a task for the applicant. Strip only this explicit
+  // informational sentence and an hh.ru employer page; survey/test/contact links still block it.
+  const text = String(core ?? '').replace(/(?:вы также можете|также вы можете)\s+(?:узнать больше о нас и\s+)?ознакомиться с (?:другими|нашими) вакансиями по ссылке\s*:\s*https:\/\/hh\.ru\/employer\/\d+\/?(?=\s|[.!]|$)\s*[.!]?/giu, '');
   return REVIEWS.test(text) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text) && !/\?/.test(text) &&
     !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
 }

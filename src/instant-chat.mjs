@@ -25,6 +25,8 @@ import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
 import { ANSWERS_PASSED } from './hh-words.mjs';
 import { learnChatQuestions } from './chat-learning.mjs';
+import { answerWasRepeated, chooseChatOption, requiresChatOption } from './chat-options.mjs';
+export { perfectOption } from './chat-options.mjs';
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
@@ -61,17 +63,6 @@ export function scrollToLastMessage() {
   } else {
     last?.scrollIntoView({ block: 'end' });
   }
-}
-
-/**
- * The bot's button that is the saved answer itself (case and punctuation aside), or null
- * @param {string} answer
- * @param {string[]} options
- * @returns {string|null}
- */
-export function perfectOption(answer, options) {
-  const wanted = normalizeQuestion(answer);
-  return options.find((option) => normalizeQuestion(option) === wanted) ?? null;
 }
 
 /** The user's own message after the given one appeared */
@@ -130,7 +121,7 @@ export async function sendChatAnswer(frame, messageId, { answer, option }) {
  * @returns {(vacancyId: string|null) => Promise<void>}
  */
 export function createInstantChat({
-  page, readQADatabase, addOrUpdateQA, addQAIfMissing, readTemplates, autoSend, autoReuse = false, closePanel, chatHistory = createChatHistory(), vacancyContext = () => [],
+  page, readQADatabase, addOrUpdateQA, addQAIfMissing, readTemplates, autoSend, autoReuse = false, closePanel, contacts = {}, chatHistory = createChatHistory(), vacancyContext = () => [],
   firstMessageMs = 20000, nextMessageMs = 15000, log = console.log,
 }) {
   /**
@@ -259,12 +250,13 @@ export function createInstantChat({
         quietSince = Date.now();
         continue;
       }
-      const option = reply && options.length > 0 ? perfectOption(reply.answer, options) : null;
-      const perfect = Boolean(reply?.perfect) && (options.length === 0 || option !== null);
+      const selection = chooseChatOption({ question: last.text, reply, options, contacts });
+      const option = selection?.option ?? null;
+      const perfect = option ? selection.autoSend : Boolean(reply?.perfect) && options.length === 0;
       log(`💬 ${last.title || 'Chat'}: ${asked}${options.length > 0 ? ` [${options.join(' / ')}]` : ''}`);
-      if (perfect && autoSend) {
-        if (await sendChatAnswer(frame, last.id, { answer: reply.answer, option }).catch(() => false)) {
-          log(`✅ Answered (perfect match, ${reply.source}): ${option ?? reply.answer}`);
+      if (perfect && autoSend && !answerWasRepeated(chat, last, option ?? reply.answer)) {
+        if (await sendChatAnswer(frame, last.id, { answer: option ?? reply.answer, option }).catch(() => false)) {
+          log(`✅ Answered (${selection?.reason ?? reply.source}): ${option ?? reply.answer}`);
           quietSince = Date.now();
           waitMs = nextMessageMs;
           continue;
@@ -275,7 +267,7 @@ export function createInstantChat({
         log('💬 Not a perfect match: the chat is left for the chat processor');
         return false;
       }
-      if (reply && !option) {
+      if (reply && !option && !requiresChatOption(last.text, options) && !answerWasRepeated(chat, last, reply.answer)) {
         const input = frame.locator(INPUT).first();
         if (!(await input.inputValue().catch(() => '')).trim()) {
           await input.fill(reply.answer).catch(() => {});

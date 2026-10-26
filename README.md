@@ -252,6 +252,10 @@ typed in them. Between those checks, a rejection that shows in the chat window i
 (the page is only looked at every 10 s, no request to hh.ru): when you have not touched the window
 for 15 s and no reply is being typed, its chat is opened, then the window goes back to the chat you
 had open. Turn it off with `--no-clear-rejections`.
+Rejections are recognized by either the status badge or explicit rejection wording in the full
+message preview, even when it has the normal text color. Messages asking a question or requesting
+a reply remain unread. After sending an answer or switching chats, clearing resumes after the
+same 15-second idle grace; a nonempty draft continues to hold the window for you.
 
 The same pass handles unread template messages: a chat whose last message, as the chat list shows it,
 is a saved template of `data/chat-templates.lino` word for word (greeting and signature aside, «Спасибо
@@ -547,22 +551,33 @@ browser. For the message waiting for an answer the reply is typed into the messa
   An acknowledgement of the application in any company's words («Спасибо за интерес к нашей
   вакансии! Мы рассмотрим ваше резюме… мы свяжемся с вами», «ознакомимся с резюме и дадим обратную
   связь», «продолжаем рассматривать кандидатов и анализировать результаты собеседований… свяжемся с
-  вами») is thanked for exactly, as the saved ones, unless it asks something, invites, links or
-  rejects. Thanks replies count as the same reply when templates are generalized.
+  вами») is thanked for exactly, as the saved ones, unless it asks something, invites or rejects.
+  An optional sentence offering other vacancies on an hh.ru employer page is allowed; surveys,
+  tests and other links still need review. The full list preview is checked before opening a chat,
+  and its actual message checked again before replying. Thanks replies count as the same reply
+  when templates are generalized.
   A template inside a longer message is an exact one when what the company adds asks nothing (no
   more question marks, no «расскажите», «уточните», invitation, form or link). The closing and
   the signature («С уважением, Егор / HR команды Нонтон») are left out, and «позиции», «вакансии»
   and «должности» are the same word in templates. Templates are answered as they show in the chat
   window, as rejections are read.
 
-`--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
-quick replies are never clicked.
+`--watch` waits until you send the reply (or type `s` to skip) before the next chat. With `--auto-send`,
+buttons are selected for exact saved answers and unambiguous salary ranges, including in the live
+chat window and the application panel. A contradictory net/gross question is answered automatically
+only when both configured amounts fit the same range. Ambiguous ranges and unknown answers wait
+for review. Explicit choice-only questions never get a free-text draft, and a bot repeating the
+question after an answer does not get the same text suggested again. Buttons arriving after their
+question are detected too; clearing an unsent draft retries the choice. Saved answers and frequency counts are retained; plain salary
+suggestions are filtered to the requested net or gross basis.
 
 While the chat window is open (`--watch`, and the rejection checks of `apply`), each sent message
 is captured as the page changes, including delivery-status and bubble-style updates, without
 requests to hh.ru. Switching chats immediately after sending does not lose the reply. The
-application browser's chat frames are recorded too. A new
+application browser's chat frames are recorded too. Navigation waits for the conversation pane
+to match its URL, so the previous chat's messages are not recorded under the next chat's ID. A new
 question in the chat window is prefilled from saved answers, leaving text you already typed alone.
+Prefills run one at a time, including at startup, to prevent duplicate text.
 A bot's question is saved without its acknowledgement of your last answer («Понял, спасибо. А
 есть ли у вас опыт с NestJS?» is saved as «Есть ли у вас опыт с NestJS?»), so it is answered word for
 word next time, whatever the bot says first; hh.ru's AI assistant's summary («В разговоре с

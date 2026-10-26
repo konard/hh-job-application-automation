@@ -186,6 +186,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
       addOrUpdateQA,
       addQAIfMissing,
       chatHistory,
+      contacts,
       readTemplates: withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), contacts).readQADatabase,
       autoSend: argv.autoSendExactAnswers,
       autoReuse: argv.autoReuseAnswers,

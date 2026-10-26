@@ -20,13 +20,14 @@ export function setUnreadFilter(want) {
 export function observeChat(read, turnedOffWords, owner) {
   if (window.__hhChatRecorder?.owner === owner && window.__hhChatRecorder) return;
   window.__hhChatRecorder?.observer?.disconnect();
+  if (window.__hhChatRecorder?.onInput) document.removeEventListener('input', window.__hhChatRecorder.onInput, true);
   const recorder = { owner };
   window.__hhChatRecorder = recorder;
   let last = '';
   const capture = () => {
     if (!/\/chat\/\d+/.test(window.location.pathname)) return;
     const chat = read(turnedOffWords);
-    if (!chat.id || !chat.messages.length) return;
+    if (!chat.id || !chat.messages.length || chat.transitioning) return;
     const signature = JSON.stringify(chat);
     if (signature === last) return;
     last = signature;
@@ -34,6 +35,14 @@ export function observeChat(read, turnedOffWords, owner) {
     // the recorder reads it. The binding queues disk writes outside the page.
     window.__hhRecordChat(chat).catch(() => { last = ''; });
   };
+  recorder.onInput = (event) => {
+    if (event.target.matches?.('textarea[data-qa="text-input"]') && !event.target.value.trim()) {
+      // Clearing an unsent draft can unblock a bot's choices without changing any message.
+      last = '';
+      capture();
+    }
+  };
+  document.addEventListener?.('input', recorder.onInput, true);
   const start = () => {
     const observer = new window.MutationObserver(capture);
     recorder.observer = observer;
@@ -47,6 +56,15 @@ export function observeChat(read, turnedOffWords, owner) {
   };
   if (document.documentElement) start();
   else document.addEventListener('DOMContentLoaded', start, { once: true });
+}
+
+/** The URL can precede the new pane. Wait for an aligned snapshot before reading or replying. */
+export async function waitForChat(target, id, { timeoutMs = 20000, pause = sleep } = {}) {
+  for (const started = Date.now(); Date.now() - started < timeoutMs; await pause(100)) {
+    const chat = await readChatIn(target);
+    if (chat.id === String(id) && !chat.transitioning && chat.messages.length) return chat;
+  }
+  throw new Error(`Chat ${id} did not finish loading its conversation`);
 }
 
 /** Register before navigation; also capture chats already open in the page and its frames. */
@@ -96,6 +114,7 @@ export async function readFullChat(target, {
   for (let pass = 0; pass < maxPasses; pass += 1) {
     chat = await read();
     if (!chat?.id) throw new Error('The history slot did not show a chat');
+    if (chat.transitioning) throw new Error('The conversation is still changing; its history was not recorded');
     if (pass > 0 && chat.id !== firstId) throw new Error('The chat changed while its history was being read');
     firstId ??= chat.id;
     const size = messages.size;

@@ -279,6 +279,20 @@ describe('A message in English is answered in English', () => {
 });
 
 describe('Acknowledgements of the application, in any company\'s words', () => {
+  test('optional hh.ru company information is recognized from the preview without treating surveys as acknowledgements', async () => {
+    const { isAcknowledgement } = await import('../src/chat-answers.mjs');
+    const message = 'Константин Константинович, здравствуйте! Благодарим Вас за отклик на вакансию Инженер по автоматизации тестирования/QA automation engineer. Мы рассмотрим Ваше резюме в ближайшее время. Если оно заинтересует нас, мы обязательно свяжемся с Вами для обсуждения деталей. Вы также можете узнать больше о нас и ознакомиться с другими вакансиями по ссылке: https://hh.ru/employer/10726025 . Спасибо за Ваше желание построить свою карьеру в нашей команде! С наилучшими пожеланиями, LADA Цифра.';
+    assert.equal(isAcknowledgement(message), true);
+    const reply = knownReply({ title: '', text: message.replace('LADA Цифра', 'Другая компания') }, { templates, qaMap: new Map() });
+    assert.equal(reply?.perfect, true);
+    assert.equal(reply?.answer, 'Здравствуйте, благодарю, ожидаю.');
+    for (const extra of [' Заполните анкету по ссылке https://forms.gle/abc.', ' Укажите Ваш Telegram.', ' Какой у вас опыт?']) {
+      assert.equal(isAcknowledgement(message + extra), false);
+    }
+    assert.equal(isAcknowledgement(message.replace('https://hh.ru/employer/10726025', 'https://forms.gle/abc')), false);
+    assert.equal(isAcknowledgement(message.replace('Вы также можете узнать больше о нас и ознакомиться', 'Перейдите и ознакомьтесь')), false);
+  });
+
   test('are thanked for as the saved ones; one that asks, invites or rejects is not', async () => {
     const { isAcknowledgement, knownReply } = await import('../src/chat-answers.mjs');
     const templates = new Map([
@@ -334,10 +348,11 @@ describe('Rejections read as they show in the chat window', () => {
       // hh.ru's status in a language without its word here: red is a rejection, green an invitation
       { id: '2', unread: true, last: 'Rad etildi', status: 'red' },
       { id: '3', unread: true, last: 'Interview', status: 'green' },
-      // A message is not a status, whatever its color
+      // A full message is a rejection only when its words say so, regardless of its color.
       { id: '4', unread: true, last: 'Unfortunately, we have chosen another candidate.', status: 'red' },
+      { id: '5', unread: true, last: 'We are still reviewing your application and will get back to you.', status: 'red' },
     ];
-    assert.deepEqual(visibleRejections(chats).map((chat) => chat.id), ['1', '2']);
+    assert.deepEqual(visibleRejections(chats).map((chat) => chat.id), ['1', '2', '4']);
     assert.equal(isRejectionCell({ last: 'Отказ' }), true);
     assert.equal(isRejection({ mine: false, heading: 'Rejection', text: 'Thank you for your interest.' }), true);
     assert.equal(isRejection({ mine: false, heading: '', text: 'Thank you for your interest.' }), false);
@@ -355,6 +370,57 @@ describe('Rejections read as they show in the chat window', () => {
       { mine: true, title: '', text: 'Respond to the invitation, even if you are not interested. This helps us.' },
     ]);
     assert.deepEqual(templates, [['Спасибо, рассмотрим ваше резюме.', 'Благодарю, ожидаю.']]);
+  });
+
+  test('the full rejection preview is cleared after switching away from an answered chat', async () => {
+    const { visibleRejections } = await import('../src/chat-answers.mjs');
+    const rejection = 'Здравствуйте, Константин Константинович! Большое спасибо за интерес, проявленный к вакансии. ' +
+      'К сожалению, в настоящий момент мы не готовы пригласить Вас на дальнейшее интервью по этой вакансии. ' +
+      'Мы внимательно ознакомились с Вашим резюме и, возможно, вернемся к Вашей кандидатуре, когда у нас возникнет такая потребность. С уважением, команда Ozon';
+    const rows = [
+      { id: 'finished-chat', unread: false, lastIsMine: true, last: 'Все ответы отправлены.' },
+      { id: 'selected-closed-chat', unread: false, last: 'Rejection', status: 'contrast' },
+      { id: 'ozon-rejection', unread: true, last: rejection, status: 'secondary' },
+      { id: 'question', unread: true, last: 'Добрый день, к сожалению, не дождалась ответа. Интересно обсудить детали по вакансии?', status: 'secondary' },
+    ];
+    assert.deepEqual(visibleRejections(rows).map(({ id }) => id), ['ozon-rejection']);
+  });
+
+  test('a multiline last-message preview keeps the rejection after the greeting', async () => {
+    const { readChatList, visibleRejections } = await import('../src/chat-answers.mjs');
+    const previousDocument = globalThis.document;
+    const previousWindow = globalThis.window;
+    const text = 'Здравствуйте, Константин.\nСпасибо за отклик.\nК сожалению, мы не готовы пригласить вас на интервью.';
+    const preview = { innerText: text, className: 'last-message-color_secondary' };
+    const cell = {
+      innerText: `Developer\nEmployer\n${text}\n1`, offsetHeight: 80,
+      getAttribute: () => 'chatik-open-chat-123', closest: () => null,
+      getBoundingClientRect: () => ({ top: 0, bottom: 80 }),
+      querySelector: (selector) => selector.includes('chat-cell-subtitle') ? { innerText: 'Employer' }
+        : selector.includes('chat-cell-title') ? { innerText: 'Developer' }
+          : selector.includes('last-message-color_') ? preview : selector.includes('badge') ? {} : null,
+    };
+    try {
+      globalThis.document = { querySelectorAll: () => [cell] };
+      globalThis.window = { innerHeight: 900 };
+      const rows = readChatList();
+      assert.equal(rows[0].last, text);
+      assert.deepEqual(visibleRejections(rows).map(({ id }) => id), ['123']);
+    } finally {
+      globalThis.document = previousDocument;
+      globalThis.window = previousWindow;
+    }
+  });
+
+  test('rejections that also ask for a reply, and the user\'s own messages, stay unread', async () => {
+    const { visibleRejections } = await import('../src/chat-answers.mjs');
+    const rows = [
+      { id: 'russian-question', unread: true, last: 'Мы не готовы пригласить вас на эту вакансию. Готовы рассмотреть другую?' },
+      { id: 'russian-request', unread: true, last: 'Мы не готовы пригласить вас на эту вакансию. Пришлите обновленное резюме.' },
+      { id: 'english-request', unread: true, last: 'Unfortunately, we have chosen another candidate. Please reply with your portfolio.' },
+      { id: 'mine', unread: true, lastIsMine: true, last: 'К сожалению, мы не готовы пригласить вас.' },
+    ];
+    assert.deepEqual(visibleRejections(rows), []);
   });
 
   test('the user\'s activity is counted, the tool\'s own clicks are not', async () => {

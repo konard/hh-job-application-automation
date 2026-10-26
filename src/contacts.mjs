@@ -11,7 +11,7 @@
 
 import { createQADatabase } from './qa-database.mjs';
 import { COMPANY_TAXES_FILE, exchangeRates, parseCompanyTaxes, salaryValues } from './salary.mjs';
-import { inferSalaryAnswer, learnSalaryPatterns } from './salary-questions.mjs';
+import { inferSalaryAnswer, learnSalaryPatterns, salaryAnswerForQuestion } from './salary-questions.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
 const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd', 'salary_gross_usdt', 'salary_net_usdt', 'salary_gross_eur', 'salary_net_eur'];
@@ -147,6 +147,11 @@ export function withContacts(db, contacts) {
      */
     async readQADatabase({ contexts, questions = [] } = {}) {
       const raw = await db.readQADatabase();
+      for (const [question, answer] of raw) {
+        const compatible = salaryAnswerForQuestion(question, answer);
+        if (compatible === null) raw.delete(question);
+        else raw.set(question, compatible);
+      }
       const patterns = questions.some((question) => !raw.has(question)) ? learnSalaryPatterns(raw) : null;
       for (const question of questions.filter((item) => !raw.has(item))) {
         const answer = inferSalaryAnswer(question, patterns);

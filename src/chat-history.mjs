@@ -46,7 +46,7 @@ export function createChatHistory(file = CHAT_HISTORY_FILE) {
     cache = { mtime: (await fs.stat(file)).mtimeMs, history };
   };
   function record(chat) {
-    if (!chat?.id || !chat.messages?.length) {
+    if (!chat?.id || chat.transitioning || !chat.messages?.length) {
       return Promise.resolve(false);
     }
     return exclusive(() => withFileLock(file, async () => {

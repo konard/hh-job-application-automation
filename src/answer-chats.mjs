@@ -27,8 +27,10 @@ import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
   TEMPLATE_THRESHOLD, chatDraftPrompt, chatsShown, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isQuestion, isSupportChat, isApplication, isRejection, isRejectionCell, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
+  userIsActive,
 } from './chat-answers.mjs';
-import { perfectOption, readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
+import { readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
+import { answerWasRepeated, chooseChatOption, requiresChatOption } from './chat-options.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
 import { createHumanInput } from './helpers/human-input.mjs';
 import { createSkippedVacancies, isSkippedForGood, SKIP_REASONS } from './skipped-vacancies.mjs';
@@ -37,7 +39,8 @@ import { extractVacancyId } from './hh-selectors.mjs';
 import { recordEvent } from './stats.mjs';
 import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
 import { learnChatQuestions } from './chat-learning.mjs';
-import { readFullChat, setUnreadFilter, watchChats } from './chat-recording.mjs';
+import { readFullChat, setUnreadFilter, waitForChat, watchChats } from './chat-recording.mjs';
+import { createMutex } from './helpers/mutex.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
@@ -317,6 +320,8 @@ let human;
 let chatRecording;
 let passRunning = false;
 const prefilledMessages = new Set();
+const handledChoices = new Set();
+const prefillExclusive = createMutex();
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, async () => {
     await chatRecording?.flush();
@@ -352,13 +357,8 @@ async function openChatTab() {
       },
       onError: (error) => console.log(`⚠️  Chat recording failed: ${error.message}`),
     });
-    if (!argv.learnAll) {
-      const shown = await readChatIn(page).catch(() => null);
-      if (shown?.id) {
-        await learn(shown);
-        await prefillSavedChat(shown, page.mainFrame());
-      }
-    }
+    // watchChats already captures the open pane. A second startup prefill races its binding.
+    await chatRecording.flush();
   }
 }
 await openChatTab();
@@ -412,18 +412,19 @@ async function learn(chat) {
  */
 async function openChat(id) {
   if (page.url().startsWith(chatUrl(id))) {
+    await waitForChat(page, id);
     return;
   }
   const cell = page.locator(`[data-qa="chatik-open-chat-${id}"]`).first();
   if (await cell.count().catch(() => 0) > 0 && await human.click(cell)) {
     if (await page.waitForURL((url) => url.href.startsWith(chatUrl(id)), { timeout: 15000 }).then(() => true, () => false)) {
-      // The chat on the right is replaced after the address
-      await sleep(2000);
+      await waitForChat(page, id);
       return;
     }
   }
   console.log(`🔗 Chat ${id} is not in the chat list: opened by its address`);
   await page.goto(chatUrl(id), { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  await waitForChat(page, id);
 }
 
 /** Prefill the reply to the waiting message; returns the id of the message it answers, or null */
@@ -492,7 +493,9 @@ async function prefillChat(id, depth = 0) {
   });
   // A template message: one of the replies the user has given to it
   reply = varyReply(reply, replyVariants(await chatHistory.read(), await templatesDb.readQADatabase()));
-  if (!reply && argv.draft) {
+  const options = await page.evaluate(readQuickReplies).catch(() => []);
+  const choice = chooseChatOption({ question: last.text, reply, options, contacts: sources.contacts });
+  if (!reply && !choice && !requiresChatOption(last.text, options) && argv.draft) {
     console.log('🤖 Drafting the reply with local Claude Code from the resume and qa.lino...');
     const drafted = await askClaude(chatDraftPrompt({
       vacancy: chat.vacancy, messages: chat.messages, resume: sources.resume, related: relatedAnswers(templateCore(last.text), sources.qaMap),
@@ -503,16 +506,16 @@ async function prefillChat(id, depth = 0) {
     console.log(`📭 No reply needed (${reply.source}${reply.matched ? `: ${reply.matched.slice(0, 80)}` : ''}): read`);
     return null;
   }
-  if (!reply) {
+  if (!reply && !choice) {
     console.log('❓ No saved or drafted reply: answer it yourself');
     return { id: last.id, replied: false, title: chat.vacancy };
   }
   // An exact answer is sent (a bot's button when it offers one), and the bot's next question taken
-  const options = await page.evaluate(readQuickReplies).catch(() => []);
-  const option = options.length > 0 ? perfectOption(reply.answer, options) : null;
-  if (argv.autoSend && reply.perfect && (options.length === 0 || option) && depth < 20) {
-    if (await sendChatAnswer(page.mainFrame(), last.id, { answer: reply.answer, option }).catch(() => false)) {
-      console.log(`✅ Answered (exact match, ${reply.source}): ${option ?? reply.answer}`);
+  const option = choice?.option ?? null;
+  const canSend = option ? choice.autoSend : reply?.perfect && options.length === 0;
+  if (argv.autoSend && canSend && depth < 20 && !answerWasRepeated(chat, last, option ?? reply.answer)) {
+    if (await sendChatAnswer(page.mainFrame(), last.id, { answer: option ?? reply.answer, option }).catch(() => false)) {
+      console.log(`✅ Answered (${choice?.reason ?? reply.source}): ${option ?? reply.answer}`);
       await page.waitForFunction((id) => {
         const messages = [...document.querySelectorAll('[data-qa^="chatik-chat-message-"]')];
         return messages.length > 0 && !messages[messages.length - 1].getAttribute('data-qa').endsWith(id);
@@ -521,6 +524,10 @@ async function prefillChat(id, depth = 0) {
       return prefillChat(id, depth + 1);
     }
     console.log('⚠️  The answer did not show in the chat: typed in for you instead');
+  }
+  if (choice || requiresChatOption(last.text, options) || (reply && answerWasRepeated(chat, last, reply.answer))) {
+    console.log('👉 Choose a button in the chat; free text is not prefilled for an option-only or repeated question');
+    return { id: last.id, replied: false, title: chat.vacancy };
   }
   const input = page.locator(MESSAGE_INPUT).first();
   if ((await input.inputValue().catch(() => '')).trim()) {
@@ -655,8 +662,7 @@ function templateCell(chat, templates) {
  * only read when it needs none. A chat with more waiting than the template is left for the user
  */
 async function answerTemplate(chat) {
-  await page.waitForSelector('[data-qa^="chatik-chat-message-"]', { timeout: 20000 }).catch(() => {});
-  const read = await readChatIn(page).catch(() => null);
+  const read = await waitForChat(page, chat.id).catch(() => null);
   if (!read) {
     return;
   }
@@ -693,33 +699,55 @@ if (argv.learnAll) {
   process.exit(0);
 }
 
+passRunning = true;
 for (const id of argv.chats) {
   const answered = await prefillChat(id);
   if (answered && !argv.auto && (argv.watch || argv.chats.length > 1)) {
     await waitForSend(answered.id);
   }
 }
+passRunning = false;
 
 /**
  * A new question shown in the user's chat gets its saved answers, without navigating, sending
  * anything, or replacing a draft already typed by the user.
  */
-async function prefillSavedChat(chat, frame) {
+function prefillSavedChat(chat, frame) {
+  return prefillExclusive(() => writeSavedChat(chat, frame));
+}
+
+async function writeSavedChat(chat, frame) {
   const last = pendingMessages(chat.messages).at(-1);
   const key = `${chat.id}/${last?.id}`;
-  if (!last || !chat.canReply || prefilledMessages.has(key) || isSupportChat(chat) ||
+  if (!last || chat.transitioning || !chat.canReply || isSupportChat(chat) ||
     isReuseOffer(last.text) || isRejection(last) || await leftAloneBecause(chat)) return;
   const reply = await knownReplyInContexts(last, {
     readTemplates: templatesDb.readQADatabase, readQADatabase: sources.qaDatabase.readQADatabase,
     contexts: await loadAnswerContexts(), known: chatContextTexts(chat),
   });
-  if (!reply?.answer || reply.noReply || frame.isDetached()) return;
+  const options = chat.options ?? await frame.evaluate(readQuickReplies).catch(() => []);
+  const choice = chooseChatOption({ question: last.text, reply, options, contacts: sources.contacts });
+  if ((!reply?.answer && !choice) || reply?.noReply || frame.isDetached()) return;
   // Recheck after looking up the answer: the user may already have moved to another chat.
   const current = await readChatIn(frame);
-  if (current.id !== chat.id || pendingMessages(current.messages).at(-1)?.id !== last.id) return;
+  if (current.transitioning || current.id !== chat.id || pendingMessages(current.messages).at(-1)?.id !== last.id) return;
   if (await frame.evaluate(() => Boolean(window.__chatAutomating))) return;
   const input = frame.locator(MESSAGE_INPUT).first();
-  if ((await input.inputValue({ timeout: 1000 }).catch(() => '')).trim()) return;
+  const draft = (await input.inputValue({ timeout: 1000 }).catch(() => '')).trim();
+  if (choice?.autoSend && argv.autoSend && !handledChoices.has(key) &&
+    !answerWasRepeated(chat, last, choice.option) && (!draft || draft === reply?.answer?.trim())) {
+    handledChoices.add(key);
+    if (await sendChatAnswer(frame, last.id, { answer: choice.option, option: choice.option }).catch(() => false)) {
+      console.log(`✅ Selected in chat ${chat.id}: ${choice.option} (${choice.reason})`);
+    } else console.log(`⚠️  The selected option did not show in chat ${chat.id}; left for review`);
+    return;
+  }
+  if (prefilledMessages.has(key) || draft || requiresChatOption(last.text, options) || !reply?.answer) return;
+  if (answerWasRepeated(chat, last, reply.answer)) {
+    prefilledMessages.add(key);
+    console.log(`👉 Chat ${chat.id}: the bot repeated this question after that answer; the same text is not prefilled again`);
+    return;
+  }
   await input.fill(reply.answer, { timeout: 1000 });
   prefilledMessages.add(key);
   console.log(`✍️  Saved answer prefilled in chat ${chat.id}: check it and send it yourself\n   ${reply.answer}`);
@@ -728,15 +756,12 @@ async function prefillSavedChat(chat, frame) {
 /** Where the chat window was at the last check: the user moving in it since, or typing, delays the next pass */
 let seenUrl = null;
 async function userIsInTheWindow() {
-  const typing = await page.locator('textarea[data-qa="text-input"]').first().inputValue({ timeout: 1000 })
-    .then((value) => value.trim().length > 0, () => false);
+  const user = await page.evaluate(readUserActivity).catch(() => null);
   const moved = seenUrl !== null && !page.isClosed() && page.url() !== seenUrl;
   seenUrl = page.isClosed() ? null : page.url();
-  return typing || moved;
+  return userIsActive(user) || moved;
 }
 
-/** How long the user has not touched the chat window before a shown rejection is read */
-const USER_IDLE_MS = 15000;
 // A chat whose click did not open it is tried again after this
 const LIVE_RETRY_MS = 5 * 60 * 1000;
 
@@ -776,7 +801,7 @@ function readRejectionsAsTheyShow({ leaveAlone }) {
           onScreen.find((chat) => { const reply = template(chat); return reply && (reply.noReply || argv.autoSend); }) ??
           (await hidden())[0];
         const user = await page.evaluate(readUserActivity).catch(() => null);
-        if (!rejection || !user || user.typing || Date.now() - user.at < USER_IDLE_MS || leaveAlone()) {
+        if (!rejection || userIsActive(user) || leaveAlone()) {
           break;
         }
         tried.set(triedKey(rejection), Date.now());
