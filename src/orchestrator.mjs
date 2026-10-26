@@ -207,13 +207,17 @@ export function createOrchestrator({
    * loop throws stopError); otherwise it waits for the user
    * @param {string|null} vacancyId
    */
-  async function applicationNotConfirmed(vacancyId) {
+  async function applicationNotConfirmed(vacancyId, reason = 'not_confirmed') {
     // The vacancy page watch saw «Вы откликнулись» first and went back to the list
     if (vacancyId && sentVacancyIds.has(vacancyId)) {
       return;
     }
-    const message = `hh.ru did not confirm the application to vacancy ${vacancyId}. ` +
-      'Check the browser (an error, a captcha, a message)';
+    const detail = {
+      cover_letter_unavailable: 'The cover letter field did not open after retries; the application was not sent',
+      cover_letter_unverified: 'The cover letter is missing or incomplete; the application was not sent',
+      submit_not_clicked: 'The submit button could not be clicked after retries; the application was not sent',
+    }[reason] ?? 'hh.ru did not confirm the application';
+    const message = `${detail} for vacancy ${vacancyId}. Check the browser (an error, a captcha, a message)`;
     if (!isInteractive()) {
       console.error(`❌ ${message}; stopping so that nothing else is sent`);
       stopError ??= new Error(`${message}; stopping so that nothing else is sent`);
@@ -308,8 +312,8 @@ export function createOrchestrator({
       await afterApplicationSent(result.vacancyId);
       return true;
     case 'modal_processing_failed':
-      if (result.reason === 'not_confirmed') {
-        await applicationNotConfirmed(result.vacancyId);
+      if (['not_confirmed', 'cover_letter_unavailable', 'cover_letter_unverified', 'submit_not_clicked'].includes(result.reason)) {
+        await applicationNotConfirmed(result.vacancyId, result.reason);
       }
       return true;
     default:

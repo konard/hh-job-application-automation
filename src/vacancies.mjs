@@ -12,7 +12,7 @@ import { noteSkip } from './skipped-vacancies.mjs';
 import { saveMarkedQAPairs, saveQAPairs, savedAnswersInContext, setupQAHandling } from './vacancy-response.mjs';
 import { resumeVisibility } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
-import { findCoverLetterToggle, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
+import { clickButtonWhenReady, clickWasNotDispatched, ensureCoverLetterVisible, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { recordEvent } from './stats.mjs';
@@ -159,25 +159,18 @@ export async function processModalApplication({
     return skip('resume_not_visible');
   }
 
-  // Expand the cover letter section unless the textarea is already visible (cover letter might be mandatory)
-  const textareaVisible = await commander.count({ selector: textareaSelector }) > 0 &&
-    await commander.isVisible({ selector: textareaSelector });
-  if (textareaVisible) {
-    console.log('💡 Cover letter textarea already visible, skipping toggle click');
-  } else {
-    const toggleSelector = await findCoverLetterToggle(commander, {
+  // Expand and verify the cover-letter field; a blocked click returns a failure result.
+  if (MESSAGE) {
+    const opened = await ensureCoverLetterVisible(commander, {
+      selector: textareaSelector,
       texts: COVER_LETTER_TEXTS,
       elementTypes: ['button', 'a'],
+      replaced: () => isFullFormOpened(commander),
     });
-    if (toggleSelector) {
-      try {
-        await commander.clickButton({ selector: toggleSelector, scrollIntoView: false });
-        console.log('✅ Clicked cover letter toggle');
-      } catch (error) {
-        console.log(`⚠️  Could not click toggle: ${error.message}`);
-      }
-    } else {
-      console.log('💡 Cover letter toggle not found, section may already be expanded');
+    if (isFullFormOpened(commander)) return FULL_FORM_OPENED;
+    if (!opened) {
+      console.log('⚠️  The cover letter field did not open after retries; application has not been sent');
+      return { success: false, reason: 'cover_letter_unavailable' };
     }
   }
 
@@ -187,15 +180,23 @@ export async function processModalApplication({
   // The English letter when the vacancy's questions are in English
   const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question));
   if (letter) {
-    const { filled, verified, actualValue } = await typeLongText(commander, { selector: textareaSelector, text: letter });
-    if (!filled) {
-      console.log(`⏭️  ${commander.engine}: textarea already contains text, skipping typing to prevent double entry`);
-    } else if (verified) {
+    const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter });
+    if (isFullFormOpened(commander)) return FULL_FORM_OPENED;
+    const actualValue = await commander.evaluate({
+      fn: (selector) => document.querySelector(selector)?.value ?? null, args: [textareaSelector],
+    });
+    const same = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
+    const matches = same(actualValue) === same(letter);
+    // A different nonempty user draft is preserved. Empty fields and incomplete/failed prefills
+    // cannot pass through to submission, even if a helper returned without throwing.
+    if (!same(actualValue) || (!matches && (filled || same(letter).startsWith(same(actualValue))))) {
+      console.log('⚠️  The cover letter is missing or incomplete; application has not been sent');
+      return { success: false, reason: 'cover_letter_unverified' };
+    }
+    if (matches) {
       console.log(`✅ ${commander.engine}: typed message successfully`);
     } else {
-      console.error(`❌ ${commander.engine}: textarea value does not match expected message`);
-      console.error('Expected:', letter);
-      console.error('Actual:', actualValue);
+      console.log('✉️  Using the existing cover letter entered by the user');
     }
   }
 
@@ -328,7 +329,12 @@ export async function processModalApplication({
   // The answers go with the application, so they are saved, like the full form's
   await saveAll();
   try {
-    await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend });
+    const clicked = await clickButtonWhenReady(commander, { selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend });
+    if (clickWasNotDispatched(clicked)) {
+      if (isFullFormOpened(commander)) return FULL_FORM_OPENED;
+      console.log('⚠️  Submit was not clicked after retries; application has not been sent');
+      return { success: false, reason: 'submit_not_clicked' };
+    }
     console.log(`✅ ${commander.engine}: clicked submit button`);
   } catch (error) {
     if (isNavigationError(error)) {

@@ -46,6 +46,45 @@ export async function findCoverLetterToggle(commander, { texts, elementTypes }) 
   return selector;
 }
 
+/** Modern browser-commander reports failed dispatches as results, without throwing. */
+export const clickWasNotDispatched = (result) => result?.dispatched === false || result?.clicked === false;
+
+/** Retry only a click known not to have reached its target; uncertain sends are never repeated. */
+export async function clickButtonWhenReady(commander, options, { attempts = 3 } = {}) {
+  let result;
+  const url = commander.getUrl?.();
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    result = await commander.clickButton(options);
+    if (!clickWasNotDispatched(result)) return result;
+    if (result.navigated || commander.getUrl?.() !== url) return result;
+    console.log(`⚠️  Click was not dispatched: ${result.reason || result.status || 'target unavailable'} (${attempt + 1}/${attempts})`);
+    if (attempt + 1 < attempts) await commander.wait({ ms: 500, reason: 'blocked button to become available' });
+  }
+  return result;
+}
+
+/** Verify the field opens before typing; a returned click alone does not prove the toggle worked. */
+export async function ensureCoverLetterVisible(commander, { selector, texts, elementTypes, replaced = () => false, attempts = 3 }) {
+  const shown = () => commander.isVisible({ selector }).catch(() => false);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (replaced()) return false;
+    if (await shown()) return true;
+    const toggle = await findCoverLetterToggle(commander, { texts, elementTypes });
+    if (!toggle) return false;
+    const result = await commander.clickButton({ selector: toggle, scrollIntoView: false });
+    if (clickWasNotDispatched(result)) console.log(`⚠️  Cover letter toggle was not clicked: ${result.reason || result.status}`);
+    for (let poll = 0; poll < 5; poll += 1) {
+      if (replaced()) return false;
+      if (await shown()) {
+        console.log('✅ Cover letter field is open');
+        return true;
+      }
+      await commander.wait({ ms: 250, reason: 'cover letter field to open' });
+    }
+  }
+  return false;
+}
+
 /**
  * Check whether the current page says the application was already sent
  * @param {Object} commander - Browser commander instance

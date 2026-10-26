@@ -31,6 +31,7 @@ function fakePopup({ questions, resumeHidden = false, user = null }) {
     waits: 0,
     clicks: [],
     filled: [],
+    letter: '',
   };
   const items = () => state.questions.map(({ question, value }, index) => ({
     type: 'textarea', question, selector: `textarea[name="task_${index}"]`, index, currentValue: value,
@@ -51,7 +52,8 @@ function fakePopup({ questions, resumeHidden = false, user = null }) {
     isVisible: async ({ selector }) => selector === SELECTORS.coverLetterTextareaPopup,
     isEnabled: async () => true,
     findToggleButton: async () => null,
-    evaluate: async ({ fn }) => {
+    evaluate: async ({ fn, args }) => {
+      if (args?.[0] === SELECTORS.coverLetterTextareaPopup) return state.letter;
       const source = fn.toString();
       if (source.includes('unansweredCount')) {
         return { totalCount: 0, unansweredCount: 0 };
@@ -81,6 +83,7 @@ function fakePopup({ questions, resumeHidden = false, user = null }) {
     },
     fillTextArea: async ({ selector, text }) => {
       state.filled.push(selector);
+      if (selector === SELECTORS.coverLetterTextareaPopup) state.letter = text;
       const index = Number(selector.match(/task_(\d+)/)?.[1] ?? -1);
       if (index >= 0) {
         state.questions[index].value = text;
