@@ -1,11 +1,11 @@
 /**
- * Tests for the errors of the application popup: a passing one is sent again, a limit or a block is not
+ * Generic application errors can be retried later; limits and blocks keep their own handling.
  */
 import { describe, test, assert } from 'test-anywhere';
 import { isPassingError } from '../src/vacancies.mjs';
 
 describe('popup errors', () => {
-  test('a passing error is sent again', () => {
+  test('a generic error is eligible for a delayed retry', () => {
     assert.equal(isPassingError({ code: 'unknown', text: 'Произошла ошибка, попробуйте ещё раз' }), true);
   });
 

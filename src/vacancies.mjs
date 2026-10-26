@@ -21,6 +21,8 @@ import { coverLetterFor } from './cover-letter.mjs';
 import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
+import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
+export { isPassingError } from './submission-retries.mjs';
 
 /**
  * Handle limit error when detected
@@ -339,30 +341,9 @@ export async function processModalApplication({
   }
 
   await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
-  let confirmed = !vacancyId || await isVacancyCardResponded({ commander, vacancyId });
-  // A passing error of hh.ru («Произошла ошибка, попробуйте ещё раз»): the same popup sent again
-  // after a minute or more; never after the daily limit or a block
-  let passing = false;
-  for (let attempt = 1; !confirmed && attempt <= SEND_RETRIES; attempt++) {
-    const error = await popupError(commander);
-    passing = isPassingError(error);
-    if (!passing || !await isButtonEnabled(commander, submitButtonSelector)) {
-      break;
-    }
-    const ms = RETRY_MIN_MS + Math.round(Math.random() * 30000);
-    console.log(`🔁 hh.ru: «${error.text}» (${error.code}); sending again in ${Math.round(ms / 1000)} s (try ${attempt} of ${SEND_RETRIES})`);
-    await commander.wait({ ms, reason: 'hh.ru error, before sending again' });
-    if (!await isButtonEnabled(commander, submitButtonSelector)) {
-      break;
-    }
-    await commander.clickButton({ selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend: true }).catch(() => {});
-    await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
-    confirmed = await isVacancyCardResponded({ commander, vacancyId });
-  }
-  // The error stays for this vacancy: it is set aside (tried once more on a later run), the run goes on
-  if (!confirmed && passing && isPassingError(await popupError(commander))) {
-    console.log(`⏭️  Vacancy ${vacancyId}: hh.ru still answers «Произошла ошибка»; set aside, tried again on a later run`);
-    return skip('send_error');
+  const confirmed = !vacancyId || await isVacancyCardResponded({ commander, vacancyId });
+  if (!confirmed && await deferFailedSubmission({ commander, vacancyId, title, saveAnswers: saveAll })) {
+    return { success: false, reason: 'submission_cooldown' };
   }
   // hh.ru answers the click with its daily limit (shown in the popup): nothing was sent
   if (!confirmed && await hasLimitError({ commander })) {
@@ -381,37 +362,6 @@ export async function processModalApplication({
  * Whether the vacancy card on the list shows "Вы откликнулись", waiting up to 10 s
  * @returns {Promise<boolean>}
  */
-/** Sends again after a passing error of hh.ru, at least a minute apart */
-const SEND_RETRIES = 2;
-const RETRY_MIN_MS = 60000;
-/** The daily limit, a block, too many requests: not sent again */
-const BLOCKING_ERROR = /limit|ban|block|captcha|many|лимит|огранич|заблок|блокир|слишком мно|не более|запрещ/i;
-
-/**
- * The error the application popup shows after the send, if any
- * @returns {Promise<{code: string, text: string}|null>}
- */
-async function popupError(commander) {
-  const { value } = await commander.safeEvaluate({
-    fn: () => {
-      const element = document.querySelector('[data-qa-popup-error-code]');
-      return element ? { code: element.getAttribute('data-qa-popup-error-code') ?? '', text: element.innerText.replace(/\s+/g, ' ').trim() } : null;
-    },
-    defaultValue: null,
-    operationName: 'popup error check',
-    silent: true,
-  });
-  return value;
-}
-
-/**
- * Whether an error of the popup passes by itself (sent again later): not the daily limit, a block
- * or too many requests
- * @param {{code: string, text: string}|null} error
- * @returns {boolean}
- */
-export const isPassingError = (error) => Boolean(error) && !BLOCKING_ERROR.test(`${error.code} ${error.text}`);
-
 async function isVacancyCardResponded({ commander, vacancyId }) {
   for (let attempt = 0; attempt < 10; attempt++) {
     const { value } = await commander.safeEvaluate({
@@ -510,7 +460,7 @@ function scanApplyButtons({ commander, selector }) {
         vacancyId: unprocessed[0]?.vacancyId ?? null,
       };
     },
-    args: [selector, Array.from(processedVacancyIds)],
+    args: [selector, [...new Set([...processedVacancyIds, ...submissionRetries.ids()])]],
     defaultValue: { totalButtons: 0, unprocessedCount: 0, buttonIndex: -1, vacancyId: null },
     operationName: 'find unprocessed vacancy button',
     silent: true,
@@ -1007,7 +957,7 @@ let blankReloads = 0;
  * Stops waiting immediately if navigation is detected (commander.wait is abortable). A page that
  * stays blank is reloaded.
  */
-export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser, blankReload = BLANK_RELOAD }) {
+export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser, blankReload = BLANK_RELOAD, retryDue = () => Boolean(submissionRetries.nextDue()) }) {
   console.log('💡 No more apply buttons on this page.');
 
   const paginationResult = await findAndClickNextPage({ commander });
@@ -1033,6 +983,7 @@ export async function waitForButtonsAfterNavigation({ commander, pageClosedByUse
     if (pageClosedByUser()) {
       return { status: 'page_closed' };
     }
+    if (retryDue()) return { status: 'retry_due' };
 
     const blank = await commander.evaluate({ fn: readPageBlank }).catch(() => false);
     blankSince = blank ? (blankSince ?? Date.now()) : null;

@@ -13,7 +13,7 @@ import {
   findAndProcessVacancyButton,
   waitForButtonsAfterNavigation,
 } from './vacancies.mjs';
-import { handleVacancyResponsePage } from './vacancy-response.mjs';
+import { handleVacancyResponsePage, saveQAPairs } from './vacancy-response.mjs';
 import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
 import { dismissOverlays, isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { registerPageTriggers, saveFormAnswers } from './page-triggers.mjs';
@@ -28,6 +28,7 @@ import { paceLine, readEvents, recordEvent } from './stats.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-attach.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
+import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -134,6 +135,7 @@ export function createOrchestrator({
         return false;
       }
       sentVacancyIds.add(vacancyId);
+      submissionRetries.forget(vacancyId);
       // It no longer waits for an answer, and is no longer a skipped vacancy
       await deferredQuestions?.forget(vacancyId)
         .catch((error) => console.error('Error updating deferred-questions.lino:', error.message));
@@ -232,14 +234,17 @@ export function createOrchestrator({
   // The full form's handler: run by the page trigger, or directly when the trigger did not start it
   let responseHandling = null;
   let handledResponseUrl = null;
+  let retryingVacancyId = null;
   const vacancyResponseHandler = () => {
     // A trigger that starts late finds the form already being filled: one handler per form
     if (responseHandling && handledResponseUrl === commander.getUrl()) {
       return responseHandling;
     }
     handledResponseUrl = commander.getUrl();
+    const retryId = retryingVacancyId;
     responseHandling = runVacancyResponseHandler().finally(() => {
       responseHandling = null;
+      if (retryingVacancyId === retryId) retryingVacancyId = null;
     });
     return responseHandling;
   };
@@ -259,8 +264,14 @@ export function createOrchestrator({
     autoSendExact: argv.autoSendExactAnswers,
     vacancyFilters,
     skippedVacancies,
+    retrySubmission: retryingVacancyId !== null && extractVacancyIdFromResponseUrl(commander.getUrl()) === retryingVacancyId,
     verbose: argv.verbose,
   });
+
+  const deferVisibleSubmissionError = () => URL_PATTERNS.vacancyResponse.test(commander.getUrl())
+    ? deferFailedSubmission({ commander, returnUrl: lastSearchPageUrl || 'https://hh.ru/search/vacancy?from=resumelist',
+      saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA }) })
+    : Promise.resolve(false);
 
   /**
    * Handle one result of findAndProcessVacancyButton
@@ -328,6 +339,9 @@ export function createOrchestrator({
       // A login made later in any hh.ru window (this one, chat, forms) reaches the others
       watchHhSessions({ port: argv.browserPort });
 
+      // Capture an existing failed form before resume selection navigates away from it.
+      await deferVisibleSubmissionError();
+
       if (!START_URL) {
         START_URL = URL_PATTERNS.searchVacancy.test(commander.getUrl()) && commander.getUrl().includes('resume=')
           // The kept-open browser already shows suggested vacancies: keep its filters, check the resume
@@ -362,6 +376,13 @@ export function createOrchestrator({
         getReturnUrl: () => lastSearchPageUrl,
       });
       process.on('exit', cleanupTriggers);
+
+      // A native send can fail while the handler is still waiting for confirmation on stdin.
+      const submissionErrors = setInterval(() => {
+        deferVisibleSubmissionError().catch((error) => console.log(`⚠️  Could not defer failed application: ${error.message}`));
+      }, 1000);
+      submissionErrors.unref();
+      process.once('exit', () => clearInterval(submissionErrors));
 
       await attachPendingLetters();
       await this.runMainLoop();
@@ -409,7 +430,23 @@ export function createOrchestrator({
           continue;
         }
 
-        const result = await findAndProcessVacancyButton({
+        const retry = URL_PATTERNS.searchVacancy.test(commander.getUrl()) ? submissionRetries.takeDue() : null;
+        let result;
+        if (retry) {
+          console.log(`🔁 Retrying vacancy ${retry.vacancyId}: its five-hour submission cooldown has expired`);
+          // Force the same handler/fallback path as a newly opened full application form.
+          handledResponseUrl = null;
+          retryingVacancyId = retry.vacancyId;
+          try {
+            await commander.goto({ url: retry.url, waitForStableUrlBefore: false });
+          } catch (error) {
+            retryingVacancyId = null;
+            submissionRetries.defer(retry.vacancyId, retry);
+            console.log(`⚠️  Retry navigation failed for vacancy ${retry.vacancyId}; deferred for another five hours: ${error.message}`);
+            continue;
+          }
+          result = { status: 'vacancy_response_detected', vacancyId: retry.vacancyId };
+        } else result = await findAndProcessVacancyButton({
           commander,
           MESSAGE,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,

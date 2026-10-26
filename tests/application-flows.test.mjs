@@ -19,6 +19,7 @@ import { createVacancyFilters } from '../src/vacancy-filters.mjs';
 import { disableConfirmations } from '../src/confirmations.mjs';
 import { SELECTORS } from '../src/hh-selectors.mjs';
 import { LETTER_SELECTORS } from '../src/letter-attach.mjs';
+import { submissionRetries } from '../src/submission-retries.mjs';
 
 const SEARCH_URL = 'https://hh.ru/search/vacancy?resume=1';
 
@@ -229,7 +230,7 @@ const RESPONSE_URL = 'https://hh.ru/applicant/vacancy_response?vacancyId=1391000
  * @param {boolean} [options.direct=false] - The form is a direct application (employer's site)
  * @param {Function} [options.onWait] - Runs on every wait (e.g. the periodic auto-save)
  */
-function fakeForm({ questions = [], confirms = true, direct = false, onWait = () => {} } = {}) {
+function fakeForm({ questions = [], confirms = true, direct = false, withoutTest = false, onWait = () => {} } = {}) {
   const state = { questions: questions.map((question) => ({ question, value: '' })), submitted: false, clicks: [], gotos: [] };
   const items = () => state.questions.map(({ question, value }, index) => ({
     type: 'textarea', question, selector: `textarea[name="task_${index}"]`, index, currentValue: value,
@@ -249,6 +250,7 @@ function fakeForm({ questions = [], confirms = true, direct = false, onWait = ()
       if (selector === 'textarea') {
         return state.questions.length + 1;
       }
+      if (selector === SELECTORS.submitButtonWithoutQuestions) return withoutTest ? 1 : 0;
       return [SELECTORS.coverLetterTextareaForm, SELECTORS.submitButtonLetter].includes(selector) ? 1 : 0;
     },
     evaluate: async ({ fn }) => {
@@ -300,6 +302,30 @@ function fakeForm({ questions = [], confirms = true, direct = false, onWait = ()
 const sends = (form) => form.state.clicks.filter(({ selector }) => selector === SELECTORS.submitButtonLetter);
 
 describe('full response form', () => {
+  test('reopening a cooling form cannot send it before its five-hour deadline', async () => {
+    disableConfirmations();
+    const form = fakeForm();
+    submissionRetries.defer('139100001');
+    try {
+      await handleVacancyResponsePage({ commander: form, MESSAGE: 'Здравствуйте', readQADatabase: async () => new Map(),
+        addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL });
+      assert.equal(sends(form).length, 0);
+      assert.deepEqual(form.state.gotos, [SEARCH_URL]);
+    } finally { submissionRetries.forget('139100001'); }
+  });
+
+  test('a delayed retry submits the saved answers through the regular send button', async () => {
+    disableConfirmations();
+    const qa = new Map([['Какие AI-инструменты Вы используете?', 'Hive Mind, Claude, Codex.']]);
+    const form = fakeForm({ questions: [...qa.keys()], withoutTest: true });
+    await handleVacancyResponsePage({ commander: form, MESSAGE: 'Здравствуйте', readQADatabase: async () => new Map(qa),
+      addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL, retrySubmission: true, autoSendExact: true });
+    assert.equal(sends(form).length, 1);
+    assert.equal(sends(form)[0].autoSend, true);
+    assert.equal(form.state.questions[0].value, 'Hive Mind, Claude, Codex.');
+    assert.equal(form.state.clicks.some(({ selector }) => selector === SELECTORS.submitButtonWithoutQuestions), false);
+  });
+
   test('an application hh.ru does not confirm goes to the stop-or-wait of the popup, never back to the list', async () => {
     disableConfirmations();
     const notConfirmed = [];

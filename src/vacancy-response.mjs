@@ -30,6 +30,7 @@ import { coverLetterFor } from './cover-letter.mjs';
 import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
+import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
 import {
   dismissOverlays,
   findFirstSelector,
@@ -370,6 +371,7 @@ export async function handleVacancyResponsePage({
   autoSendExact = true,
   vacancyFilters = null,
   skippedVacancies = null,
+  retrySubmission = false,
   verbose,
 }) {
   // hh.ru changes the URL after a response, so the vacancy ID is taken first
@@ -398,6 +400,14 @@ export async function handleVacancyResponsePage({
     console.log('Detected vacancy_response page, handling application form...');
     await commander.waitForSelector({ selector: 'body' });
     await dismissOverlays(commander);
+    const cooling = submissionRetries.get(vacancyId);
+    if (cooling && cooling.until > Date.now()) {
+      await saveQAPairs({ commander, addOrUpdateQA });
+      console.log(`⏭️  Vacancy ${vacancyId} is waiting for its five-hour submission retry; left alone until ${new Date(cooling.until).toISOString()}`);
+      await returnToList();
+      return;
+    }
+    if (await deferFailedSubmission({ commander, vacancyId, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA }) })) return;
 
     // hh.ru stays on this page after a response and offers to respond again
     if (await isResponseSubmitted(commander)) {
@@ -458,7 +468,7 @@ export async function handleVacancyResponsePage({
         : 'Cover letter already contains text, skipping prefill');
     }
 
-    if (submitWithoutTestSelector) {
+    if (submitWithoutTestSelector && !retrySubmission) {
       console.log('Using special "Откликнуться без теста" flow');
       // Questions outside the test (e.g. the salary) still take their saved answers
       await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext });
@@ -600,6 +610,7 @@ export async function handleVacancyResponsePage({
       return;
     }
     if (!await isResponseSubmitted(commander)) {
+      if (await deferFailedSubmission({ commander, vacancyId, title, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA }) })) return;
       console.log(`⚠️  hh.ru did not confirm the application to vacancy ${vacancyId}, manual check required`);
       // Never move on to the next vacancy: the run stops (unattended) or waits for the user
       await onApplicationNotConfirmed(vacancyId);

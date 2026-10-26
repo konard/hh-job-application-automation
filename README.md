@@ -201,12 +201,16 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 Questions that the QA database cannot answer are never skipped by default: the form waits for
 you (`--on-missing-answers wait`). Use `--on-missing-answers skip` for fully unattended runs.
 
-An application hh.ru does not confirm as sent (no «Вы откликнулись»), on the popup or the full
-form, stops an unattended run and makes a supervised one wait for you; the run never moves on to the
-next vacancy then. When the popup shows a passing error of hh.ru («Произошла ошибка,
-попробуйте ещё раз»), it is sent again after 1–1.5 minutes, at most twice; never after the daily
-limit, a block or «too many requests». When it is still there after that, the vacancy is set aside
-(`send_error` in `skipped-vacancies.lino`, tried once more on a later run) and the run goes on.
+When a popup or full application form shows hh.ru's generic submission error («Произошла ошибка,
+попробуйте ещё раз» / “An error occurred, please try again”), its answers are saved before leaving
+and the vacancy waits five hours in an in-memory queue. Other applications continue. The vacancy
+is excluded from the search list during the cooldown and is reopened for retry after it expires,
+even if it is no longer on the current search page. Retries respect the normal pacing and answer
+review rules; another generic failure starts another five-hour wait. The queue stays in RAM only
+and is cleared when the application process restarts. These errors are not written to
+`skipped-vacancies.lino`. Daily limits, blocks, captchas and field validation keep their own
+handling. An unconfirmed application without a recognized generic error still stops an unattended
+run or waits for the user in a supervised run.
 
 ### Test Mode and Confirmations
 
