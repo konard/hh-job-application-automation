@@ -37,7 +37,12 @@ export function observeChat(read, turnedOffWords, owner) {
   const start = () => {
     const observer = new window.MutationObserver(capture);
     recorder.observer = observer;
-    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    observer.observe(document.documentElement, {
+      childList: true, subtree: true, characterData: true,
+      // Delivery acknowledgement can change only an existing icon's data-qa, or a bubble's
+      // outgoing class/style. Record the sender correction without waiting for another message.
+      attributes: true, attributeFilter: ['data-qa', 'class', 'style'],
+    });
     capture();
   };
   if (document.documentElement) start();

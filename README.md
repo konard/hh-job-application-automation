@@ -559,8 +559,9 @@ browser. For the message waiting for an answer the reply is typed into the messa
 quick replies are never clicked.
 
 While the chat window is open (`--watch`, and the rejection checks of `apply`), each sent message
-is captured as the page changes, without requests to hh.ru; switching chats immediately after
-sending does not lose the reply. The application browser's chat frames are recorded too. A new
+is captured as the page changes, including delivery-status and bubble-style updates, without
+requests to hh.ru. Switching chats immediately after sending does not lose the reply. The
+application browser's chat frames are recorded too. A new
 question in the chat window is prefilled from saved answers, leaving text you already typed alone.
 A bot's question is saved without its acknowledgement of your last answer («Понял, спасибо. А
 есть ли у вас опыт с NestJS?» is saved as «Есть ли у вас опыт с NestJS?»), so it is answered word for

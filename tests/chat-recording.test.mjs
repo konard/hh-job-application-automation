@@ -167,6 +167,52 @@ describe('durable chat recording', () => {
       globalThis.document = previousDocument;
     }
   });
+
+  test('delivery acknowledgement alone saves a wide reply as an answer, without an employer response', () => fixture(async (dir) => {
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const history = createChatHistory(path.join(dir, 'history.json'));
+    const qaDatabase = createQADatabase(path.join(dir, 'qa.lino'));
+    const conversation = chat('1', 'Ответ без ожидания следующего сообщения.');
+    // A full-width optimistic bubble has no outgoing status until the send is acknowledged.
+    conversation.messages.at(-1).mine = false;
+    const writes = [];
+    let notify;
+    let options;
+    try {
+      globalThis.window = {
+        location: { pathname: '/chat/1' },
+        MutationObserver: class {
+          constructor(callback) { notify = callback; }
+          observe(_target, settings) { options = settings; }
+        },
+        __hhRecordChat: (snapshot) => {
+          const write = learnChatQuestions(JSON.parse(JSON.stringify(snapshot)), { history, qaDatabase, log: () => {} });
+          writes.push(write);
+          return write;
+        },
+      };
+      globalThis.document = { documentElement: {} };
+      observeChat(() => conversation, '');
+      await Promise.all(writes);
+      expect((await qaDatabase.readQADatabase()).has(question)).toBe(false);
+      conversation.messages.at(-1).mine = true;
+      // Simulate the browser's mutation delivery rules, rather than inserting another message.
+      for (const attributeName of ['data-qa', 'class', 'style']) {
+        if (options.attributes && (!options.attributeFilter || options.attributeFilter.includes(attributeName))) {
+          notify([{ type: 'attributes', attributeName }]);
+        }
+      }
+      await Promise.all(writes);
+      expect((await qaDatabase.readQADatabase()).get(question)).toBe(conversation.messages.at(-1).text);
+      expect((await history.read())['1'].answerCounts).toEqual([
+        { question, answer: conversation.messages.at(-1).text, count: 1 },
+      ]);
+    } finally {
+      globalThis.window = previousWindow;
+      globalThis.document = previousDocument;
+    }
+  }));
 });
 
 describe('complete chat history', () => {
