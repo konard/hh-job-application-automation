@@ -6,6 +6,9 @@ import { contractContacts } from './contacts.mjs';
 import { ANSWER_SEPARATOR } from './qa.mjs';
 import { mergeAnswerFrequencies } from './answer-variants.mjs';
 
+/** Access-controlled recruiter links belong in the private transcript, never the shared Q&A. */
+export const hasPrivateRecruiterLinks = (text) => /https?:\/\/\S*(?:\/private\/|[?&](?:token|access_token|auth|key|p)=)/iu.test(String(text));
+
 /**
  * Read every distinct answer given to the same question, without changing the user's saved
  * wording. Checkbox arrays keep their meaning. Contacts are templated before expansion in the
@@ -66,6 +69,7 @@ export async function learnChatQuestions(chat, { history, qaDatabase, buttonQues
   const asked = templates.filter(([question]) => buttonQuestions.has(normalizeQuestion(question)));
   const known = await (qaDatabase.readSavedQADatabase ?? qaDatabase.readQADatabase)();
   for (const [question, answer] of [...questions, ...asked]) {
+    if (hasPrivateRecruiterLinks(question)) continue;
     if (known.has(question)) continue;
     if (qaDatabase.addQAIfMissing) {
       if (!await qaDatabase.addQAIfMissing(question, answer)) continue;

@@ -642,6 +642,10 @@ requests to hh.ru. Switching chats immediately after sending does not lose the r
 application browser's chat frames are recorded too. Navigation waits for the conversation pane
 to match its URL, so the previous chat's messages are not recorded under the next chat's ID. A new
 question in the chat window is prefilled from saved answers, leaving text you already typed alone.
+Full-history learning scrolls toward older messages using the negative scroll position of hh.ru's
+reversed message column; it keeps reading older pages until the original application is reached.
+Recruiter questions containing private access links stay in the local transcript and are excluded
+from the shared Q&A file.
 Prefills run one at a time, including at startup, to prevent duplicate text.
 A bot's question is saved without its acknowledgement of your last answer («Понял, спасибо. А
 есть ли у вас опыт с NestJS?» is saved as «Есть ли у вас опыт с NestJS?»), so it is answered word for

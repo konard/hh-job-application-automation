@@ -95,7 +95,9 @@ export function scrollChatHistory() {
     box = box.parentElement;
   }
   if (!box) return false;
-  box.scrollTop = 0;
+  // hh.ru uses a reversed flex column: zero is the newest end and older messages have
+  // negative scrollTop. Setting zero repeatedly never requests an older history page.
+  box.scrollTop = window.getComputedStyle(box).flexDirection === 'column-reverse' ? -box.scrollHeight : 0;
   return true;
 }
 

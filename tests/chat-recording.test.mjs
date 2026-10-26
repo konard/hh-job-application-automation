@@ -7,7 +7,7 @@ import { createQADatabase } from '../src/qa-database.mjs';
 import { learnedPairs, knownReply, countChatAnswers } from '../src/chat-answers.mjs';
 import { withContacts } from '../src/contacts.mjs';
 import { learnChatQuestions, withChatHistoryAnswers } from '../src/chat-learning.mjs';
-import { observeChat, readFullChat, setUnreadFilter } from '../src/chat-recording.mjs';
+import { observeChat, readFullChat, scrollChatHistory, setUnreadFilter } from '../src/chat-recording.mjs';
 import { allAnswersExact } from '../src/qa.mjs';
 
 const question = 'Сколько проектов или задач вы можете вести одновременно? При каком количестве одновременных задач происходит распыление и снижение результативности?';
@@ -21,6 +21,25 @@ const fixture = async (fn) => {
 };
 
 describe('durable chat recording', () => {
+  test('older history is above a negative scroll position in hh.ru’s reversed message column', () => {
+    const before = { window: globalThis.window, document: globalThis.document };
+    const pane = { scrollHeight: 1600, clientHeight: 400, scrollTop: 0 };
+    try {
+      globalThis.document = { querySelector: () => ({ parentElement: pane }) };
+      globalThis.window = { getComputedStyle: () => ({ overflowY: 'auto', flexDirection: 'column-reverse' }) };
+      expect(scrollChatHistory()).toBe(true);
+      expect(pane.scrollTop).toBe(-1600);
+      globalThis.window.getComputedStyle = () => ({ overflowY: 'auto', flexDirection: 'column' });
+      pane.scrollTop = 400;
+      expect(scrollChatHistory()).toBe(true);
+      expect(pane.scrollTop).toBe(0);
+    } finally {
+      for (const [key, value] of Object.entries(before)) {
+        if (value === undefined) delete globalThis[key]; else globalThis[key] = value;
+      }
+    }
+  });
+
   test('a transitioning pane cannot change the archive or learned answers', () => fixture(async (dir) => {
     const history = createChatHistory(path.join(dir, 'history.json'));
     const qaDatabase = createQADatabase(path.join(dir, 'qa.lino'));
@@ -28,6 +47,19 @@ describe('durable chat recording', () => {
     expect(await history.record(changing)).toBe(false);
     await learnChatQuestions(changing, { history, qaDatabase, log: () => {} });
     expect(await history.read()).toEqual({});
+    expect((await qaDatabase.readQADatabase()).size).toBe(0);
+  }));
+
+  test('private recruiter links stay verbatim in the local archive and out of shared Q&A', () => fixture(async (dir) => {
+    const history = createChatHistory(path.join(dir, 'history.json'));
+    const qaDatabase = createQADatabase(path.join(dir, 'qa.lino'));
+    const question = 'Описание компании и вакансии.\nhttps://example.com/private/video?p=test-access-key\nГотовы обсудить детали в чате?';
+    const conversation = { id: 'private', messages: [
+      { id: '1', mine: false, title: '', text: question }, { id: '2', mine: true, title: '', text: 'Да' },
+    ] };
+    expect(learnedPairs(conversation.messages).questions.some(([text]) => text.includes('/private/'))).toBe(true);
+    await learnChatQuestions(conversation, { history, qaDatabase, log: () => {} });
+    expect((await history.read()).private.messages[0].text).toBe(question);
     expect((await qaDatabase.readQADatabase()).size).toBe(0);
   }));
 
