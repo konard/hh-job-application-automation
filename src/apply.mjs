@@ -78,6 +78,9 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
 (async () => {
   const argv = createConfig();
   process.env.ANSWER_FINAL_PERIOD = argv.answerFinalPeriod;
+  // Also pass the CLI preference to chat/form workers that post their own alerts.
+  process.env.NOTIFY_SOUND = String(argv.notificationSound);
+  if (!argv.notificationSound) console.log('🔕 Notification sounds disabled; visual alerts remain enabled.');
   if (process.env.HH_SUBMISSION_RETRIES_HANDOFF) {
     const handoff = process.env.HH_SUBMISSION_RETRIES_HANDOFF;
     delete process.env.HH_SUBMISSION_RETRIES_HANDOFF;

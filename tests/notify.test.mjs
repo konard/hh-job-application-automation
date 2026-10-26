@@ -1,5 +1,8 @@
 import { describe, test, assert } from 'test-anywhere';
-import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUser, focusActive, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUser, focusActive, notificationSoundEnabled, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
 
 describe('alerts when the run waits for you', () => {
   test('on on macOS unless NOTIFY=0; never in tests or elsewhere', () => {
@@ -8,6 +11,29 @@ describe('alerts when the run waits for you', () => {
     assert.equal(alertsEnabled({ NOTIFY: 'off' }, 'darwin'), false);
     assert.equal(alertsEnabled({ NODE_ENV: 'test' }, 'darwin'), false);
     assert.equal(alertsEnabled({}, 'linux'), false);
+  });
+
+  test('muting notification sounds leaves visual alerts enabled', () => {
+    for (const value of ['false', '0', 'no', 'off', 'FALSE']) {
+      assert.equal(notificationSoundEnabled({ env: { NOTIFY_SOUND: value } }), false);
+      assert.equal(alertsEnabled({ NOTIFY_SOUND: value }, 'darwin'), true);
+    }
+    assert.equal(notificationSoundEnabled({ env: { NOTIFY_SOUND: 'true' } }), true);
+  });
+
+  test('standalone alerts read the local sound setting, with the environment taking precedence', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hh-notification-sound-'));
+    const file = path.join(dir, '.lenv');
+    try {
+      assert.equal(notificationSoundEnabled({ env: {}, file }), true);
+      fs.writeFileSync(file, '# NOTIFY_SOUND: true\nNOTIFY_SOUND: "false"\n');
+      assert.equal(notificationSoundEnabled({ env: {}, file }), false);
+      assert.equal(notificationSoundEnabled({ env: { NOTIFY_SOUND: 'true' }, file }), true);
+      fs.writeFileSync(file, 'NOTIFY_SOUND: true\n');
+      assert.equal(notificationSoundEnabled({ env: {}, file }), true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('the text is one short line: what is needed is told in the terminal', () => {

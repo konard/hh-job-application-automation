@@ -34,6 +34,11 @@ describe('default vacancy insights', () => {
 });
 
 describe('answer style and vacancy feedback settings', () => {
+  test('notification sound can be turned off and explicitly restored from the CLI', () => {
+    assert.equal(configOf('--no-notification-sound').notificationSound, false);
+    assert.equal(configOf('--notification-sound').notificationSound, true);
+  });
+
   test('final-period conflicts default to a period and can prefer no period', () => {
     assert.equal(configOf().answerFinalPeriod, 'with');
     assert.equal(configOf('--answer-final-period', 'without').answerFinalPeriod, 'without');

@@ -87,6 +87,11 @@ export function createConfig() {
           description: `Steps to confirm on stdin, comma-separated: ${CONFIRM_STEPS.join(', ')}, or none`,
           default: getenv('CONFIRM', 'send'),
         })
+        .option('notification-sound', {
+          type: 'boolean',
+          description: 'Play a sound when attention is needed; disable sound while keeping visual alerts',
+          default: getenv('NOTIFY_SOUND', true),
+        })
         .option('on-missing-answers', {
           type: 'string',
           choices: ['wait', 'skip'],

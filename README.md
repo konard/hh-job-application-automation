@@ -94,7 +94,9 @@ resume and applies to the vacancies hh.ru suggests for it:
   only brings the browser forward. No alert is shown while the browser window that waits for you
   is the app in front (checked again every 5 minutes). The sound is heard with a Focus on too; an
   alert not answered is shown again every 5 minutes, and it is taken away once the wait is over. `NOTIFY=0` turns
-  them off.
+  them off. To mute sound while keeping visual alerts, use `--no-notification-sound` or set
+  `NOTIFY_SOUND: false` in `.lenv` (`NOTIFY_SOUND=false` in the environment). Sound is enabled
+  by default; set it back to `true` or remove the setting to restore it.
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names
   are counted). The hh.ru session of any browser you use (Google Chrome, Safari, Firefox, Edge,

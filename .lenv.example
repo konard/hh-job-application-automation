@@ -48,6 +48,10 @@
 # Default: send (forms with questions are sent after you confirm)
 # CONFIRM: answers,send
 
+# Play notification sounds independently of visual alerts
+# Default: true. Set false to mute; restore true or remove this setting to enable sound again.
+# NOTIFY_SOUND: false
+
 # Questions without a saved answer: wait (for you to answer them) or skip (the vacancy)
 # Default: wait
 # ON_MISSING_ANSWERS: wait

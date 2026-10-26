@@ -44,6 +44,17 @@ const LSREGISTER = '/System/Library/Frameworks/CoreServices.framework/Frameworks
 export const alertsEnabled = (env = process.env, platform = process.platform) =>
   platform === 'darwin' && env.NODE_ENV !== 'test' && !/^(0|false|no|off)$/i.test(env.NOTIFY ?? '');
 
+/** Mute sound independently of visual alerts; standalone tools also honor the local .lenv. */
+export function notificationSoundEnabled({ env = process.env, file = '.lenv' } = {}) {
+  let value = env.NOTIFY_SOUND;
+  if (value === undefined) {
+    let text = '';
+    try { text = fs.readFileSync(file, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    value = text.match(/^NOTIFY_SOUND:[ \t]*([^\r\n]+)/m)?.[1].trim().replace(/^(['"`])(.*)\1$/, '$2');
+  }
+  return !/^(0|false|no|off)$/i.test(String(value ?? ''));
+}
+
 /**
  * Whether a Focus (or Do Not Disturb) is on, from the Focus assertions file
  * @param {Object} assertions - ~/Library/DoNotDisturb/DB/Assertions.json
@@ -330,7 +341,9 @@ export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS,
       schedule(remindMs);
       return;
     }
-    spawn('afplay', [SOUND], { stdio: 'ignore' }).on('error', () => {}).unref();
+    if (notificationSoundEnabled()) {
+      spawn('afplay', [SOUND], { stdio: 'ignore' }).on('error', () => {}).unref();
+    }
     const options = { text, pid, onAnswer, log };
     stopShown = notifierReady && !focusOn() ? postNotification(options) : openWindow(options);
     shown.add(stopShown);
