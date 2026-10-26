@@ -3,7 +3,7 @@
  * for word and the form holds exactly the saved answers
  */
 import { describe, test, assert } from 'test-anywhere';
-import { allAnswersExact } from '../src/qa.mjs';
+import { allAnswersExact, exactAnswerIssues } from '../src/qa.mjs';
 
 const ENGLISH = 'Твой уровень владения английским языком:';
 const B2C = 'Есть ли у тебя опыт работы с крупными B2C-продуктами?';
@@ -30,6 +30,32 @@ describe('allAnswersExact', () => {
       textarea(B2C, 'Да, Kaiten'),
       checkbox(STACK, ['Go', 'Java', 'PostgreSQL'], ['PostgreSQL', 'Go']),
     ], qaMap), true);
+  });
+
+  test('hyphens, typographic dashes and nonbreaking spaces in unique option labels are equivalent', () => {
+    const question = 'На каком этапе работы над новой фичей вы подключитесь?';
+    const saved = 'На этапе проработки ТО, до его утверждения - чтобы заложить критерии тестирования';
+    const offered = saved.replace(' - ', '\u00a0— ');
+    const qa = new Map([[question, saved]]);
+    const fields = [radio(question, [offered, 'После реализации'], offered)];
+    assert.equal(allAnswersExact(fields, qa), true);
+    assert.deepEqual(exactAnswerIssues(fields, qa), []);
+    assert.equal(allAnswersExact([checkbox(question, [offered, 'Другой ответ'], [offered])], new Map([[question, [saved]]])), true);
+  });
+
+  test('typography matching never changes code/free-text comparisons or conflates offered options', () => {
+    assert.equal(allAnswersExact([textarea('Code?', 'a — b')], new Map([['Code?', 'a - b']])), false);
+    const question = 'Which option?';
+    assert.equal(allAnswersExact([radio(question, ['A-B', 'A—B'], 'A—B')], new Map([[question, 'A‐B']])), false);
+    assert.equal(allAnswersExact([radio(question, ['A-B', 'A—B'], 'A-B')], new Map([[question, 'A-B']])), true);
+    assert.equal(allAnswersExact([radio(question, ['До реализации — всегда'], 'До реализации — всегда')], new Map([[question, 'После реализации - всегда']])), false);
+  });
+
+  test('review diagnostics identify the actual non-exact question instead of blaming a complete form', () => {
+    const issues = exactAnswerIssues([textarea('New question?', 'Text'), textarea(B2C, 'Different text')], qaMap);
+    assert.deepEqual(issues.map(({ question }) => question), ['New question?', B2C]);
+    assert.equal(issues[0].reason, 'question is not saved word for word');
+    assert.equal(issues[1].reason, 'the current answer differs from its saved answer');
   });
 
   test('a question matched only approximately is not exact', () => {

@@ -120,31 +120,54 @@ export function allAnswersExact(items, qaMap) {
   if (items.length === 0) {
     return false;
   }
-  const same = (a, b) => String(a ?? '').trim() === String(b ?? '').trim();
   const choices = new Map(items.filter(({ type }) => type !== 'textarea').map((item) => [item.question, item]));
-  return items.every((item) => {
-    if (!qaMap.has(item.question)) {
-      return false;
+  return items.every((item) => itemAnswerExact(item, qaMap, choices));
+}
+
+const choiceText = (text) => String(text ?? '').normalize('NFC').replace(/[\u2010-\u2015]/g, '-').replace(/\s+/g, ' ').trim();
+const sameList = (first, second) => {
+  const sorted = [...second].sort();
+  return first.length === second.length && [...first].sort().every((text, index) => text === sorted[index]);
+};
+
+function itemAnswerExact(item, qaMap, choices) {
+  if (!qaMap.has(item.question)) {
+    return false;
+  }
+  const saved = qaMap.get(item.question);
+  const savedList = [saved].flat().map((answer) => String(answer).trim());
+  if (item.type === 'textarea') {
+    if (hasAnswerVariants(saved)) return false;
+    const choice = choices.get(item.question);
+    // The text box of a choice question holds the answer only for its "Свой вариант" option
+    if (choice && !choice.options.some(({ checked, value }) => checked && value === 'open')) {
+      return true;
     }
-    const saved = qaMap.get(item.question);
-    const savedList = [saved].flat().map((answer) => String(answer).trim());
-    if (item.type === 'textarea') {
-      if (hasAnswerVariants(saved)) return false;
-      const choice = choices.get(item.question);
-      // The text box of a choice question holds the answer only for its "Свой вариант" option
-      if (choice && !choice.options.some(({ checked, value }) => checked && value === 'open')) {
-        return true;
-      }
-      return same(item.currentValue, savedList.join('\n'));
-    }
-    const checked = item.options.filter((option) => option.checked);
-    if (checked.some(({ value }) => value === 'open')) {
-      // "Свой вариант": the saved answer is the text in its box, checked above
-      return checked.length === 1;
-    }
-    const checkedTexts = checked.map(({ optionText }) => optionText.trim()).sort();
-    return checkedTexts.length === savedList.length && [...savedList].sort().every((answer, i) => answer === checkedTexts[i]);
-  });
+    // Code and free text stay literal: changing an operator or dash may change their meaning.
+    return String(item.currentValue ?? '').trim() === savedList.join('\n').trim();
+  }
+  const checked = item.options.filter((option) => option.checked);
+  if (checked.some(({ value }) => value === 'open')) {
+    // "Свой вариант": the saved answer is the text in its box, checked above
+    return checked.length === 1;
+  }
+  const checkedTexts = checked.map(({ optionText }) => optionText.trim());
+  if (sameList(checkedTexts, savedList)) return true;
+  // Typography in a closed option label does not change the saved answer. Require a unique
+  // label after normalization, so two differently written offered options never get conflated.
+  if (savedList.some((answer) => new Set(item.options.filter((option) => choiceText(option.optionText) === choiceText(answer))
+    .map((option) => option.optionText.trim())).size > 1)) return false;
+  return sameList(checkedTexts.map(choiceText), savedList.map(choiceText));
+}
+
+/** Tell the user which field prevents unattended submission, using the pre-autofill database. */
+export function exactAnswerIssues(items, qaMap) {
+  const choices = new Map(items.filter(({ type }) => type !== 'textarea').map((item) => [item.question, item]));
+  return [...new Map(items.filter((item) => !itemAnswerExact(item, qaMap, choices)).map((item) => [item.question, {
+    question: item.question,
+    reason: !qaMap.has(item.question) ? 'question is not saved word for word'
+      : hasAnswerVariants(qaMap.get(item.question)) ? 'several saved answers need selection' : 'the current answer differs from its saved answer',
+  }])).values()];
 }
 
 /**

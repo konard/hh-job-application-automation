@@ -13,6 +13,7 @@ import {
   fillCheckboxQuestion,
   listOpenQuestions,
   allAnswersExact,
+  exactAnswerIssues,
   setupAutoSaveListeners,
   collectMarkedQAPairs,
   answerFits,
@@ -563,6 +564,9 @@ export async function handleVacancyResponsePage({
       console.log(`Every answer is the saved answer of the very same question (${describeQuestionCounts(totalCount, textareaCount)}) - sending without asking`);
     } else {
       console.log(`All test questions answered (${describeQuestionCounts(totalCount, textareaCount)}), not all with the saved answer of the very same question`);
+      const issues = exactAnswerIssues(await extractPageQuestions({ evaluate: commander.evaluate }), savedBefore);
+      for (const issue of issues) console.log(`   • ${issue.question.split('\n')[0]}: ${issue.reason}`);
+      if (!issues.length) console.log('   • Some answers were completed after the initial autofill; review is still required');
     }
     const decision = await decideSend({
       hasQuestions: hasTestQuestions,
