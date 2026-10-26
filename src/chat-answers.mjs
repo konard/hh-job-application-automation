@@ -18,6 +18,7 @@ import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isEnglish, isPattern
 import { answerText, hasAnswerVariants } from './qa.mjs';
 import { answersInContexts, showsContext } from './answer-contexts.mjs';
 import { APPLICATION_WORD, INVITE_NOTICE, REJECTION_WORD, TURNED_OFF_WORDS } from './hh-words.mjs';
+import { salaryClarificationQuestion } from './salary-questions.mjs';
 
 /** A template message is the same text in other words; its saved reply needs a close match */
 export const TEMPLATE_THRESHOLD = 0.6;
@@ -602,8 +603,15 @@ export async function knownReplyInContexts(message, { readTemplates, readQADatab
   const qaMaps = answersInContexts(readQADatabase, contexts);
   // A message not saved word for word that has an answer under itself: a salary question answered by pattern
   const savedAsIs = (await readQADatabase()).has(message.text);
+  const clarification = salaryClarificationQuestion(message.text, known);
+  const question = clarification ?? message.text;
   const replyIn = async (texts) => {
-    const qaMap = await qaMaps(message.text, texts);
+    const qaMap = await qaMaps(question, texts);
+    if (clarification) {
+      return qaMap.has(question)
+        ? { answer: answerText(qaMap.get(question)), perfect: false, source: 'salary clarification by pattern', matched: message.text }
+        : null;
+    }
     const byPattern = !savedAsIs && qaMap.has(message.text) ? qaMap.get(message.text) : null;
     return knownReply(message, { templates: await templates(message.text, texts), qaMap, byPattern });
   };

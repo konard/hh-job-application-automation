@@ -48,9 +48,9 @@ describe('The currency of an answer (data/answer-contexts.lino)', () => {
     assert.equal(expandContacts('От {{salary_net_usd}} на руки или эквивалент.', inRub), 'От 450 000 ₽ на руки или эквивалент.');
   });
 
-  test('a sum missing in that context keeps the saved one', () => {
+  test('a missing currency-specific salary cannot silently reuse an amount in rubles', () => {
     const noRate = { salary_net: '450 000 ₽', salary_gross: '530 000 ₽', salary_net_usd: '$6 000' };
-    assert.equal(contactsInContexts(noRate, chooseContexts(contexts, 'Ваша вилка?', vacancy)).salary_gross, '530 000 ₽');
+    assert.equal(contactsInContexts(noRate, chooseContexts(contexts, 'Ваша вилка?', vacancy)).salary_gross, undefined);
   });
 
   test('the Q&A database read in contexts', async () => {

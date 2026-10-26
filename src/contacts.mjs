@@ -108,18 +108,21 @@ export function contractContacts(text, contacts) {
 
 /**
  * The contacts with the placeholders of the chosen contexts; a value whose own placeholders have
- * no value (no dollar sum) keeps the contact as it was
+ * no value keeps the contact as it was, except a salary in an explicitly selected currency:
+ * a missing dollar amount must never fall back to a ruble amount
  * @param {Object} contacts
  * @param {Array} chosen - chooseContexts (answer-contexts.mjs)
  * @returns {Object}
  */
 export function contactsInContexts(contacts, chosen) {
   const result = { ...contacts };
-  for (const { values } of chosen) {
+  for (const { group, values } of chosen) {
     for (const [key, template] of Object.entries(values)) {
       const value = expandContacts(template, contacts);
       if (!/\{\{\w+\}\}/.test(value)) {
         result[key] = value;
+      } else if (group === 'currency' && /^salary_(?:net|gross)(?:_|$)/.test(key)) {
+        delete result[key];
       }
     }
   }

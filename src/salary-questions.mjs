@@ -35,8 +35,11 @@ const PLACEHOLDER = /\{\{(salary_\w+?)(?:_usdt|_usd|_eur)?\}\}/g;
 /** What a plain salary answer says besides its sums */
 const PLAIN_WORDS = new Set(['от', 'в', 'месяц', 'ежемесячно', 'на', 'руки', 'до', 'вычета', 'ндфл', 'налогов', 'from', 'net', 'gross', 'per', 'month', 'salary', 'before', 'taxes', 'a']);
 
-/** Salary answers in English when none of the shape is saved */
-const ENGLISH_ANSWERS = { net: 'From {{salary_net}} net per month.', gross: 'From {{salary_gross}} gross per month ({{salary_net}} net).' };
+/** Fallback wording follows the message language independently of its requested currency. */
+const DEFAULT_ANSWERS = {
+  en: { net: 'From {{salary_net}} net per month.', gross: 'From {{salary_gross}} gross per month ({{salary_net}} net).' },
+  ru: { net: 'От {{salary_net}} в месяц на руки.', gross: 'От {{salary_gross}} в месяц до вычета {{salary_tax}}.' },
+};
 
 const words = (text) => (String(text).toLowerCase().replace(/ё/g, 'е').match(/[\p{L}]{4,}/gu) ?? []);
 const stems = (text) => new Set(words(text).map((word) => word.slice(0, 6)));
@@ -142,6 +145,39 @@ export function salaryQuestion(question, patterns = null) {
   };
 }
 
+const CURRENCY = /[$€₽]|\b(?:usd[tc]?|eur|rub|dollars?|euros?|rubles?)\b|доллар|рубл|руб\.|евро/iu;
+const CLARIFY = /цифр|сумм|подскаж|уточн|укаж|напиш|можно|figures?|amount|numbers?|please|could you|what about|how about|\?/iu;
+const OTHER_MONEY_TOPIC = /бюджет|выручк|оборот|расход|налогооблож|revenue|budget|expenses?|как.*налог|how.*tax/iu;
+
+/**
+ * A follow-up may omit "salary": "цифры в долларах и до вычета налогов". Only continue a
+ * recent salary question or a consecutive chain of its clarifications; unrelated topics stop it.
+ * Returns a salary question for deterministic inference, never an exact saved-question claim.
+ */
+export function salaryClarificationQuestion(question, known = []) {
+  const text = String(question ?? '').trim();
+  if (salaryQuestion(text) || !text || text.length > 400 || NOT_EXPECTATION.test(text) || OTHER_PERIOD.test(text)) return null;
+  const clarifies = (value) => (CURRENCY.test(value) || NET.test(value) || GROSS.test(value)) &&
+    CLARIFY.test(value) && !OTHER_MONEY_TOPIC.test(value) && !OTHER_PERIOD.test(value) && !NOT_EXPECTATION.test(value);
+  if (!clarifies(text)) return null;
+  const previous = [known].flat().map(String).filter((value) => value.trim() && value.trim() !== text).slice(0, 4);
+  const chain = [];
+  let anchor;
+  for (const value of previous) {
+    if (salaryQuestion(value)) { anchor = value; break; }
+    if (!clarifies(value)) return null;
+    chain.push(value);
+  }
+  if (!anchor) return null;
+  const tax = [text, ...chain, anchor].find((value) => NET.test(value) || GROSS.test(value)) ?? anchor;
+  const shape = PRIMARY_NET.test(tax) ? 'net' : GROSS.test(tax) ? 'gross' : 'net';
+  // A bare "USD gross?" keeps the previous message's language, rather than treating the
+  // currency code as an English sentence.
+  const languageText = text.replace(/\b(?:usd[tc]?|eur|rub|gross|net)\b/giu, '').replace(/[^\p{L}]/gu, '');
+  const language = english(languageText ? text : anchor) ? 'en' : 'ru';
+  return `${language === 'ru' ? 'Зарплатные ожидания' : 'Salary expectations'} ${shape}: ${text}`;
+}
+
 /** Keep only compatible plain salary suggestions; the transcript and saved wording stay intact. */
 export function salaryAnswerForQuestion(question, answer) {
   const asked = salaryQuestion(question);
@@ -166,9 +202,6 @@ export function inferSalaryAnswer(question, patterns) {
     return null;
   }
   const { variants } = patterns;
-  // A question in English is answered in English: without a saved answer of its shape, the built-in
-  // one; a question in Russian without a net answer in Russian takes the English one
-  const list = variants[`${asked.shape}:${asked.language}`] ??
-    (asked.language === 'en' ? [ENGLISH_ANSWERS[asked.shape]] : asked.shape === 'gross' ? null : variants['net:en']);
+  const list = variants[`${asked.shape}:${asked.language}`] ?? [DEFAULT_ANSWERS[asked.language][asked.shape]];
   return list?.length ? list[hash(question) % list.length] : null;
 }

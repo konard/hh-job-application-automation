@@ -618,6 +618,12 @@ for review. Explicit choice-only questions never get a free-text draft, and a bo
 question after an answer does not get the same text suggested again. Buttons arriving after their
 question are detected too; clearing an unsent draft retries the choice. Saved answers and frequency counts are retained; plain salary
 suggestions are filtered to the requested net or gross basis.
+Salary follow-ups such as «цифры в долларах и до вычета налогов» inherit the recent salary
+topic even without repeating «зарплата». The reply's language, currency and net/gross basis are
+chosen independently: Russian messages can request USD gross, and a new explicit currency
+overrides an earlier one. Unrelated questions stop that inheritance. A missing amount in the
+requested currency is left for review, never replaced by an amount in rubles. Inferred follow-ups
+are prefilled for review under the same rules as other salary patterns.
 Answer alternatives differing only by a single final period are combined into the version with
 the period by default. Use `--answer-final-period without` or `ANSWER_FINAL_PERIOD: without` in
 `.lenv` to prefer the version without it. This preference applies on save, load and frequency

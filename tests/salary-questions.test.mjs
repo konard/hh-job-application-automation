@@ -3,7 +3,7 @@
  * shape, both learned from the saved questions and answers
  */
 import { describe, test, assert } from 'test-anywhere';
-import { answerShape, inferSalaryAnswer, learnSalaryPatterns, salaryQuestion } from '../src/salary-questions.mjs';
+import { answerShape, inferSalaryAnswer, learnSalaryPatterns, salaryClarificationQuestion, salaryQuestion } from '../src/salary-questions.mjs';
 import { answersInContexts, loadAnswerContexts, plainSalaryAnswer } from '../src/answer-contexts.mjs';
 import { withContacts } from '../src/contacts.mjs';
 import { savedAnswersInContext } from '../src/vacancy-response.mjs';
@@ -56,6 +56,33 @@ describe('Salary questions by pattern', () => {
     assert.deepEqual(salaryQuestion('От какой суммы рассматриваете предложения?', patterns), { shape: 'net', language: 'ru' });
     assert.deepEqual(salaryQuestion('Ожидаемый уровень дохода до вычета налогов?', patterns), { shape: 'gross', language: 'ru' });
     assert.deepEqual(salaryQuestion('What are your salary expectations (net)?', patterns), { shape: 'net', language: 'en' });
+  });
+
+  test('salary clarifications inherit a recent salary topic and tax basis, independently of currency and language', () => {
+    const previous = 'Константин, спасибо за отклик! Подскажи свои зарплатные ожидания в долларах?';
+    const followup = 'Константин подскажи пожалуйста цифры в долларах и до вычета налогов, спасибо!';
+    assert.deepEqual(salaryQuestion(salaryClarificationQuestion(followup, [followup, previous])), { shape: 'gross', language: 'ru' });
+    assert.deepEqual(salaryQuestion(salaryClarificationQuestion('USD gross?', [previous])), { shape: 'gross', language: 'ru' });
+    assert.deepEqual(salaryQuestion(salaryClarificationQuestion('А в рублях?', ['Укажите зарплатные ожидания до вычета налогов'])), { shape: 'gross', language: 'ru' });
+    assert.deepEqual(salaryQuestion(salaryClarificationQuestion('Please provide the figures in USD before taxes.', ['What are your salary expectations?'])), { shape: 'gross', language: 'en' });
+  });
+
+  test('a clarification cannot reuse an old salary topic across an unrelated question or change the pay period', () => {
+    const previous = 'Ваши зарплатные ожидания?';
+    for (const [text, known] of [
+      ['Какие цифры в долларах до вычета налогов?', []],
+      ['А в долларах?', ['Какой ваш опыт с PostgreSQL?', previous]],
+      ['А в долларах в час?', [previous]],
+      ['А какая выручка в долларах?', [previous]],
+      ['Подскажите как рассчитываете налоги в долларах?', [previous]],
+    ]) assert.equal(salaryClarificationQuestion(text, known), null, text);
+  });
+
+  test('fallback wording uses Russian for a Russian question even when only English examples exist', () => {
+    const onlyEnglish = learnSalaryPatterns(new Map([['Your salary expectations?', 'From {{salary_net}} net per month.']]));
+    assert.equal(inferSalaryAnswer('Ваши зарплатные ожидания в долларах до вычета налогов?', onlyEnglish),
+      'От {{salary_gross}} в месяц до вычета {{salary_tax}}.');
+    assert.equal(inferSalaryAnswer('Ваши зарплатные ожидания?', onlyEnglish), 'От {{salary_net}} в месяц на руки.');
   });
 
   test('not the expected pay a month: left to the saved answers', () => {
