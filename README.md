@@ -556,6 +556,8 @@ browser. For the message waiting for an answer the reply is typed into the messa
   вакансии! Мы рассмотрим ваше резюме… мы свяжемся с вами», «ознакомимся с резюме и дадим обратную
   связь», «продолжаем рассматривать кандидатов и анализировать результаты собеседований… свяжемся с
   вами») is thanked for exactly, as the saved ones, unless it asks something, invites or rejects.
+  A status such as «Ваше резюме находится на этапе рассмотрения» / “Your application is under review”
+  is handled the same way, including from the chat list, without requiring a promise to contact you.
   An optional sentence offering other vacancies on an hh.ru employer page is allowed; surveys,
   tests and other links still need review. The full list preview is checked before opening a chat,
   and its actual message checked again before replying. Thanks replies count as the same reply

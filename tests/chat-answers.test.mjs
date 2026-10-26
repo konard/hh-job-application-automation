@@ -279,6 +279,29 @@ describe('A message in English is answered in English', () => {
 });
 
 describe('Acknowledgements of the application, in any company\'s words', () => {
+  test('an active review needs no promise of a follow-up to be handled from the list preview', async () => {
+    const { isAcknowledgement } = await import('../src/chat-answers.mjs');
+    const preview = 'Здравствуйте, Константин Константинович!\n\nБольшое спасибо за интерес к вакансии! В данный момент, Ваше резюме находится на этапе рассмотрения.\n\nС Уважением, Наумова Дарья';
+    // Use only older templates: learning the user's manual reply must not hide the missing rule.
+    const reply = knownReply({ title: '', text: preview }, { templates, qaMap: new Map() });
+    assert.equal(isAcknowledgement(preview), true);
+    assert.equal(reply?.perfect, true);
+    assert.equal(reply?.source.startsWith('chat-templates'), true);
+    assert.equal(reply?.answer, 'Здравствуйте, благодарю, ожидаю.');
+    for (const text of ['Ваш отклик находится на рассмотрении.', 'Ваша кандидатура сейчас на рассмотрении.',
+      'Ваше резюме рассматривается.', 'Your application is currently under review.', 'Your CV is being reviewed.']) {
+      assert.equal(isAcknowledgement(text), true, text);
+    }
+    for (const extra of [' Какой у Вас опыт?', ' Укажите зарплатные ожидания.', ' Пришлите резюме.',
+      ' Заполните анкету https://forms.gle/abc.', ' Приглашаем на интервью.', ' Мы выбрали другого кандидата.']) {
+      assert.equal(isAcknowledgement(preview + extra), false, extra);
+      const withRequest = preview.replace('С Уважением, Наумова Дарья', `${extra}\n\nС Уважением, Наумова Дарья`);
+      assert.notEqual(knownReply({ title: '', text: withRequest }, { templates, qaMap: new Map() })?.perfect, true, extra);
+    }
+    assert.equal(isAcknowledgement('Ваше резюме не находится на рассмотрении.'), false);
+    assert.equal(isAcknowledgement('Ваше резюме может быть рассмотрено.'), false);
+  });
+
   test('optional hh.ru company information is recognized from the preview without treating surveys as acknowledgements', async () => {
     const { isAcknowledgement } = await import('../src/chat-answers.mjs');
     const message = 'Константин Константинович, здравствуйте! Благодарим Вас за отклик на вакансию Инженер по автоматизации тестирования/QA automation engineer. Мы рассмотрим Ваше резюме в ближайшее время. Если оно заинтересует нас, мы обязательно свяжемся с Вами для обсуждения деталей. Вы также можете узнать больше о нас и ознакомиться с другими вакансиями по ссылке: https://hh.ru/employer/10726025 . Спасибо за Ваше желание построить свою карьеру в нашей команде! С наилучшими пожеланиями, LADA Цифра.';

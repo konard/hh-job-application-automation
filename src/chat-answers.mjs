@@ -461,10 +461,11 @@ const PATTERN_MESSAGE_WORDS = 40;
 export const patternSays = (pattern, core) => !ASKS_TO_DO.test(core) && !ASKS_FOR.test(core) && !/\?/.test(core) &&
   patternWords(core).length <= Math.max(PATTERN_MESSAGE_WORDS, 3 * patternOwnWords(pattern));
 
-/** An acknowledgement: the resume (the application) is reviewed, and the employer comes back with the result */
+/** Acknowledgements can state an active review without promising a separate follow-up. */
 const REVIEWS = /рассмотр|рассматр|анализ|изуч|ознаком|в работу|приня(?:ли|то)|получили|подходит|подойд|review|consider/iu;
 const COMES_BACK = /свяж|сообщ|верн[её]м|верн[её]тся|обратн\p{L}* связ|позвон|напиш(?:ем|ет)|результат|contact|get back|reach out/iu;
 const ABOUT_APPLICATION = /резюме|отклик|кандидат|опыт|resume|cv|application/iu;
+const UNDER_REVIEW = /(?:резюме|кандидатура|отклик)\s+(?:(?:сейчас|пока)\s+)?(?:(?:находится|находятся)\s+)?(?:на\s+(?:этапе\s+)?рассмотрени[ия]|в\s+процессе\s+рассмотрения|рассматривается)|(?:resume|cv|application|candidacy)\s+(?:is\s+)?(?:currently\s+)?(?:under\s+review|being\s+(?:reviewed|considered))/iu;
 /**
  * Asks the user to do something: an imperative, an invitation, an interview (not the results of
  * interviews held), a test or a form, a link
@@ -478,7 +479,7 @@ const BAD_NEWS = /к сожалению|отказ|не готовы|не мож
 /**
  * Whether a message only acknowledges the application, in any company's words («Спасибо за
  * отклик! Мы рассмотрим ваше резюме и свяжемся с вами»): it tells the resume is reviewed and the
- * employer comes back, asks nothing and brings no bad news. Thanks answer it
+ * employer comes back, or states an active review. It asks nothing and brings no bad news.
  * @param {string} core - templateCore of the message
  * @returns {boolean}
  */
@@ -486,8 +487,9 @@ export function isAcknowledgement(core) {
   // Optional company information is not a task for the applicant. Strip only this explicit
   // informational sentence and an hh.ru employer page; survey/test/contact links still block it.
   const text = String(core ?? '').replace(/(?:вы также можете|также вы можете)\s+(?:узнать больше о нас и\s+)?ознакомиться с (?:другими|нашими) вакансиями по ссылке\s*:\s*https:\/\/hh\.ru\/employer\/\d+\/?(?=\s|[.!]|$)\s*[.!]?/giu, '');
-  return REVIEWS.test(text) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text) && !/\?/.test(text) &&
-    !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
+  return (UNDER_REVIEW.test(text) || (REVIEWS.test(text) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text))) && !/\?/.test(text) &&
+    !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && !isRejection({ text }) &&
+    patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
 }
 
 /** The thanks to a message in English when none in English is saved */
