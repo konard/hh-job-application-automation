@@ -84,6 +84,32 @@ const runList = (commander, { skippedVacancies, vacancyFilters }) => findAndProc
 });
 
 describe('vacancy list', () => {
+  test('vacancy collection precedes applying and the returning search card is found again by ID', async () => {
+    clearProcessedVacancies();
+    const { skippedVacancies, vacancyFilters } = await stores();
+    const list = fakeList({ vacancyId: '139000009', card: ['Backend Developer', 'Acme'] });
+    const steps = [];
+    const original = list.safeEvaluate;
+    list.safeEvaluate = async (options) => {
+      if (options.operationName === 'find unprocessed vacancy button' && options.args[2]) {
+        assert.deepEqual(steps, ['collected']);
+        return { value: { totalButtons: 3, unprocessedCount: 1, buttonIndex: 2, vacancyId: '139000009' } };
+      }
+      if (options.operationName === 'vacancy button click') {
+        assert.equal(options.args[1], 2);
+        steps.push('applied');
+      }
+      return original(options);
+    };
+    await findAndProcessVacancyButton({ commander: list, skippedVacancies, vacancyFilters,
+      START_URL: SEARCH_URL, pageClosedByUser: () => false, waitForUrlCondition: async () => {},
+      vacancyInsights: { enabled: true, visit: async ({ vacancyId, returnUrl }) => {
+        assert.equal(vacancyId, '139000009'); assert.equal(returnUrl, SEARCH_URL); steps.push('collected');
+        return { id: vacancyId, description: 'Develop backend software.' };
+      } } });
+    assert.deepEqual(steps, ['collected', 'applied']);
+  });
+
   test('a vague card has its description read once; field work is filtered without a click', async () => {
     clearProcessedVacancies();
     const { dir, skippedVacancies, vacancyFilters } = await stores();

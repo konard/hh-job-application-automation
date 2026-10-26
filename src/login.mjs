@@ -243,7 +243,7 @@ export async function ensureLoggedIn({ commander, page, argv, isPageClosed }) {
 }
 
 /** Ports of the windows that hold an hh.ru session: the automation browser, chat (9340, 9341), forms (9331-9339), experience (9351) */
-export const HH_SESSION_PORTS = [9322, 9340, 9341, ...Array.from({ length: 9 }, (_, index) => 9331 + index), 9351];
+export const HH_SESSION_PORTS = [9322, 9340, 9341, ...Array.from({ length: 9 }, (_, index) => 9331 + index), 9351, 9352];
 
 const sessionPorts = (port) => [...new Set([port ?? 9322, ...HH_SESSION_PORTS])];
 

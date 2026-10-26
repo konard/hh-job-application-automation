@@ -18,7 +18,7 @@ describe('hh.ru login shared between windows', () => {
   });
 
   test('every hh.ru window of the automation is watched', () => {
-    for (const port of [9322, 9340, 9331, 9339, 9351]) {
+    for (const port of [9322, 9340, 9331, 9339, 9351, 9352]) {
       assert.ok(HH_SESSION_PORTS.includes(port));
     }
     assert.ok(!HH_SESSION_PORTS.includes(9350));

@@ -14,6 +14,8 @@
     "prefill-form": "bun src/prefill-form.mjs",
     "skipped": "bun src/skipped.mjs",
     "stats": "bun src/stats.mjs",
+    "vacancy-stats": "bun src/vacancy-stats.mjs",
+    "ai-status": "bun src/oxion-status.mjs",
     "answer-chats": "bun src/answer-chats.mjs",
     "experience": "bun src/experience-sync.mjs",
     "cv": "bun src/cv-sync.mjs",

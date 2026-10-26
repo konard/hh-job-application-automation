@@ -19,6 +19,15 @@ export function createSubmissionRetries({ now = Date.now } = {}) {
       return pending.get(id);
     },
     get: (id) => pending.get(String(id)),
+    // A controlled code reload may hand off RAM state through an environment variable. Normal
+    // starts do not read a queue file or reconstruct retries from the log.
+    restore(entries) {
+      for (const entry of entries) {
+        if (!/^\d+$/.test(String(entry.vacancyId)) || !Number.isFinite(entry.until) ||
+          !/^https:\/\/hh\.ru\/applicant\/vacancy_response\?/.test(entry.url)) throw new Error('Invalid in-memory retry handoff');
+        pending.set(String(entry.vacancyId), { ...entry, vacancyId: String(entry.vacancyId) });
+      }
+    },
     ids: () => [...pending.keys()],
     forget: (id) => pending.delete(String(id)),
     nextDue: () => [...pending.values()].filter((entry) => entry.until <= now()).sort((a, b) => a.until - b.until)[0] ?? null,

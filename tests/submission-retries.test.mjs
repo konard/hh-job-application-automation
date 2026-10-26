@@ -6,6 +6,16 @@ const formUrl = 'https://hh.ru/applicant/vacancy_response?vacancyId=138848764&st
 const searchUrl = 'https://hh.ru/search/vacancy?resume=1';
 
 describe('five-hour application retries in RAM', () => {
+  test('a controlled RAM handoff preserves the exact deadline without making it persistent', () => {
+    const old = createSubmissionRetries({ now: () => 1000 });
+    const entry = old.defer('123');
+    const updated = createSubmissionRetries({ now: () => 2000 });
+    updated.restore([entry]);
+    expect(updated.get('123').until).toBe(entry.until);
+    expect(updated.nextDue()).toBeNull();
+    expect(createSubmissionRetries().ids()).toEqual([]);
+    expect(() => updated.restore([{ vacancyId: 'bad', until: 0, url: 'https://other.test' }])).toThrow();
+  });
   test('nothing is due before five hours; repeated observations keep the original deadline', () => {
     let now = 1000;
     const retries = createSubmissionRetries({ now: () => now });

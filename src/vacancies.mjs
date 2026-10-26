@@ -429,9 +429,9 @@ export function markVacancyAsProcessed(vacancyId) {
  * and find the first one whose vacancy was not processed yet
  * @returns {Promise<{value: Object, navigationError?: boolean}>}
  */
-function scanApplyButtons({ commander, selector }) {
+function scanApplyButtons({ commander, selector, targetVacancyId = null }) {
   return commander.safeEvaluate({
-    fn: (baseSelector, alreadyProcessedIds) => {
+    fn: (baseSelector, alreadyProcessedIds, targetId) => {
       const processedSet = new Set(alreadyProcessedIds);
       const isVacancyId = (id) => /^\d+$/.test(id);
 
@@ -451,7 +451,7 @@ function scanApplyButtons({ commander, selector }) {
       const buttons = Array.from(document.querySelectorAll(baseSelector));
       const unprocessed = buttons
         .map((button, index) => ({ index, vacancyId: findVacancyId(button) }))
-        .filter(({ vacancyId }) => !vacancyId || !processedSet.has(vacancyId));
+        .filter(({ vacancyId }) => targetId ? vacancyId === targetId : !vacancyId || !processedSet.has(vacancyId));
 
       return {
         totalButtons: buttons.length,
@@ -460,7 +460,7 @@ function scanApplyButtons({ commander, selector }) {
         vacancyId: unprocessed[0]?.vacancyId ?? null,
       };
     },
-    args: [selector, [...new Set([...processedVacancyIds, ...submissionRetries.ids()])]],
+    args: [selector, [...new Set([...processedVacancyIds, ...submissionRetries.ids()])], targetVacancyId],
     defaultValue: { totalButtons: 0, unprocessedCount: 0, buttonIndex: -1, vacancyId: null },
     operationName: 'find unprocessed vacancy button',
     silent: true,
@@ -737,6 +737,7 @@ export async function findAndProcessVacancyButton({
   onMissingAnswers = 'wait',
   vacancyFilters = null,
   skippedVacancies = null,
+  vacancyInsights = null,
   verbose = false,
   waitForUrlCondition,
   START_URL,
@@ -749,7 +750,8 @@ export async function findAndProcessVacancyButton({
     return { status: 'not_on_target_page' };
   }
 
-  const { selector, buttonIndex, vacancyId, status } = await findVacancyButton({ commander });
+  const { selector, vacancyId, status, buttonIndex: initialIndex } = await findVacancyButton({ commander });
+  let buttonIndex = initialIndex;
   if (!selector) {
     return { status };
   }
@@ -764,9 +766,20 @@ export async function findAndProcessVacancyButton({
 
   const { lines: cardLines, title } = await readVacancyCard({ commander, selector, buttonIndex });
   const card = cardLines.join('\n');
+  let details = null;
+  if (vacancyInsights?.enabled && vacancyId) {
+    details = await vacancyInsights.visit({ commander, vacancyId, returnUrl: currentPageUrl });
+    if (!details) return { status: 'vacancy_collection_failed', vacancyId, descriptionRead: true };
+    // Returning from the vacancy can reorder the search cards. Find this ID again, never reuse
+    // the old position and accidentally apply to another vacancy.
+    const refreshed = await scanApplyButtons({ commander, selector, targetVacancyId: vacancyId });
+    if (refreshed.navigationError) return { status: 'navigation_detected', vacancyId, descriptionRead: true };
+    buttonIndex = refreshed.value.buttonIndex;
+    if (buttonIndex < 0) return { status: 'vacancy_not_listed', vacancyId, descriptionRead: true };
+  }
   // The description only when the card does not settle the filters (one request, see readVacancyDescription)
-  const descriptionRead = Boolean(vacancyFilters && vacancyId && await vacancyFilters.needsDescription?.(card));
-  const description = descriptionRead ? await readVacancyDescription({ commander, vacancyId }) : '';
+  const descriptionRead = Boolean(details) || Boolean(vacancyFilters && vacancyId && await vacancyFilters.needsDescription?.(card));
+  const description = details?.description ?? (descriptionRead ? await readVacancyDescription({ commander, vacancyId }) : '');
   vacancyFilters?.keepDescription?.(vacancyId, description);
   vacancyFilters?.keepCard?.(vacancyId, card);
   // Checked before the click, so a vacancy filtered out by its card costs no request

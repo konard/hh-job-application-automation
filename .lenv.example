@@ -105,6 +105,20 @@
 # Default: false
 # VERBOSE: true
 
+# Vacancy descriptions and analysis are enabled by default. Employer text stays locally under
+# data/vacancies/ (gitignored); comparisons do not reject an application based on a score.
+# VACANCY_INSIGHTS: false
+# COLLECT_VACANCIES: false
+# COMPARE_RESUME: false
+# UPDATE_RESUME_ALIASES: false
+# VACANCY_CACHE_DIR: data/vacancies
+
+# Optional Oxion API credentials: use .lenv, which is ignored by git. Never commit a real key.
+# Check available models with: bun run ai-status -- --probe
+# OXION_BASE_URL: 'https://oxionai.com/v1'
+# OXION_API_KEY: your_private_key
+# OXION_MODEL: claude-haiku-5-5
+
 # Send forms with questions (popup or full form) unattended even when not every answer is the
 # saved answer of the very same question (otherwise such a form waits for you)
 # Default: false (manual review recommended for safety)

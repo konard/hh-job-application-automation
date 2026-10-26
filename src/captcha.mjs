@@ -103,30 +103,40 @@ let waiting = null;
  *   captcha, without waiting for it (the answer prefill)
  * @returns {Promise<boolean>} True when a captcha was shown and has been solved
  */
-export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha } = {}) {
+export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha, alert = alertUser,
+  alertDelayMs = CAPTCHA_ALERT_MS, now = Date.now, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   waiting ??= (async () => {
     if (!await isCaptchaShown(commander)) {
       return false;
     }
     const episode = {};
     console.log('🛑 hh.ru shows a captcha. Solve it in the browser; the automation touches nothing until it is gone.');
-    const started = Date.now();
+    const started = now();
     const where = captchaPlace(commander.getUrl?.(), 'main');
     // Written at once: a run stopped before the captcha is gone still counts it
     recordEvent('captcha_shown', where);
-    // Not at once: the AI may read it first
-    const endAlert = alertUser({ delayMs: CAPTCHA_ALERT_MS });
+    // A clock alone cannot tell whether background processing is finished. Notify only once
+    // it has settled and the page still needs manual attention; never while it is running.
+    let background = null;
+    let settled = !onCaptcha;
+    let endAlert = null;
     try {
       while (await isCaptchaShown(commander)) {
-        onCaptcha?.(commander, episode);
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
+        if (!endAlert && settled && !background && now() - started >= alertDelayMs) endAlert = alert();
+        if (onCaptcha && !background) {
+          settled = false;
+          background = Promise.resolve().then(() => onCaptcha(commander, episode))
+            .catch((error) => console.log(`⚠️  Background CAPTCHA step failed; manual input is required: ${error.message.split('\n')[0]}`))
+            .finally(() => { settled = true; background = null; });
+        }
+        await pause(pollMs);
       }
     } finally {
-      endAlert();
+      endAlert?.();
     }
-    console.log(`✅ Captcha solved after ${Math.round((Date.now() - started) / 1000)} s, continuing`);
+    console.log(`✅ Captcha solved after ${Math.round((now() - started) / 1000)} s, continuing`);
     // Solved by AI: its reading was sent and hh.ru showed no new picture after it
-    recordEvent('captcha', { ms: Date.now() - started, ai: Boolean(episode.sent && !episode.reported), ...where, solved: true, shown: true });
+    recordEvent('captcha', { ms: now() - started, ai: Boolean(episode.sent && !episode.reported), ...where, solved: true, shown: true });
     return true;
   })().finally(() => {
     waiting = null;

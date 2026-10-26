@@ -48,7 +48,7 @@ const PAGE_READY_TIMEOUT = 120000;
  * @returns {Object} Orchestrator with start method
  */
 export function createOrchestrator({
-  commander, page, argv, qaDB, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, onPageClosed,
+  commander, page, argv, qaDB, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, vacancyInsights = null, onPageClosed,
   onApplicationSent = async () => {},
   answerInstantChat = async () => {},
 }) {
@@ -136,6 +136,7 @@ export function createOrchestrator({
       }
       sentVacancyIds.add(vacancyId);
       submissionRetries.forget(vacancyId);
+      await vacancyInsights?.applied(vacancyId).catch((error) => console.log(`⚠️  Could not update private vacancy cache: ${error.message}`));
       // It no longer waits for an answer, and is no longer a skipped vacancy
       await deferredQuestions?.forget(vacancyId)
         .catch((error) => console.error('Error updating deferred-questions.lino:', error.message));
@@ -434,6 +435,10 @@ export function createOrchestrator({
         let result;
         if (retry) {
           console.log(`🔁 Retrying vacancy ${retry.vacancyId}: its five-hour submission cooldown has expired`);
+          if (vacancyInsights?.enabled && !await vacancyInsights.visit({ commander, vacancyId: retry.vacancyId, returnUrl: lastSearchPageUrl })) {
+            submissionRetries.defer(retry.vacancyId, retry);
+            continue;
+          }
           // Force the same handler/fallback path as a newly opened full application form.
           handledResponseUrl = null;
           retryingVacancyId = retry.vacancyId;
@@ -458,6 +463,7 @@ export function createOrchestrator({
           onMissingAnswers: argv.onMissingAnswers,
           vacancyFilters,
           skippedVacancies,
+          vacancyInsights,
           verbose: argv.verbose,
           waitForUrlCondition,
           START_URL,

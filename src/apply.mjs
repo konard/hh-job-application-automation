@@ -35,6 +35,9 @@ import { prepareAlerts } from './notify.mjs';
 import { createChatHistory } from './chat-history.mjs';
 import { learnChatQuestions, withChatHistoryAnswers } from './chat-learning.mjs';
 import { watchChats } from './chat-recording.mjs';
+import { createVacancyInsights } from './vacancy-insights.mjs';
+import { createResumeAliasUpdater } from './resume-aliases.mjs';
+import { submissionRetries } from './submission-retries.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 
@@ -73,6 +76,12 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
 
 (async () => {
   const argv = createConfig();
+  if (process.env.HH_SUBMISSION_RETRIES_HANDOFF) {
+    const handoff = process.env.HH_SUBMISSION_RETRIES_HANDOFF;
+    delete process.env.HH_SUBMISSION_RETRIES_HANDOFF;
+    submissionRetries.restore(JSON.parse(handoff));
+    console.log(`♻️  Preserved ${submissionRetries.ids().length} in-memory submission cooldown(s) during code reload`);
+  }
   argv.userDataDir ||= getUserDataDir();
 
   if (argv.verbose) {
@@ -164,6 +173,11 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     await startTracing({ commander, page: session.page });
   }
 
+  const vacancyInsights = createVacancyInsights({
+    enabled: argv.vacancyInsights, collect: argv.collectVacancies, compare: argv.compareResume,
+    update: argv.updateResumeAliases, directory: argv.vacancyCacheDir,
+    updateAliases: createResumeAliasUpdater({ fromPort: argv.browserPort }),
+  });
   const orchestrator = createOrchestrator({
     // Nothing touches the page while hh.ru shows a captcha, except its answer: Haiku's reading is sent
     // once (--captcha-auto-send), after that it is only prefilled and the user sends it
@@ -178,6 +192,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     deferredQuestions,
     vacancyFilters,
     skippedVacancies,
+    vacancyInsights,
     onPageClosed: () => shutdown('Tab close detected'),
     // Recruiter bots ask in the chat panel right after the application
     answerInstantChat: argv.answerInstantChats ? createInstantChat({

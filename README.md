@@ -81,7 +81,7 @@ keeps them for every persistent profile by default: browser-commander #187).
 resume and applies to the vacancies hh.ru suggests for it:
 
 - **Alerts** - on macOS, whenever the run waits for you (a question to answer or confirm, a
-  login, a captcha the AI did not read within 30 s, a form to fill by hand), it plays a sound and
+  login, a captcha that still needs manual input after background work has finished, a form to fill by hand), it plays a sound and
   shows a short notification («The job application automation needs your attention»; what is
   needed is told in the terminal) with two buttons: «Show browser» brings the window
   that waits for you to the front (un-minimized, on its tab), «Later» shows it again in 15 minutes
@@ -211,6 +211,48 @@ and is cleared when the application process restarts. These errors are not writt
 `skipped-vacancies.lino`. Daily limits, blocks, captchas and field validation keep their own
 handling. An unconfirmed application without a recognized generic error still stops an unattended
 run or waits for the user in a supervised run.
+
+### Vacancy collection, résumé matching and technology statistics
+
+By default, before applying, the browser visits the full vacancy page, saves its description,
+HTML, skills, employer and other visible job details in `data/vacancies/<id>.lino`, and returns
+to the application flow. This private directory is ignored by Git: employer descriptions are
+not published. Each selected vacancy is collected, including ones the filters later exclude.
+Updates use the same vacancy ID, so repeated reads do not inflate demand statistics. Successful
+applications are marked in the cache. If the full description cannot be read, that application
+is left unsent on this pass.
+
+A separate terminal report shows the technology coverage of the résumé, matched technologies,
+names without résumé evidence, and alternative spellings. This is a keyword comparison, not a
+prediction of hiring outcomes, and a low score does not block an application. Explicit skills and
+requirement sections take priority over general prose; preferred requirements are kept separately.
+The complete original text remains available for later analysis.
+
+Known equivalent names are listed in `data/technology-aliases.lino`. For example, Golang can match
+Go and Postgres can match PostgreSQL. Related technologies and versions are kept distinct: knowing
+Angular does not establish AngularJS experience, and .NET does not establish .NET Core experience.
+When a vacancy uses a verified equivalent spelling absent from the résumé, it is added to an
+additive technology-names section of the résumé's About text in its own browser slot (9352).
+Existing prose is retained; no missing technology is added as experience. The original text and
+changes are backed up under private `data/resume/alias-updates/`, and the local résumé export is
+updated after the site confirms the save. An already-open edit draft is left for the user.
+
+```bash
+bun run vacancy-stats                     # ranked technologies, spellings, gaps and requirements
+bun run vacancy-stats -- --top 50 --json  # machine-readable statistics from the private cache
+bun run apply -- --message-file data/cover-letter.txt --no-vacancy-insights
+bun run apply -- --message-file data/cover-letter.txt --no-update-resume-aliases
+```
+
+Individual switches are `--no-collect-vacancies`, `--no-compare-resume`, and
+`--no-update-resume-aliases`; `--no-vacancy-insights` disables the whole pre-application check.
+The comparisons and statistics run locally and use no AI tokens.
+
+Optional Oxion credentials belong in ignored `.lenv`: `OXION_BASE_URL`, `OXION_API_KEY`, and
+`OXION_MODEL`. `bun run ai-status` checks the authenticated catalog;
+`bun run ai-status -- --probe` also makes a four-token text request to confirm model access.
+An authenticated key does not mean every model is available. Unsupported models are reported
+explicitly, and a different model is never substituted silently. Credentials are not logged.
 
 ### Test Mode and Confirmations
 
@@ -347,7 +389,7 @@ remote
   even when its description mentions the warehouses it automates
 - `programming`, `remote`: those guards
 
-The vacancy description is read only when it is needed: the card has no programming or remote sign
+With vacancy insights disabled, the vacancy description is read only when it is needed: the card has no programming or remote sign
 and no rule matched it already (a «Сервисный инженер» card, not a «Go-разработчик» one). Then the run
 requests the vacancy page once, from the vacancy list (a same-origin request for the HTML only, no
 navigation and no images or scripts), reads its title, work format and description, and keeps the

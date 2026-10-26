@@ -69,6 +69,35 @@ function fakeCommander({ checks = 0, url = 'https://hh.ru/search/vacancy' } = {}
 }
 
 describe('captcha guard', () => {
+  test('attention notifications wait for background work to settle and only appear if manual input remains', async () => {
+    let shown = true, time = 0, ticks = 0, alerts = 0, working = true;
+    let finish;
+    const processing = new Promise((resolve) => { finish = () => { working = false; resolve(); }; });
+    const commander = { getUrl: () => 'https://hh.ru/search/vacancy', safeEvaluate: async () => ({ value: shown }) };
+    await waitWhileCaptcha(commander, {
+      pollMs: 1, alertDelayMs: 2, now: () => time,
+      onCaptcha: () => processing,
+      alert: () => { assert.equal(working, false); alerts++; return () => {}; },
+      pause: async () => {
+        time++; ticks++;
+        if (ticks <= 3) assert.equal(alerts, 0);
+        if (ticks === 3) finish();
+        if (ticks === 6) shown = false;
+        await Promise.resolve(); await Promise.resolve();
+      },
+    });
+    assert.equal(alerts, 1);
+  });
+
+  test('a page cleared before manual attention is needed produces no notification', async () => {
+    let shown = true, alerts = 0;
+    const commander = { getUrl: () => 'https://hh.ru/search/vacancy', safeEvaluate: async () => ({ value: shown }) };
+    await waitWhileCaptcha(commander, { pollMs: 1, alertDelayMs: 0,
+      onCaptcha: async () => { shown = false; }, alert: () => { alerts++; return () => {}; },
+      pause: async () => { await Promise.resolve(); await Promise.resolve(); } });
+    assert.equal(alerts, 0);
+  });
+
   test('isCaptchaShown recognises a captcha page by its URL', async () => {
     assert.equal(await isCaptchaShown(fakeCommander({ url: 'https://hh.ru/account/captcha?backurl=%2F' })), true);
   });

@@ -127,6 +127,26 @@ export function createConfig() {
             'for you to check and send',
           default: getenv('CAPTCHA_PREFILL', true),
         })
+        .option('vacancy-insights', {
+          type: 'boolean', description: 'Visit vacancy pages before applying; collect private descriptions, compare the résumé and add verified technology aliases',
+          default: getenv('VACANCY_INSIGHTS', true),
+        })
+        .option('collect-vacancies', {
+          type: 'boolean', description: 'Cache full vacancy descriptions locally in Links Notation (never committed)',
+          default: getenv('COLLECT_VACANCIES', true),
+        })
+        .option('compare-resume', {
+          type: 'boolean', description: 'Print a separate technology coverage comparison with the résumé before each application',
+          default: getenv('COMPARE_RESUME', true),
+        })
+        .option('update-resume-aliases', {
+          type: 'boolean', description: 'Add verified alternate spellings of existing résumé technologies to the résumé; never infer new experience',
+          default: getenv('UPDATE_RESUME_ALIASES', true),
+        })
+        .option('vacancy-cache-dir', {
+          type: 'string', description: 'Private local vacancy cache directory',
+          default: getenv('VACANCY_CACHE_DIR', path.join(process.cwd(), 'data/vacancies')),
+        })
         .option('captcha-auto-send', {
           type: 'boolean',
           description: 'With --captcha-prefill: send Haiku\'s reading of a captcha once; if hh.ru does not accept it, ' +

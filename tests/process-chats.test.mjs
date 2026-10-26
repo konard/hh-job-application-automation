@@ -24,6 +24,15 @@ describe('apply --clear-rejections', () => {
   });
 });
 
+describe('default vacancy insights', () => {
+  test('collection, comparisons and verified aliases are enabled and can be disabled independently', () => {
+    const defaults = configOf();
+    for (const name of ['vacancyInsights', 'collectVacancies', 'compareResume', 'updateResumeAliases']) assert.equal(defaults[name], true);
+    const disabled = configOf('--no-vacancy-insights', '--no-collect-vacancies', '--no-compare-resume', '--no-update-resume-aliases');
+    for (const name of ['vacancyInsights', 'collectVacancies', 'compareResume', 'updateResumeAliases']) assert.equal(disabled[name], false);
+  });
+});
+
 describe('apply --process-chats', () => {
   test('is off by default and checks every 2 hours when on', () => {
     assert.equal(configOf().processChats, false);
