@@ -41,6 +41,7 @@ import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs'
 import { learnChatQuestions } from './chat-learning.mjs';
 import { readFullChat, setUnreadFilter, waitForChat, watchChats } from './chat-recording.mjs';
 import { createMutex } from './helpers/mutex.mjs';
+import { getAnswerFinalPeriod } from './answer-variants.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
 
@@ -63,6 +64,8 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --no-draft             Do not draft unknown answers with local Claude Code
   --no-forms             Do not prefill questionnaire links from chats
   --no-learn             Do not save the answers you send in those questionnaires to data/qa.lino
+  --answer-final-period <with|without>
+                         Resolve existing final-period answer conflicts in this style (default: with)
   --learn-all            Read every chat, including older message pages, slowly, in a window
                          of its own (port 9341), and save
                          the answers you sent (qa.lino, chat-templates.lino and all variants in
@@ -103,6 +106,9 @@ function parseArgs(args) {
       parsed.learn = false;
     } else if (flag === '--poll') {
       parsed.poll = Number(inline ?? args[++i]);
+    } else if (flag === '--answer-final-period') {
+      const style = inline ?? args[++i];
+      process.env.ANSWER_FINAL_PERIOD = getAnswerFinalPeriod({ env: { ANSWER_FINAL_PERIOD: style ?? '' } });
     } else {
       parsed.chats.push(args[i].match(/(\d{6,})/)?.[1] ?? args[i]);
     }

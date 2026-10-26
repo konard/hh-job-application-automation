@@ -33,6 +33,18 @@ describe('default vacancy insights', () => {
   });
 });
 
+describe('answer style and vacancy feedback settings', () => {
+  test('final-period conflicts default to a period and can prefer no period', () => {
+    assert.equal(configOf().answerFinalPeriod, 'with');
+    assert.equal(configOf('--answer-final-period', 'without').answerFinalPeriod, 'without');
+  });
+
+  test('viewed-vacancy feedback is automatic by default and can be disabled', () => {
+    assert.equal(configOf().autoAnswerViewedVacancy, true);
+    assert.equal(configOf('--no-auto-answer-viewed-vacancy').autoAnswerViewedVacancy, false);
+  });
+});
+
 describe('apply --process-chats', () => {
   test('is off by default and checks every 2 hours when on', () => {
     assert.equal(configOf().processChats, false);

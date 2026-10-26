@@ -230,7 +230,7 @@ function report({ url, slot, title, fields }) {
  */
 export async function loadAnswerSources() {
   const contacts = await loadContacts(path.join(DATA, 'contacts.lino'));
-  const qaDatabase = withContacts(withChatHistoryAnswers(createQADatabase(path.join(DATA, 'qa.lino')), { contacts }), contacts);
+  const qaDatabase = withContacts(withChatHistoryAnswers(createQADatabase(path.join(DATA, 'qa.lino'), { resolveVariants: true }), { contacts }), contacts);
   const { profile, resume } = await loadProfile({
     resumeMarkdown: path.join(DATA, 'resume', 'resume.md'),
     resumeJson: path.join(DATA, 'resume', 'resume.json'),

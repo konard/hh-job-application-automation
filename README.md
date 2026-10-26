@@ -619,8 +619,16 @@ question after an answer does not get the same text suggested again. Buttons arr
 question are detected too; clearing an unsent draft retries the choice. Saved answers and frequency counts are retained; plain salary
 suggestions are filtered to the requested net or gross basis.
 Answer alternatives differing only by a single final period are combined into the version with
-the period. Their usage counts are added before frequency sorting; original saved answers and
-chat transcripts retain their wording. Other punctuation and different answers remain separate.
+the period by default. Use `--answer-final-period without` or `ANSWER_FINAL_PERIOD: without` in
+`.lenv` to prefer the version without it. This preference applies on save, load and frequency
+sorting only when **both versions exist**. The first save keeps the answer exactly as entered;
+an individual answer never gains or loses a period just because of the setting. Usage counts
+are combined; original chat transcripts, other punctuation and different answers remain intact.
+
+The “You've viewed the vacancy but haven't applied. Why?” survey automatically gets “Maybe
+I'll apply later”, even if it appears while the application loop is waiting. Use
+`--no-auto-answer-viewed-vacancy` or `AUTO_ANSWER_VIEWED_VACANCY: false` in `.lenv` to disable
+this. A different reason already selected by the user is left alone.
 
 While the chat window is open (`--watch`, and the rejection checks of `apply`), each sent message
 is captured as the page changes, including delivery-status and bubble-style updates, without

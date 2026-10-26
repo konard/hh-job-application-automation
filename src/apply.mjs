@@ -38,8 +38,9 @@ import { watchChats } from './chat-recording.mjs';
 import { createVacancyInsights } from './vacancy-insights.mjs';
 import { createResumeAliasUpdater } from './resume-aliases.mjs';
 import { submissionRetries } from './submission-retries.mjs';
+import { watchVacancyFeedback } from './vacancy-feedback.mjs';
 
-const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
+const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'), { resolveVariants: true });
 
 let session = null;
 let commander = null;
@@ -76,6 +77,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
 
 (async () => {
   const argv = createConfig();
+  process.env.ANSWER_FINAL_PERIOD = argv.answerFinalPeriod;
   if (process.env.HH_SUBMISSION_RETRIES_HANDOFF) {
     const handoff = process.env.HH_SUBMISSION_RETRIES_HANDOFF;
     delete process.env.HH_SUBMISSION_RETRIES_HANDOFF;
@@ -143,6 +145,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     idleTimeoutMinutes: argv.browserIdleTimeout,
     singleTab: argv.singleTab,
   });
+  await watchVacancyFeedback(session.page, { enabled: argv.autoAnswerViewedVacancy });
   chatRecording = await watchChats(session.page, {
     onChat: (chat) => learnChatQuestions(chat, { history: chatHistory, qaDatabase: chatQa }),
     onError: (error) => console.log(`⚠️  Chat recording failed: ${error.message}`),

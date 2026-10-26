@@ -37,14 +37,18 @@ import { Parser } from 'links-notation';
 import fs from 'fs/promises';
 import path from 'path';
 import { createMutex, withFileLock } from './helpers/mutex.mjs';
+import { normalizeAnswerVariants, resolveAnswerConflict } from './answer-variants.mjs';
 
 /**
  * Creates a Q&A database instance with the specified file path
  * @param {string} filePath - REQUIRED: Path to the qa.lino file
+ * @param {Object} [options]
+ * @param {boolean} [options.resolveVariants=false] - Resolve final-period answer conflicts on save/load
+ * @param {'with'|'without'} [options.finalPeriod] - Override the user's ANSWER_FINAL_PERIOD setting
  * @returns {Object} Q&A database instance with methods
  * @throws {Error} If filePath is not provided
  */
-export function createQADatabase(filePath) {
+export function createQADatabase(filePath, { resolveVariants = false, finalPeriod } = {}) {
   if (!filePath) {
     throw new Error(
       'CRITICAL: QA Database file path is REQUIRED!\n' +
@@ -54,6 +58,8 @@ export function createQADatabase(filePath) {
   }
 
   const QA_FILE_PATH = filePath;
+  // The parser also serves configuration files; only answer databases opt into resolution.
+  const normalize = (answer) => resolveVariants ? normalizeAnswerVariants(answer, { finalPeriod }) : answer;
 
   const exclusive = createMutex();
 
@@ -72,7 +78,7 @@ export function createQADatabase(filePath) {
    *
    * @returns {Promise<Map<string, string|Array<string>>>} Map of questions to answers
    */
-  async function readQADatabase() {
+  async function readRawQADatabase() {
     try {
       // Ensure data directory exists
       await fs.mkdir(path.dirname(QA_FILE_PATH), { recursive: true });
@@ -140,6 +146,11 @@ export function createQADatabase(filePath) {
       console.error('Error reading Q&A database:', error);
       return new Map();
     }
+  }
+
+  // A bad style setting must propagate to the writer, never masquerade as an empty database.
+  async function readQADatabase() {
+    return new Map([...await readRawQADatabase()].map(([question, answer]) => [question, normalize(answer)]));
   }
 
   /**
@@ -225,7 +236,8 @@ export function createQADatabase(filePath) {
 
       // Format as indented Q&A pairs with proper multiline handling
       const lines = [];
-      for (const [question, answer] of qaMap.entries()) {
+      for (const [question, saved] of qaMap.entries()) {
+        const answer = normalize(saved);
         // Question handling: escapeReference handles all cases including multiline
         const escapedQuestion = escapeReference(question);
         lines.push(escapedQuestion);
@@ -293,7 +305,7 @@ export function createQADatabase(filePath) {
     // One write at a time in this process, and across processes (the run, form watchers, chats)
     return exclusive(() => withFileLock(QA_FILE_PATH, async () => {
       const qaMap = await readQADatabase();
-      qaMap.set(question, answer);
+      qaMap.set(question, resolveVariants ? resolveAnswerConflict(qaMap.get(question), answer, { finalPeriod }) : answer);
       await writeQADatabase(qaMap);
     }));
   }

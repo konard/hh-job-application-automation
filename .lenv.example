@@ -72,6 +72,15 @@
 # Default: true
 # AUTO_SEND_EXACT_ANSWERS: false
 
+# Resolve a conflict only when both otherwise identical answers exist, with and without a final
+# period. The first save is kept as entered; distinct answers and checkbox selections stay separate.
+# Choices: with, without. Default: with
+# ANSWER_FINAL_PERIOD: without
+
+# Answer "You've viewed the vacancy but haven't applied. Why?" with "Maybe I'll apply later".
+# Default: true. Turn off to leave these surveys for manual handling.
+# AUTO_ANSWER_VIEWED_VACANCY: false
+
 # Skip vacancies that ask these questions (a part of a question is enough) for now,
 # separated by |; they are kept in data/deferred-questions.lino until answered in qa.lino
 # Default: none

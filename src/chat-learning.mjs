@@ -11,7 +11,7 @@ import { mergeAnswerFrequencies } from './answer-variants.mjs';
  * wording. Checkbox arrays keep their meaning. Contacts are templated before expansion in the
  * vacancy's context. The archive is the source of variants, including answers to known questions.
  */
-export function withChatHistoryAnswers(db, { history = createChatHistory(), contacts = {} } = {}) {
+export function withChatHistoryAnswers(db, { history = createChatHistory(), contacts = {}, finalPeriod } = {}) {
   let previous;
   let recordedCounts = [];
   const read = async () => {
@@ -38,7 +38,7 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
     }
     const ranked = new Map();
     for (const [question, counts] of frequencies) {
-      const answers = mergeAnswerFrequencies([...counts].map(([answer, count]) => ({ answer, count })));
+      const answers = mergeAnswerFrequencies([...counts].map(([answer, count]) => ({ answer, count })), { finalPeriod });
       raw.set(question, answers.map(({ answer }) => answer).join(ANSWER_SEPARATOR));
       ranked.set(question, answers);
     }

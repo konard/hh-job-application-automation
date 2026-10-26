@@ -99,6 +99,16 @@ export function createConfig() {
             'and autofill answered it with the saved answer; other forms are autofilled and wait for you',
           default: getenv('AUTO_SEND_EXACT_ANSWERS', true),
         })
+        .option('answer-final-period', {
+          type: 'string', choices: ['with', 'without'],
+          description: 'When both answer variants exist, resolve a final-period conflict with or without the period; first saves keep their wording',
+          default: getenv('ANSWER_FINAL_PERIOD', 'with'),
+        })
+        .option('auto-answer-viewed-vacancy', {
+          type: 'boolean',
+          description: 'Answer the viewed-but-not-applied vacancy survey with "Maybe I\'ll apply later"',
+          default: getenv('AUTO_ANSWER_VIEWED_VACANCY', true),
+        })
         .option('network-idle-ms', {
           type: 'number',
           description: 'How long the page has no requests before it counts as ready for the next step (browser-commander waits 30000 by default)',

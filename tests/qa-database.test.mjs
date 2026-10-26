@@ -923,8 +923,11 @@ Step 3: Experiment`;
       // Read original production file
       const originalContent = await fs.readFile(PRODUCTION_QA_FILE, 'utf8');
 
-      // Create a database instance for production file
-      const prodDB = createQADatabase(PRODUCTION_QA_FILE);
+      // Exercise an isolated copy: the running application may be saving new answers.
+      const copyDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'qa-production-roundtrip-'));
+      const copyFile = path.join(copyDirectory, 'qa.lino');
+      await fs.writeFile(copyFile, originalContent, 'utf8');
+      const prodDB = createQADatabase(copyFile);
 
       try {
         // Read all Q&A pairs
@@ -935,7 +938,7 @@ Step 3: Experiment`;
         await prodDB.writeQADatabase(qaMap);
 
         // Read the file again
-        const newContent = await fs.readFile(PRODUCTION_QA_FILE, 'utf8');
+        const newContent = await fs.readFile(copyFile, 'utf8');
 
         // Content should be IDENTICAL (zero changes)
         assert.equal(
@@ -946,8 +949,7 @@ Step 3: Experiment`;
 
         console.log(`✅ Production qa.lino round-trip successful: ${qaMap.size} Q&A pairs, zero changes`);
       } finally {
-        // Always restore original content to avoid modifying production file
-        await fs.writeFile(PRODUCTION_QA_FILE, originalContent, 'utf8');
+        await fs.rm(copyDirectory, { recursive: true, force: true });
       }
     });
   });

@@ -92,6 +92,10 @@ describe('durable chat recording', () => {
       { answer: `${salary}.`, count: 4 }, { answer: different, count: 3 },
     ]);
     expect((await database.readAnswerFrequencies()).get(question)[0].count).toBe(4);
+    const without = withChatHistoryAnswers(original, { history, finalPeriod: 'without' });
+    expect((await without.readAnswerFrequencies()).get(question)).toEqual([
+      { answer: salary, count: 4 }, { answer: different, count: 3 },
+    ]);
     expect(await fs.readFile(path.join(dir, 'history.json'), 'utf8')).toBe(before);
     expect((await original.readQADatabase()).get(question)).toBe(salary);
   }));
