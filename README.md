@@ -558,19 +558,31 @@ browser. For the message waiting for an answer the reply is typed into the messa
 `--watch` waits until you send the reply (or type `s` to skip) before the next chat; hh.ru's suggested
 quick replies are never clicked.
 
-While the chat window is open (`--watch`, and the rejection checks of `apply`), what you answer in it
-is learned as you send it: the open chat is read from the page every few seconds, without requests to
-hh.ru. A bot's question is saved without its acknowledgement of your last answer («Понял, спасибо. А
+While the chat window is open (`--watch`, and the rejection checks of `apply`), each sent message
+is captured as the page changes, without requests to hh.ru; switching chats immediately after
+sending does not lose the reply. The application browser's chat frames are recorded too. A new
+question in the chat window is prefilled from saved answers, leaving text you already typed alone.
+A bot's question is saved without its acknowledgement of your last answer («Понял, спасибо. А
 есть ли у вас опыт с NestJS?» is saved as «Есть ли у вас опыт с NestJS?»), so it is answered word for
 word next time, whatever the bot says first; hh.ru's AI assistant's summary («В разговоре с
 кандидатом я узнал: …») is learned too and needs no reply. A check waits while you are typing or
 moving around in that window. `bun run answer-chats -- --learn-all` reads the chats you answered
-before, slowly, in a window of its own (port 9341).
+before, slowly, in a window of its own (port 9341). It opens unread chats too (marking them read),
+scrolls through older message pages, and records each page before it scrolls out of view. A chat
+is marked complete only when its original application is reached; an incomplete load is logged
+and remains eligible for another pass. Repeated last-message previews do not skip conversations.
 
 Every chat read (in the chat window, the chat panel after an application, or `--learn-all`) is kept
-as it is in `logs/chat-history.json` (personal, not committed), its new messages added as they come;
-`--learn-all` reads once more the chats read before it was kept. `bun run answer-chats -- --relearn`
-learns the answers again from it without opening hh.ru.
+as it is in `logs/chat-history.json` (personal, not committed), with writes locked across processes.
+Changed messages are updated and earlier versions of your sent text kept. Replies sent in several
+bubbles are learned together. Existing answers in `qa.lino` are kept as you wrote them; every
+distinct answer from the archive is also available to prefill, separated by ` | ` when there are
+several, sorted by how often you sent each wording (most frequent first; ties keep their existing
+order). Each chat stores `answerCounts` alongside its transcript. A sent reply counts once by its
+message IDs, even when read repeatedly; a bot repeating it in a summary adds no use. An answer
+known only from a summary or the saved Q&A file has count 0 until a sent occurrence is found.
+Such alternatives wait for review. Checkbox selections keep their existing meaning.
+`bun run answer-chats -- --relearn` learns the answers again from the archive without opening hh.ru.
 
 ### Sync Work Experience with LinkedIn
 

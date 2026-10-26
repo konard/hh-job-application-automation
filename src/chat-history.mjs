@@ -12,7 +12,8 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { NO_REPLY, isThanks, knownReply, learnedPairs } from './chat-answers.mjs';
+import { NO_REPLY, isThanks, knownReply, learnedPairs, countChatAnswers } from './chat-answers.mjs';
+import { createMutex, withFileLock } from './helpers/mutex.mjs';
 
 export { isThanks };
 
@@ -33,34 +34,59 @@ export function createChatHistory(file = CHAT_HISTORY_FILE) {
     }
     return cache.history;
   };
-  // One write at a time in a process
-  let writing = Promise.resolve();
-  async function record(chat) {
+  const exclusive = createMutex();
+  const readLocked = () => fs.readFile(file, 'utf8').then(JSON.parse, (error) => {
+    if (error.code === 'ENOENT') return {};
+    throw error;
+  });
+  const writeLocked = async (history) => {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(`${file}.tmp`, JSON.stringify(history));
+    await fs.rename(`${file}.tmp`, file);
+    cache = { mtime: (await fs.stat(file)).mtimeMs, history };
+  };
+  function record(chat) {
     if (!chat?.id || !chat.messages?.length) {
-      return false;
+      return Promise.resolve(false);
     }
-    await writing;
-    const history = await read();
-    const saved = history[chat.id] ?? { messages: [] };
-    const byId = new Map(saved.messages.map((message) => [message.id, message]));
-    const fresh = chat.messages.filter((message) => !byId.has(message.id));
-    if (fresh.length === 0 && saved.vacancy === chat.vacancy) {
-      return false;
-    }
-    fresh.forEach((message) => byId.set(message.id, { id: message.id, mine: message.mine, title: message.title, text: message.text }));
-    history[chat.id] = {
-      vacancy: chat.vacancy, company: chat.company, vacancyUrl: chat.vacancyUrl, at: new Date().toISOString(),
-      messages: [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id)),
-    };
-    writing = writing.then(async () => {
-      await fs.mkdir(path.dirname(file), { recursive: true });
-      await fs.writeFile(`${file}.tmp`, JSON.stringify(history));
-      await fs.rename(`${file}.tmp`, file);
-    }).catch(() => {});
-    await writing;
-    return true;
+    return exclusive(() => withFileLock(file, async () => {
+      // Always read under the shared lock: the panel, chat watcher and history slot write here.
+      const history = await readLocked();
+      const saved = history[chat.id] ?? { messages: [] };
+      const byId = new Map(saved.messages.map((message) => [message.id, message]));
+      const fresh = chat.messages.map((message) => {
+        const before = byId.get(message.id);
+        const previousTexts = [...before?.previousTexts ?? [], ...message.previousTexts ?? []];
+        if (before?.mine && message.mine && before.text !== message.text) previousTexts.push(before.text);
+        return previousTexts.length ? { ...message, previousTexts: [...new Set(previousTexts)] } : message;
+      }).filter((message) => JSON.stringify(byId.get(message.id)) !== JSON.stringify(message));
+      const metadata = Object.fromEntries(['vacancy', 'company', 'vacancyUrl', 'historyComplete', 'recordingVersion'].filter((key) => chat[key] !== undefined).map((key) => [key, chat[key]]));
+      fresh.forEach((message) => byId.set(message.id, { ...message }));
+      const messages = [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
+      const answerCounts = countChatAnswers(messages);
+      if (fresh.length === 0 && Object.entries(metadata).every(([key, value]) => saved[key] === value) &&
+        JSON.stringify(saved.answerCounts) === JSON.stringify(answerCounts)) {
+        return false;
+      }
+      history[chat.id] = {
+        ...saved, ...metadata, at: new Date().toISOString(),
+        messages, answerCounts,
+      };
+      await writeLocked(history);
+      return true;
+    }));
   }
-  return { read, record };
+  /** Backfill frequency metadata in one locked write, without reopening chats or changing Q&A. */
+  function recount() {
+    return exclusive(() => withFileLock(file, async () => {
+      const history = await readLocked();
+      for (const chat of Object.values(history)) chat.answerCounts = countChatAnswers(chat.messages);
+      await writeLocked(history);
+      return { chats: Object.keys(history).length, sentAnswers: Object.values(history)
+        .reduce((total, chat) => total + chat.answerCounts.reduce((sum, answer) => sum + answer.count, 0), 0) };
+    }));
+  }
+  return { read, record, recount };
 }
 
 /** A reply to someone by name («Ирина, здравствуйте!») is theirs, not one for every chat */

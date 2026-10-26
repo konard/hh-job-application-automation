@@ -10,7 +10,7 @@
 export const REJECTION_WORD = /^(?:отказ|rejection|refusal|declined)$/iu;
 
 /** The title of the user's own first message in a chat: the application with its cover letter */
-export const APPLICATION_WORD = /^(?:отклик на вакансию|vacancy application|application for (?:the|a) vacancy|response to (?:the|a) vacancy)$/iu;
+export const APPLICATION_WORD = /^(?:отклик на вакансию|vacancy application|application for (?:the|a) vacancy|response to (?:the|a) vacancy|bewerbung)$/iu;
 
 /**
  * hh.ru's notice that a recruiter bot has passed the answers on, so it asks nothing more:

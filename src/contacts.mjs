@@ -169,5 +169,10 @@ export function withContacts(db, contacts) {
         : contractContacts(answer, contacts);
       await db.addOrUpdateQA(question, templated);
     },
+    async addQAIfMissing(question, answer) {
+      return db.addQAIfMissing(question, Array.isArray(answer)
+        ? answer.map((item) => contractContacts(item, contacts))
+        : contractContacts(answer, contacts));
+    },
   };
 }

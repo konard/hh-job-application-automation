@@ -32,12 +32,16 @@ import { blockHangingHosts } from './hanging-hosts.mjs';
 import { closeChatPanel } from './helpers/page-helpers.mjs';
 import { todayLine } from './stats.mjs';
 import { prepareAlerts } from './notify.mjs';
+import { createChatHistory } from './chat-history.mjs';
+import { learnChatQuestions, withChatHistoryAnswers } from './chat-learning.mjs';
+import { watchChats } from './chat-recording.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'));
 
 let session = null;
 let commander = null;
 let chatProcess = null;
+let chatRecording = null;
 let shuttingDown = false;
 
 /**
@@ -50,6 +54,7 @@ async function shutdown(reason, exitCode = 0) {
   shuttingDown = true;
   console.log(`\n${reason}, shutting down...`);
   try {
+    await chatRecording?.flush();
     if (chatProcess) {
       chatProcess.kill('SIGTERM');
       chatProcess = null;
@@ -83,7 +88,9 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
   }
   // Answers and the cover letter use {{telegram}}-style placeholders for data/contacts.lino
   const contacts = await loadContacts(path.join(process.cwd(), 'data', 'contacts.lino'));
-  const { readQADatabase, addOrUpdateQA } = withContacts(qaDatabase, contacts);
+  const chatHistory = createChatHistory();
+  const chatQa = withContacts(withChatHistoryAnswers(qaDatabase, { history: chatHistory, contacts }), contacts);
+  const { readQADatabase, addOrUpdateQA, addQAIfMissing } = chatQa;
   argv.message = expandContacts(argv.message, contacts);
   argv.messageEn = expandContacts(argv.messageEn ?? '', contacts);
   const deferredVacancyIds = await deferredQuestions.pendingVacancyIds(await readQADatabase());
@@ -126,6 +133,10 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     keepOpen: argv.keepBrowserOpen,
     idleTimeoutMinutes: argv.browserIdleTimeout,
     singleTab: argv.singleTab,
+  });
+  chatRecording = await watchChats(session.page, {
+    onChat: (chat) => learnChatQuestions(chat, { history: chatHistory, qaDatabase: chatQa }),
+    onError: (error) => console.log(`⚠️  Chat recording failed: ${error.message}`),
   });
 
   // Someone answers on stdin when steps are confirmed, so missing answers can be asked for too
@@ -173,6 +184,8 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
       page: session.page,
       readQADatabase,
       addOrUpdateQA,
+      addQAIfMissing,
+      chatHistory,
       readTemplates: withContacts(createQADatabase(path.join(process.cwd(), 'data', 'chat-templates.lino')), contacts).readQADatabase,
       autoSend: argv.autoSendExactAnswers,
       autoReuse: argv.autoReuseAnswers,

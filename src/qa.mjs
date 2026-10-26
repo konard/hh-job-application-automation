@@ -129,6 +129,7 @@ export function allAnswersExact(items, qaMap) {
     const saved = qaMap.get(item.question);
     const savedList = [saved].flat().map((answer) => String(answer).trim());
     if (item.type === 'textarea') {
+      if (hasAnswerVariants(saved)) return false;
       const choice = choices.get(item.question);
       // The text box of a choice question holds the answer only for its "Свой вариант" option
       if (choice && !choice.options.some(({ checked, value }) => checked && value === 'open')) {
@@ -310,6 +311,8 @@ export async function countUnansweredQuestions(options = {}) {
  * @param {string|string[]} answer
  * @returns {string}
  */
+export const ANSWER_SEPARATOR = ' | ';
+export const hasAnswerVariants = (answer) => typeof answer === 'string' && answer.includes(ANSWER_SEPARATOR);
 export const answerText = (answer) => [answer].flat().join('\n');
 
 /** A question that asks where, what, how many…: «да» or «нет» does not answer it */

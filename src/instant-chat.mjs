@@ -17,13 +17,14 @@
  * @module instant-chat
  */
 
-import { chatContextTexts, compareReusedAnswers, describeReuse, isQuestion, isReuseOffer, knownReplyInContexts, learnedPairs, pendingMessages, readChatIn, reuseOption } from './chat-answers.mjs';
+import { chatContextTexts, compareReusedAnswers, describeReuse, isQuestion, isReuseOffer, knownReplyInContexts, pendingMessages, readChatIn, reuseOption } from './chat-answers.mjs';
 import { normalizeQuestion } from './qa-database.mjs';
 import { askUser, isInteractive, withdrawPrompt } from './confirmations.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
 import { ANSWERS_PASSED } from './hh-words.mjs';
+import { learnChatQuestions } from './chat-learning.mjs';
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
@@ -129,7 +130,7 @@ export async function sendChatAnswer(frame, messageId, { answer, option }) {
  * @returns {(vacancyId: string|null) => Promise<void>}
  */
 export function createInstantChat({
-  page, readQADatabase, addOrUpdateQA, readTemplates, autoSend, autoReuse = false, closePanel, chatHistory = createChatHistory(), vacancyContext = () => [],
+  page, readQADatabase, addOrUpdateQA, addQAIfMissing, readTemplates, autoSend, autoReuse = false, closePanel, chatHistory = createChatHistory(), vacancyContext = () => [],
   firstMessageMs = 20000, nextMessageMs = 15000, log = console.log,
 }) {
   /**
@@ -157,17 +158,9 @@ export function createInstantChat({
 
   /** Questions answered in the chat go to qa.lino: the user's answers, and the bot's summary of them */
   async function learn(chat) {
-    // Kept as it is: the answers can be learned again from it (answer-chats --relearn)
-    await chatHistory.record(chat).catch(() => {});
-    const known = await readQADatabase();
-    const { questions, templates } = learnedPairs(chat.messages);
-    const asked = templates.filter(([text]) => buttonQuestions.has(normalizeQuestion(text)));
-    for (const [question, answer] of [...questions, ...asked]) {
-      if (!known.has(question)) {
-        await addOrUpdateQA(question, answer);
-        log(`💾 Learned from the chat (qa.lino): ${question}`);
-      }
-    }
+    await learnChatQuestions(chat, {
+      history: chatHistory, qaDatabase: { readQADatabase, addOrUpdateQA, addQAIfMissing }, buttonQuestions, log,
+    });
   }
 
   /** Wait until the user has answered the message in the panel, or typed y/s to move on */
@@ -317,7 +310,7 @@ export function createInstantChat({
       // Whatever was answered is saved for the next time, however the chat ended
       const chat = await readChatIn(frame).catch(() => null);
       if (chat) {
-        await learn(chat).catch(() => {});
+        await learn(chat).catch((error) => log(`⚠️  Chat recording failed: ${error.message}`));
       }
     }
     if (botDone) {

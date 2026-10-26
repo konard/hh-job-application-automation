@@ -298,6 +298,17 @@ export function createQADatabase(filePath) {
     }));
   }
 
+  /** Learn a new question without replacing an answer saved by the user or another process. */
+  function addQAIfMissing(question, answer) {
+    return exclusive(() => withFileLock(QA_FILE_PATH, async () => {
+      const qaMap = await readQADatabase();
+      if (qaMap.has(question)) return false;
+      qaMap.set(question, answer);
+      await writeQADatabase(qaMap);
+      return true;
+    }));
+  }
+
   /**
    * Gets the answer for a given question
    * @param {string} question - The question
@@ -365,6 +376,7 @@ export function createQADatabase(filePath) {
     readQADatabase,
     writeQADatabase,
     addOrUpdateQA,
+    addQAIfMissing,
     getAnswer,
     filePath: QA_FILE_PATH,
   };

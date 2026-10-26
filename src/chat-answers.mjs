@@ -15,7 +15,7 @@
  */
 
 import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isEnglish, isPattern, matchesPattern, normalizeQuestion, patternWords, stringSimilarity } from './qa-database.mjs';
-import { answerText } from './qa.mjs';
+import { answerText, hasAnswerVariants } from './qa.mjs';
 import { answersInContexts, showsContext } from './answer-contexts.mjs';
 import { APPLICATION_WORD, INVITE_NOTICE, REJECTION_WORD, TURNED_OFF_WORDS } from './hh-words.mjs';
 
@@ -31,7 +31,7 @@ export const CHAT_QUESTION_THRESHOLD = 0.7;
  * @param {{mine: boolean, title?: string}} message
  * @returns {boolean}
  */
-export const isApplication = (message) => APPLICATION_WORD.test(message.title ?? '') || Boolean(message.mine && message.title);
+export const isApplication = (message) => APPLICATION_WORD.test(message.title ?? '');
 
 /**
  * Runs in the page: the messages of the open chat, oldest first. The user's own messages carry a
@@ -41,7 +41,7 @@ export const isApplication = (message) => APPLICATION_WORD.test(message.title ??
  *   heading: the bubble's own title («Отказ», "Rejection"); turnedOff: the employer turned the conversation off
  */
 export function readChat(turnedOffWords) {
-  const clean = (text) => String(text ?? '').replace(/\n{3,}/g, '\n\n').trim();
+  const clean = (text) => String(text ?? '').trim();
   const messages = [...document.querySelectorAll('[data-qa^="chatik-chat-message-"]')]
     .filter((element) => /^chatik-chat-message-\d+$/.test(element.getAttribute('data-qa')))
     .map((element) => {
@@ -50,9 +50,11 @@ export function readChat(turnedOffWords) {
       // The user's own bubble is on the right; hh.ru's notices in the middle are not the user's. The
       // employer's bubbles have an icon too (chat-bubble-icon-hidden, an eye), so icons decide only
       // when the page is not laid out
-      const mine = bubble?.width > 0
-        ? bubble.left - row.left > 40 && row.right - bubble.right < 40
-        : Boolean(element.querySelector('[data-qa^="status-icon"], [data-qa^="chat-bubble-icon"]:not([data-qa="chat-bubble-icon-hidden"]), [class*="message_my"], [class*="chat-bubble_outgoing"]'));
+      // Long outgoing answers can fill the row, so their left margin is not a reliable sender
+      // test. An outgoing delivery status takes precedence over the bubble's position.
+      const outgoing = element.querySelector('[data-qa^="status-icon"], [data-qa^="chat-bubble-icon"]:not([data-qa="chat-bubble-icon-hidden"]), [class*="message_my"], [class*="chat-bubble_outgoing"]');
+      const mine = Boolean(outgoing) || Boolean(bubble?.width > 0 &&
+        bubble.left - row.left > 40 && row.right - bubble.right < 40);
       return {
         id: element.getAttribute('data-qa').replace('chatik-chat-message-', ''),
         mine,
@@ -100,7 +102,7 @@ export const readChatIn = (target) => target.evaluate(readChat, TURNED_OFF_WORDS
 export function scrollChatList(top) {
   const cell = document.querySelector('[data-qa^="chatik-open-chat-"]');
   let box = cell?.parentElement;
-  while (box && !(box.scrollHeight > box.clientHeight + 10 && /auto|scroll/.test(window.getComputedStyle(box).overflowY))) {
+  while (box && !/auto|scroll/.test(window.getComputedStyle(box).overflowY)) {
     box = box.parentElement;
   }
   if (!box) {
@@ -537,7 +539,7 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
     const asked = questionCore(core);
     const saved = findBestMatch(asked, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
     if (saved) {
-      return { answer: answerText(saved.answer), perfect: sameText(asked, saved.question) || sameText(core, saved.question), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
+      return { answer: answerText(saved.answer), perfect: !hasAnswerVariants(saved.answer) && (sameText(asked, saved.question) || sameText(core, saved.question)), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
     }
   }
   return null;
@@ -753,6 +755,7 @@ export const isSupportChat = (chat) => !chat.vacancy && /поддержк|suppor
 export function learnedPairs(messages) {
   const questions = [];
   const templates = [];
+  const answerEvents = [];
   messages.forEach((message, index) => {
     // A recruiter bot repeats the questions with the answers given; answers that are questions back are not answers
     if (!message.mine) {
@@ -761,8 +764,22 @@ export function learnedPairs(messages) {
     }
     // A greeting alone answers nothing: the answer follows in the next message
     // hh.ru's own notices shown on the user's side («Ответьте на приглашение…») are not the user's answers
-    if (isApplication(message) || INVITE_NOTICE.test(message.text) || isQuestion(message.text) || GREETING_ONLY.test(message.text.trim())) {
+    if (isApplication(message) || INVITE_NOTICE.test(message.text) ||
+      (/\?\s*$/.test(message.text) && !/[.!]\s+\S/.test(message.text)) || GREETING_ONLY.test(message.text.trim())) {
       return;
+    }
+    // An answer can be sent in several bubbles. Keep the whole reply, once, rather than losing
+    // every bubble after the first (including answers whose sender name is shown).
+    if (messages[index - 1]?.mine && !isApplication(messages[index - 1]) &&
+      !INVITE_NOTICE.test(messages[index - 1].text) && !GREETING_ONLY.test(messages[index - 1].text.trim()) &&
+      !isQuestion(messages[index - 1].text)) return;
+    const parts = [message.text];
+    const messageIds = [message.id ?? `index:${index}`];
+    for (let next = index + 1; messages[next]?.mine; next += 1) {
+      if (!isApplication(messages[next]) && !INVITE_NOTICE.test(messages[next].text)) {
+        parts.push(messages[next].text);
+        messageIds.push(messages[next].id ?? `index:${next}`);
+      }
     }
     // A reminder («не дождалась вашего ответа») is not what the user answers: the question before it is
     let before = index - 1;
@@ -780,10 +797,45 @@ export function learnedPairs(messages) {
     }
     const core = templateCore(asked.text, { sender: asked.title });
     const question = questionCore(core);
-    (asksSomething(core) || asksSomething(question) ? questions : templates)
-      .push([asksSomething(core) || asksSomething(question) ? question : core, message.text]);
+    const isAsked = asksSomething(core) || asksSomething(question);
+    const answer = parts.join('\n\n');
+    (isAsked ? questions : templates).push([isAsked ? question : core, answer]);
+    if (isAsked) answerEvents.push({ question, answer, messageIds });
   });
-  return { questions, templates };
+  return { questions, templates, answerEvents };
+}
+
+/**
+ * Frequencies of actual sent replies, keyed by message IDs, not by how often a snapshot is read.
+ * Bot summaries retain their answers with count 0: they are not another reply sent by the user.
+ * Earlier versions of edited sent messages each count once, without counting other replies again.
+ */
+export function countChatAnswers(messages) {
+  const counts = new Map();
+  const events = new Set();
+  const add = (question, answer, event) => {
+    const key = JSON.stringify([normalizeQuestion(question), answer]);
+    if (!counts.has(key)) counts.set(key, { question, answer, count: 0 });
+    if (event && !events.has(event)) {
+      events.add(event);
+      counts.get(key).count += 1;
+    }
+  };
+  const collect = (items, changedId) => {
+    const { questions, answerEvents } = learnedPairs(items);
+    questions.forEach(([question, answer]) => add(question, answer));
+    for (const { question, answer, messageIds } of answerEvents) {
+      if (changedId !== undefined && !messageIds.includes(changedId)) continue;
+      add(question, answer, JSON.stringify([normalizeQuestion(question), answer, messageIds]));
+    }
+  };
+  messages.forEach((message, index) => {
+    for (const text of message.previousTexts ?? []) {
+      collect(messages.map((item, at) => at === index ? { ...item, text } : item), message.id ?? `index:${index}`);
+    }
+  });
+  collect(messages);
+  return [...counts.values()];
 }
 
 /** Links of questionnaires employers send in chats */

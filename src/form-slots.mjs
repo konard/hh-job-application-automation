@@ -19,6 +19,7 @@ import { recordEvent } from './stats.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { startFormWatch } from './form-answers.mjs';
 import { createQADatabase } from './qa-database.mjs';
+import { withChatHistoryAnswers } from './chat-learning.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy, isPayQuestion, payGuidance, statesPay } from './vacancy-context.mjs';
 import {
@@ -229,7 +230,7 @@ function report({ url, slot, title, fields }) {
  */
 export async function loadAnswerSources() {
   const contacts = await loadContacts(path.join(DATA, 'contacts.lino'));
-  const qaDatabase = withContacts(createQADatabase(path.join(DATA, 'qa.lino')), contacts);
+  const qaDatabase = withContacts(withChatHistoryAnswers(createQADatabase(path.join(DATA, 'qa.lino')), { contacts }), contacts);
   const { profile, resume } = await loadProfile({
     resumeMarkdown: path.join(DATA, 'resume', 'resume.md'),
     resumeJson: path.join(DATA, 'resume', 'resume.json'),
