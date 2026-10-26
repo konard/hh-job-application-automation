@@ -4,6 +4,7 @@ import { createChatHistory } from './chat-history.mjs';
 import { normalizeQuestion } from './qa-database.mjs';
 import { contractContacts } from './contacts.mjs';
 import { ANSWER_SEPARATOR } from './qa.mjs';
+import { mergeAnswerFrequencies } from './answer-variants.mjs';
 
 /**
  * Read every distinct answer given to the same question, without changing the user's saved
@@ -37,7 +38,7 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
     }
     const ranked = new Map();
     for (const [question, counts] of frequencies) {
-      const answers = [...counts].map(([answer, count]) => ({ answer, count })).sort((a, b) => b.count - a.count);
+      const answers = mergeAnswerFrequencies([...counts].map(([answer, count]) => ({ answer, count })));
       raw.set(question, answers.map(({ answer }) => answer).join(ANSWER_SEPARATOR));
       ranked.set(question, answers);
     }

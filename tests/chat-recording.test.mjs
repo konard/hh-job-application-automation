@@ -76,6 +76,26 @@ describe('durable chat recording', () => {
     expect((await original.readQADatabase()).get('Как вы проверяете результат?')).toBe('Отвечаю');
   }));
 
+  test('final-period variants combine their frequencies and rank together without changing archived replies', () => fixture(async (dir) => {
+    const history = createChatHistory(path.join(dir, 'history.json'));
+    const original = createQADatabase(path.join(dir, 'qa.lino'));
+    const salary = 'От 450 000 ₽ в месяц на руки';
+    const different = 'От 530 000 ₽ в месяц до налогов.';
+    await original.addOrUpdateQA(question, salary);
+    for (const [index, answer] of [salary, salary, `${salary}.`, `${salary}.`, different, different, different].entries()) {
+      await history.record(chat(String(index + 1), answer));
+    }
+    const before = await fs.readFile(path.join(dir, 'history.json'), 'utf8');
+    const database = withChatHistoryAnswers(original, { history });
+    expect((await database.readQADatabase()).get(question)).toBe(`${salary}. | ${different}`);
+    expect((await database.readAnswerFrequencies()).get(question)).toEqual([
+      { answer: `${salary}.`, count: 4 }, { answer: different, count: 3 },
+    ]);
+    expect((await database.readAnswerFrequencies()).get(question)[0].count).toBe(4);
+    expect(await fs.readFile(path.join(dir, 'history.json'), 'utf8')).toBe(before);
+    expect((await original.readQADatabase()).get(question)).toBe(salary);
+  }));
+
   test('frequencies persist once per sent reply, including repeats in the same chat, without counting bot summaries', () => fixture(async (dir) => {
     const history = createChatHistory(path.join(dir, 'history.json'));
     const conversation = { ...chat('1', 'Пять задач'), messages: [

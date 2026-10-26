@@ -618,6 +618,9 @@ for review. Explicit choice-only questions never get a free-text draft, and a bo
 question after an answer does not get the same text suggested again. Buttons arriving after their
 question are detected too; clearing an unsent draft retries the choice. Saved answers and frequency counts are retained; plain salary
 suggestions are filtered to the requested net or gross basis.
+Answer alternatives differing only by a single final period are combined into the version with
+the period. Their usage counts are added before frequency sorting; original saved answers and
+chat transcripts retain their wording. Other punctuation and different answers remain separate.
 
 While the chat window is open (`--watch`, and the rejection checks of `apply`), each sent message
 is captured as the page changes, including delivery-status and bubble-style updates, without

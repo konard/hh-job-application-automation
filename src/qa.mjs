@@ -2,6 +2,8 @@
  * Q&A handling module for hh.ru job application forms
  * Handles extraction, matching, and auto-filling of questions and answers
  */
+import { ANSWER_SEPARATOR, normalizeAnswerVariants } from './answer-variants.mjs';
+export { ANSWER_SEPARATOR } from './answer-variants.mjs';
 
 /**
  * Extract all questions from page (textareas, radios, checkboxes)
@@ -134,7 +136,7 @@ function itemAnswerExact(item, qaMap, choices) {
   if (!qaMap.has(item.question)) {
     return false;
   }
-  const saved = qaMap.get(item.question);
+  const saved = normalizeAnswerVariants(qaMap.get(item.question));
   const savedList = [saved].flat().map((answer) => String(answer).trim());
   if (item.type === 'textarea') {
     if (hasAnswerVariants(saved)) return false;
@@ -334,9 +336,8 @@ export async function countUnansweredQuestions(options = {}) {
  * @param {string|string[]} answer
  * @returns {string}
  */
-export const ANSWER_SEPARATOR = ' | ';
-export const hasAnswerVariants = (answer) => typeof answer === 'string' && answer.includes(ANSWER_SEPARATOR);
-export const answerText = (answer) => [answer].flat().join('\n');
+export const hasAnswerVariants = (answer) => typeof answer === 'string' && normalizeAnswerVariants(answer).includes(ANSWER_SEPARATOR);
+export const answerText = (answer) => [normalizeAnswerVariants(answer)].flat().join('\n');
 
 /** A question that asks where, what, how many…: «да» or «нет» does not answer it */
 const OPEN_QUESTION = /^(?:где|откуда|куда|когда|какой|какая|какое|какие|каких|каким|какую|сколько|почему|зачем|кто|чем|what|where|when|why|how|which|who)(?!\p{L})/iu;
