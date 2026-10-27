@@ -649,6 +649,9 @@ reversed message column; it keeps reading older pages until the original applica
 Recruiter questions containing private access links stay in the local transcript and are excluded
 from the shared Q&A file.
 Prefills run one at a time, including at startup, to prevent duplicate text.
+Questions seen while automatic chat processing owns the window are queued and retried when it
+finishes, even if the conversation does not change again. A newer chat replaces the pending one;
+existing drafts stay untouched. Restarting a signed-in chat slot keeps its current page open.
 A bot's question is saved without its acknowledgement of your last answer («Понял, спасибо. А
 есть ли у вас опыт с NestJS?» is saved as «Есть ли у вас опыт с NestJS?»), so it is answered word for
 word next time, whatever the bot says first; hh.ru's AI assistant's summary («В разговоре с

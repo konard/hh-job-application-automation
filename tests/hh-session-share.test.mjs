@@ -1,9 +1,18 @@
 import { describe, test, assert } from 'test-anywhere';
-import { HH_SESSION_PORTS, pageSignInState } from '../src/login.mjs';
+import { HH_SESSION_PORTS, pageSignInState, seedHhSession } from '../src/login.mjs';
 
 const fakePage = (url, state) => ({ url: () => url, evaluate: async () => state });
 
 describe('hh.ru login shared between windows', () => {
+  test('restarting a signed-in slot preserves its current chat and draft without navigation', async () => {
+    const page = {
+      ...fakePage('https://hh.ru/chat/5742911523', 'in'),
+      goto: async () => { throw new Error('An already signed-in chat must not navigate away'); },
+    };
+    assert.equal(await seedHhSession({ page }), true);
+    assert.equal(page.url(), 'https://hh.ru/chat/5742911523');
+  });
+
   test('a page tells whether it is signed in, without loading anything', async () => {
     assert.equal(await pageSignInState(fakePage('https://hh.ru/chat', 'in')), 'in');
     assert.equal(await pageSignInState(fakePage('https://hh.ru/applicant/resumes', 'out')), 'out');

@@ -40,7 +40,7 @@ import { recordEvent } from './stats.mjs';
 import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
 import { learnChatQuestions } from './chat-learning.mjs';
 import { readFullChat, setUnreadFilter, waitForChat, watchChats } from './chat-recording.mjs';
-import { createMutex } from './helpers/mutex.mjs';
+import { createChatPrefillQueue } from './chat-prefill-queue.mjs';
 import { getAnswerFinalPeriod } from './answer-variants.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
@@ -327,9 +327,15 @@ let chatRecording;
 let passRunning = false;
 const prefilledMessages = new Set();
 const handledChoices = new Set();
-const prefillExclusive = createMutex();
+const livePrefill = createChatPrefillQueue({
+  busy: async (frame) => passRunning || (!frame.isDetached() &&
+    await frame.evaluate(() => Boolean(window.__chatAutomating)).catch(() => false)),
+  write: writeSavedChat,
+  onError: (error) => console.log(`⚠️  Saved answer prefill failed: ${error.message}`),
+});
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, async () => {
+    livePrefill.stop();
     await chatRecording?.flush();
     await session?.release();
     process.exit(0);
@@ -353,13 +359,11 @@ async function openChatTab() {
           return;
         }
         await learn(chat);
-        if (!passRunning) {
-          await prefillSavedChat(chat, frame).catch((error) => {
-            if (!/Execution context was destroyed|closed|detached/i.test(error.message)) {
-              console.log(`⚠️  Saved answer prefill failed: ${error.message}`);
-            }
-          });
-        }
+        await prefillSavedChat(chat, frame).catch((error) => {
+          if (!/Execution context was destroyed|closed|detached/i.test(error.message)) {
+            console.log(`⚠️  Saved answer prefill failed: ${error.message}`);
+          }
+        });
       },
       onError: (error) => console.log(`⚠️  Chat recording failed: ${error.message}`),
     });
@@ -719,10 +723,11 @@ passRunning = false;
  * anything, or replacing a draft already typed by the user.
  */
 function prefillSavedChat(chat, frame) {
-  return prefillExclusive(() => writeSavedChat(chat, frame));
+  return livePrefill.enqueue(chat, frame);
 }
 
 async function writeSavedChat(chat, frame) {
+  if (frame.isDetached()) return;
   const last = pendingMessages(chat.messages).at(-1);
   const key = `${chat.id}/${last?.id}`;
   if (!last || chat.transitioning || !chat.canReply || isSupportChat(chat) ||
@@ -737,7 +742,7 @@ async function writeSavedChat(chat, frame) {
   // Recheck after looking up the answer: the user may already have moved to another chat.
   const current = await readChatIn(frame);
   if (current.transitioning || current.id !== chat.id || pendingMessages(current.messages).at(-1)?.id !== last.id) return;
-  if (await frame.evaluate(() => Boolean(window.__chatAutomating))) return;
+  if (passRunning || await frame.evaluate(() => Boolean(window.__chatAutomating))) return false;
   const input = frame.locator(MESSAGE_INPUT).first();
   const draft = (await input.inputValue({ timeout: 1000 }).catch(() => '')).trim();
   if (choice?.autoSend && argv.autoSend && !handledChoices.has(key) &&

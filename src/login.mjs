@@ -364,6 +364,8 @@ export async function hhPageSignedIn(page) {
  */
 export async function seedHhSession({ page, fromPort = 9322, log: say = console.log }) {
   // A slot signed in on its own keeps its login (a signed-out browser's cookies would replace it)
+  // Checking the profile page would navigate away from an already signed-in chat and its draft.
+  if (await pageSignInState(page) === 'in') return true;
   if (await hhPageSignedIn(page)) {
     return true;
   }
