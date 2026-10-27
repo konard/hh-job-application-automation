@@ -19,6 +19,41 @@ const sources = (values = contacts, extra = []) => ({
 });
 
 describe('salary currency and tax follow-ups in recruiter chats', () => {
+  test('a salary acknowledgement followed by a GitHub question uses the actual question', async () => {
+    const values = { ...contacts, github: 'github.com/example' };
+    const wrappedTemplates = withContacts({ readQADatabase: async () => new Map() }, values).readQADatabase;
+    for (const question of [
+      'Спасибо за информацию о зарплате. Можете, пожалуйста, поделиться ссылкой на ваш GitHub или примеры кода, если они у вас есть?',
+      'Thanks for sharing your salary expectations. Could you share your GitHub profile?',
+    ]) {
+      const reply = await knownReplyInContexts({ text: question }, {
+        ...sources(values, [['pattern: github', '{{github}}']]), readTemplates: wrappedTemplates,
+        known: [question, 'На какую заработную плату вы ориентируетесь на старте?'],
+      });
+      expect(reply).toMatchObject({ answer: 'github.com/example', perfect: false });
+      expect(reply.source).toMatch(/^qa.lino/);
+      expect(reply.answer).not.toMatch(/450|530|₽/);
+    }
+  });
+
+  test('a new topic without a saved answer cannot fall back to the acknowledged salary', async () => {
+    const question = 'Спасибо за информацию о зарплате. Можете поделиться ссылкой на ваш GitHub?';
+    const reply = await knownReplyInContexts({ text: question }, {
+      ...sources(), readTemplates: withContacts({ readQADatabase: async () => new Map() }, contacts).readQADatabase,
+      known: [question, original],
+    });
+    expect(reply).toBeNull();
+  });
+
+  test('salary inference through wrapped templates never becomes an exact saved-template match', async () => {
+    const question = 'Спасибо за отклик. Какие у вас зарплатные ожидания?';
+    const reply = await knownReplyInContexts({ text: question }, {
+      ...sources(), readTemplates: withContacts({ readQADatabase: async () => new Map() }, contacts).readQADatabase,
+      known: [question],
+    });
+    expect(reply).toMatchObject({ answer: 'От 450 000 ₽ в месяц на руки.', perfect: false, source: 'salary question by pattern' });
+  });
+
   test('the screenshot conversation gets Russian USD gross, ignoring the previously sent ruble net amount', async () => {
     const chat = { vacancy: 'Senior Backend Developer', messages: [
       { mine: false, text: original },

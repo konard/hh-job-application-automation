@@ -383,7 +383,7 @@ export function describeReuse({ pairs, decision }) {
   ].join('\n');
 }
 
-const ACKNOWLEDGEMENT = /^(понял[аи]?|поняла|ясно|хорошо|отлично|супер|здорово|спасибо|благодарю|принято|ok|ок)(?!\p{L})[^.!?]*[.!]\s+/iu;
+const ACKNOWLEDGEMENT = /^(понял[аи]?|поняла|ясно|хорошо|отлично|супер|здорово|спасибо|благодарю|принято|thanks|thank you|understood|got it|noted|ok|ок)(?!\p{L})[^.!?]*[.!]\s+/iu;
 const LEAD_IN = /^(?:хорошо|отлично|понял[аи]?|поняла|ясно|спасибо|ок|ok)(?:\s*[,!.]\s*(?:а\s+)?|\s+а\s+)|^(?:а|теперь)\s+(?=\p{L})/iu;
 // «Расскажите, пожалуйста,» before the question itself («был ли…», «в каких проектах…»)
 const POLITE = /^(?:скажите|подскажите|расскажите|уточните)\s*,?\s*(?:пожалуйста\s*,?\s*)?(?=\p{L}+\s+ли(?!\p{L})|(?:в\s+)?(?:как|сколько|где|когда|почему|зачем|что|чем|кто))/iu;
@@ -599,12 +599,17 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
  * @returns {Promise<Object|null>} As knownReply
  */
 export async function knownReplyInContexts(message, { readTemplates, readQADatabase, contexts, known = [], vacancyTexts }) {
-  const templates = answersInContexts(readTemplates, contexts);
+  // Templates are saved messages, never inferred salary replies labeled as exact matches.
+  const templates = answersInContexts(readTemplates, contexts, { inferPatterns: false });
   const qaMaps = answersInContexts(readQADatabase, contexts);
+  // "Thanks for the salary information. Share your GitHub?" asks about GitHub, not pay.
+  // Strip acknowledgement text before any topic inference or currency/tax selection.
+  const asked = questionCore(templateCore(message.text, { sender: message.title }));
   // A message not saved word for word that has an answer under itself: a salary question answered by pattern
-  const savedAsIs = (await readQADatabase()).has(message.text);
-  const clarification = salaryClarificationQuestion(message.text, known);
-  const question = clarification ?? message.text;
+  const saved = await readQADatabase();
+  const savedAsIs = saved.has(message.text) || saved.has(asked);
+  const clarification = salaryClarificationQuestion(asked, known.map((text) => questionCore(templateCore(text))));
+  const question = clarification ?? asked;
   const replyIn = async (texts) => {
     const qaMap = await qaMaps(question, texts);
     if (clarification) {
@@ -612,7 +617,7 @@ export async function knownReplyInContexts(message, { readTemplates, readQADatab
         ? { answer: answerText(qaMap.get(question)), perfect: false, source: 'salary clarification by pattern', matched: message.text }
         : null;
     }
-    const byPattern = !savedAsIs && qaMap.has(message.text) ? qaMap.get(message.text) : null;
+    const byPattern = !savedAsIs && qaMap.has(question) ? qaMap.get(question) : null;
     return knownReply(message, { templates: await templates(message.text, texts), qaMap, byPattern });
   };
   const reply = await replyIn(known);

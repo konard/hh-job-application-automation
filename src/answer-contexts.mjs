@@ -105,9 +105,11 @@ export function showsContext(contexts, texts) {
  * salary-questions.mjs), under the question itself
  * @param {Function} readQADatabase - withContacts' (contacts.mjs): takes {contexts, questions}
  * @param {Array} contexts - parseAnswerContexts
+ * @param {Object} [options]
+ * @param {boolean} [options.inferPatterns=true] - False for message templates, which must come from saved examples
  * @returns {(question: string, known?: string|string[]) => Promise<Map>}
  */
-export function answersInContexts(readQADatabase, contexts) {
+export function answersInContexts(readQADatabase, contexts, { inferPatterns = true } = {}) {
   const maps = new Map();
   const read = (key, options) => {
     if (!maps.has(key)) {
@@ -119,7 +121,7 @@ export function answersInContexts(readQADatabase, contexts) {
     const chosen = chooseContexts(contexts, question, known);
     const key = chosen.map(({ group, name }) => `${group}: ${name}`).join('\n');
     const saved = await read(key, { contexts: chosen });
-    if (saved.has(question) || !String(question ?? '').trim()) {
+    if (!inferPatterns || saved.has(question) || !String(question ?? '').trim()) {
       return saved;
     }
     const withPattern = await read(`${key}\n\n${question}`, { contexts: chosen, questions: [question] });
