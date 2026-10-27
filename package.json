@@ -17,6 +17,7 @@
     "vacancy-stats": "bun src/vacancy-stats.mjs",
     "ai-status": "bun src/oxion-status.mjs",
     "answer-chats": "bun src/answer-chats.mjs",
+    "backfill-questionnaires": "bun src/backfill-questionnaires.mjs",
     "experience": "bun src/experience-sync.mjs",
     "cv": "bun src/cv-sync.mjs",
     "test-assignment": "bun src/test-assignment.mjs",

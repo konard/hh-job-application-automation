@@ -32,6 +32,7 @@ const isCurrent = () => {
 log(`👀 Watching the form on port ${state.port}: answers you change are saved to qa.lino, and what you send`);
 try {
   const qaDatabase = withContacts(createQADatabase(path.join(DATA, 'qa.lino'), { resolveVariants: true }), await loadContacts(path.join(DATA, 'contacts.lino')));
+  await qaDatabase.backfillQuestionAnswers();
   // An answer changed and left as it is for a minute is saved before the form is sent
   const onEdit = async (edited) => {
     const saved = await saveSentAnswers(edited, { qaDatabase, prefilled: state.prefilled });

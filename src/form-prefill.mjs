@@ -11,6 +11,7 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import os from 'os';
 import { findBestMatch } from './qa-database.mjs';
+import { composeQuestionAnswer, splitQuestions } from './multi-question.mjs';
 import { expandContacts } from './contacts.mjs';
 import { answerText, findMatchingOption } from './qa.mjs';
 
@@ -87,7 +88,7 @@ export function linksFor(title, links) {
  * @returns {{answer: string, missing: string[]}|null}
  */
 export function contactAnswer(title, profile) {
-  if (title.length > 160) {
+  if (title.length > 160 || splitQuestions(title).length > 1) {
     return null;
   }
   const parts = CONTACT_PARTS.filter(({ test }) => test.test(title));
@@ -149,7 +150,7 @@ export function pickOptions(options, saved) {
 export function planAnswers(fields, { profile, qaMap, qaMapFor = () => qaMap, company = '' }) {
   return fields.map((field) => {
     // The employer's own poll (rating.hh.ru) asks to find the company; the ratings are the user's
-    if (company && field.kind === 'text' && /компани|работодател|organization|company/i.test(field.title)) {
+    if (company && field.kind === 'text' && splitQuestions(field.title).length < 2 && /компани|работодател|organization|company/i.test(field.title)) {
       return { ...field, answer: company, source: 'company from the chat' };
     }
     if (field.kind === 'file') {
@@ -165,6 +166,13 @@ export function planAnswers(fields, { profile, qaMap, qaMapFor = () => qaMap, co
       }
     }
     let match = findBestMatch(field.title, qaMapFor(field.title));
+    if (match?.composed || (!match && splitQuestions(field.title).length > 1)) {
+      match = composeQuestionAnswer(field.title, (part) => {
+        const contact = contactAnswer(part, profile);
+        return contact && !contact.missing.length ? { question: part, answer: contact.answer, score: 1 }
+          : findBestMatch(part, qaMapFor(part), { threshold: 0.7 });
+      });
+    }
     // A question asking for a link takes only a saved answer with a link
     if (match && /ссылк|\blink\b|\burl\b/i.test(field.title) && !/https?:\/\/|www\.|\w\.(ru|com|io|org|me)\b/i.test(answerText(match.answer))) {
       match = null;

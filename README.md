@@ -683,6 +683,23 @@ known only from a summary or the saved Q&A file has count 0 until a sent occurre
 Such alternatives wait for review. Checkbox selections keep their existing meaning.
 `bun run answer-chats -- --relearn` learns the answers again from the archive without opening hh.ru.
 
+Messages and form fields with several questions retain the complete question and reply. When
+numbered replies align with numbered, bulleted or separate questions, each individual pair is
+also saved to `qa.lino` and counted separately in chat history. Conditional follow-ups stay with
+their parent question; code fences and instructions are not treated as extra questions. Ambiguous
+replies remain intact rather than being guessed into separate answers.
+
+Chats, hh.ru applications and external forms can reuse individual answers from a questionnaire,
+or assemble a complete draft from saved individual answers. Each component uses its own salary
+and contact context. A newly assembled block requires review; it is not an exact saved reply for
+automatic submission. Missing components leave the block open. Answer variants retain their
+frequency order. Existing saved questionnaires are indexed when the app or form tools start;
+to backfill both saved Q&A and archived chat counts without opening a browser, run:
+
+```bash
+bun run backfill-questionnaires
+```
+
 ### Sync Work Experience with LinkedIn
 
 ```bash

@@ -12,7 +12,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { NO_REPLY, isThanks, knownReply, learnedPairs, countChatAnswers } from './chat-answers.mjs';
+import { NO_REPLY, isThanks, knownReply, learnedPairs, countChatAnswers, ANSWER_COUNTS_VERSION } from './chat-answers.mjs';
 import { createMutex, withFileLock } from './helpers/mutex.mjs';
 
 export { isThanks };
@@ -65,12 +65,12 @@ export function createChatHistory(file = CHAT_HISTORY_FILE) {
       const messages = [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
       const answerCounts = countChatAnswers(messages);
       if (fresh.length === 0 && Object.entries(metadata).every(([key, value]) => saved[key] === value) &&
-        JSON.stringify(saved.answerCounts) === JSON.stringify(answerCounts)) {
+        saved.answerCountsVersion === ANSWER_COUNTS_VERSION && JSON.stringify(saved.answerCounts) === JSON.stringify(answerCounts)) {
         return false;
       }
       history[chat.id] = {
         ...saved, ...metadata, at: new Date().toISOString(),
-        messages, answerCounts,
+        messages, answerCounts, answerCountsVersion: ANSWER_COUNTS_VERSION,
       };
       await writeLocked(history);
       return true;
@@ -80,7 +80,10 @@ export function createChatHistory(file = CHAT_HISTORY_FILE) {
   function recount() {
     return exclusive(() => withFileLock(file, async () => {
       const history = await readLocked();
-      for (const chat of Object.values(history)) chat.answerCounts = countChatAnswers(chat.messages);
+      for (const chat of Object.values(history)) {
+        chat.answerCounts = countChatAnswers(chat.messages);
+        chat.answerCountsVersion = ANSWER_COUNTS_VERSION;
+      }
       await writeLocked(history);
       return { chats: Object.keys(history).length, sentAnswers: Object.values(history)
         .reduce((total, chat) => total + chat.answerCounts.reduce((sum, answer) => sum + answer.count, 0), 0) };

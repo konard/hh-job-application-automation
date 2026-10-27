@@ -20,6 +20,7 @@ import {
   answerText,
 } from './qa.mjs';
 import { findBestMatch } from './qa-database.mjs';
+import { composeQuestionAnswer, splitQuestions } from './multi-question.mjs';
 import { answersInContexts, loadAnswerContexts, plainSalaryAnswer, sameButSums, showsContext } from './answer-contexts.mjs';
 import { describeFilterMatch } from './vacancy-filters.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
@@ -90,8 +91,17 @@ async function answersInContext({ commander, readQADatabase, context = '' }) {
   const known = [...[context].flat(), ...pageQuestions.map(({ question }) => question)];
   const contexts = await loadAnswerContexts();
   const inContexts = answersInContexts(readQADatabase, contexts);
-  const answerFor = async (formQuestion, savedQuestion) =>
-    (await inContexts(formQuestion, known)).get(savedQuestion) ?? qaMap.get(savedQuestion);
+  const answerFor = async (formQuestion, savedQuestion) => {
+    const map = await inContexts(formQuestion, known);
+    if (map.has(savedQuestion)) return map.get(savedQuestion);
+    const parts = splitQuestions(formQuestion);
+    if (parts.length > 1) {
+      const matches = new Map(await Promise.all(parts.map(async ({ text }) => [text,
+        findBestMatch(text, await inContexts(text, known), { threshold: 0.7 })])));
+      return composeQuestionAnswer(formQuestion, (part) => matches.get(part))?.answer;
+    }
+    return qaMap.get(savedQuestion);
+  };
   // The salary questions not saved word for word, answered by pattern (salary-questions.mjs)
   const byPattern = new Map();
   for (const { question } of pageQuestions) {
@@ -151,11 +161,16 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
         console.log(`[QA] Answer: "${answer}"`);
         continue;
       }
-      const match = findBestMatch(item.question, qaMap);
+      let match = findBestMatch(item.question, qaMap);
+      if (!match && splitQuestions(item.question).length > 1) {
+        const answer = await answerFor(item.question, item.question);
+        if (answer !== undefined) match = { question: item.question, answer, score: 1, composed: true };
+      }
       if (match && item.type === 'textarea' && !answerFits(item.question, match.answer)) {
         console.log(`[QA] "${item.question}": the saved answer of "${match.question}" (${match.answer}) does not answer it, left empty`);
       } else if (match) {
         const answer = await answerFor(item.question, match.question);
+        if (answer === undefined) continue;
         questionToAnswer.set(item.question, { ...item, answer, matchScore: match.score });
         console.log(`[QA] Fuzzy match for "${item.question}" (score: ${match.score.toFixed(3)})`);
         console.log(`[QA] Matched to: "${match.question}"`);

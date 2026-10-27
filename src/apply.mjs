@@ -101,6 +101,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     console.log(`⏭️  Skipping vacancies that ask:\n${formatQuestions(argv.skipQuestions)}`);
   }
   // Answers and the cover letter use {{telegram}}-style placeholders for data/contacts.lino
+  await qaDatabase.backfillQuestionAnswers();
   const contacts = await loadContacts(path.join(process.cwd(), 'data', 'contacts.lino'));
   const chatHistory = createChatHistory();
   const chatQa = withContacts(withChatHistoryAnswers(qaDatabase, { history: chatHistory, contacts }), contacts);

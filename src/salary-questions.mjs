@@ -16,6 +16,7 @@
  */
 
 import { isPattern } from './qa-database.mjs';
+import { splitQuestions } from './multi-question.mjs';
 
 /** Built-in words that make a question a salary question */
 const SALARY = /зарплат|заработн|з\s?\/\s?пл?(?!\p{L})|в\s+каком\s+диапазоне|(?<!\p{L})зп(?!\p{L})|оклад|вознагражден|(?:финансов|денежн)\p{L}*\s+(?:ожидани|пожелани|услови)|ожидани\p{L}*\s+по\s+(?:доход|оплат|вознагражд)|(?:уровень|уровня|уровне)\s+дохода|желаем\p{L}*\s+доход|(?:от|на)\s+как\p{L}*\s+сумм|вилк|компенсац|(?:ожидаем|желаем|комфортн)\p{L}*\s+(?:уров\p{L}*\s+)?(?:доход|оплат)|(?:уров|размер)\p{L}*\s+(?:ожидаемого\s+|желаемо\p{L}*\s+)?(?:доход|оплат)|доход\p{L}*\s+для\s+себя|salary|compensation|pay expectation|rate expectation/iu;
@@ -131,7 +132,7 @@ export function salaryQuestion(question, patterns = null) {
   const text = String(question ?? '');
   // A list of questions is not one salary question
   const numbered = text.match(/(?:^|\n)\s*\d+[.)]\s/g)?.length ?? 0;
-  if (!text.trim() || text.length > 400 || numbered > 1 || NOT_EXPECTATION.test(text) || OTHER_PERIOD.test(text)) {
+  if (!text.trim() || text.length > 400 || numbered > 1 || splitQuestions(text).length > 1 || NOT_EXPECTATION.test(text) || OTHER_PERIOD.test(text)) {
     return null;
   }
   const own = stems(text);

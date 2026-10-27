@@ -19,6 +19,7 @@ import { answerText, hasAnswerVariants } from './qa.mjs';
 import { answersInContexts, showsContext } from './answer-contexts.mjs';
 import { APPLICATION_WORD, INVITE_NOTICE, REJECTION_WORD, TURNED_OFF_WORDS } from './hh-words.mjs';
 import { salaryClarificationQuestion } from './salary-questions.mjs';
+import { composeQuestionAnswer, separateQuestionAnswers, splitQuestions } from './multi-question.mjs';
 
 /** A template message is the same text in other words; its saved reply needs a close match */
 export const TEMPLATE_THRESHOLD = 0.6;
@@ -561,6 +562,13 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
     return { answer: answerText(templates.get(REJECTION_KEY)), perfect: false, source: 'rejection: asking for the reason', matched: REJECTION_KEY };
   }
   const core = templateCore(message.text, { sender: message.title });
+  if (splitQuestions(core).length > 1) {
+    const candidates = DETAILS_REQUEST.test(core)
+      ? new Map([...qaMap].filter(([, answer]) => !BARE_YES.test(answerText(answer).trim()))) : qaMap;
+    const saved = findBestMatch(questionCore(core), candidates, { threshold: CHAT_QUESTION_THRESHOLD });
+    return saved ? { answer: answerText(saved.answer), perfect: !saved.composed && !hasAnswerVariants(saved.answer),
+      source: saved.composed ? 'qa.lino (combined answers; review)' : 'qa.lino: saved questionnaire', matched: saved.question } : null;
+  }
   const examples = new Map([...templates].filter(([key]) => !isPattern(key)));
   // A template inside a longer message (a company adds a paragraph of its own) is still that template
   const flat = normalizeQuestion(sameWords(core));
@@ -603,7 +611,7 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
       ? new Map([...qaMap].filter(([, answer]) => !BARE_YES.test(answerText(answer).trim()))) : qaMap;
     const saved = findBestMatch(asked, candidates, { threshold: CHAT_QUESTION_THRESHOLD });
     if (saved) {
-      return { answer: answerText(saved.answer), perfect: !hasAnswerVariants(saved.answer) && (sameText(asked, saved.question) || sameText(core, saved.question)), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
+      return { answer: answerText(saved.answer), perfect: !saved.composed && !hasAnswerVariants(saved.answer) && (sameText(asked, saved.question) || sameText(core, saved.question)), source: `qa.lino ${saved.score.toFixed(2)}${saved.composed ? ' (combined answers; review)' : ''}`, matched: saved.question };
     }
   }
   return null;
@@ -633,6 +641,17 @@ export async function knownReplyInContexts(message, { readTemplates, readQADatab
   // A message not saved word for word that has an answer under itself: a salary question answered by pattern
   const saved = await readQADatabase();
   const savedAsIs = saved.has(message.text) || saved.has(asked);
+  const parts = splitQuestions(asked);
+  if (parts.length > 1 && !savedAsIs) {
+    const replies = new Map(await Promise.all(parts.map(async ({ text }) => [text, await knownReplyInContexts(
+      { ...message, text }, { readTemplates: async () => new Map(), readQADatabase, contexts, known, vacancyTexts },
+    )])));
+    const combined = composeQuestionAnswer(asked, (part) => {
+      const reply = replies.get(part);
+      return reply?.answer && !reply.noReply ? { ...reply, score: 1 } : null;
+    });
+    return combined ? { answer: combined.answer, perfect: false, source: 'qa.lino (combined answers; review)', matched: asked } : null;
+  }
   const clarification = salaryClarificationQuestion(asked, known.map((text) => questionCore(templateCore(text))));
   const question = clarification ?? asked;
   const replyIn = async (texts) => {
@@ -889,7 +908,12 @@ export function learnedPairs(messages) {
     (isAsked ? questions : templates).push([isAsked ? question : core, answer]);
     if (isAsked) answerEvents.push({ question, answer, messageIds });
   });
-  return { questions, templates, answerEvents };
+  return {
+    questions: questions.flatMap(([question, answer]) => [[question, answer], ...separateQuestionAnswers(question, answer)]),
+    templates,
+    answerEvents: answerEvents.flatMap((event) => [event, ...separateQuestionAnswers(event.question, event.answer)
+      .map(([question, answer]) => ({ ...event, question, answer }))]),
+  };
 }
 
 /**
@@ -897,6 +921,7 @@ export function learnedPairs(messages) {
  * Bot summaries retain their answers with count 0: they are not another reply sent by the user.
  * Earlier versions of edited sent messages each count once, without counting other replies again.
  */
+export const ANSWER_COUNTS_VERSION = 2;
 export function countChatAnswers(messages) {
   const counts = new Map();
   const events = new Set();

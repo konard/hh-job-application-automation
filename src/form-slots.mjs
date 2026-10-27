@@ -19,6 +19,7 @@ import { recordEvent } from './stats.mjs';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { startFormWatch } from './form-answers.mjs';
 import { createQADatabase } from './qa-database.mjs';
+import { splitQuestions } from './multi-question.mjs';
 import { withChatHistoryAnswers } from './chat-learning.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy, isPayQuestion, payGuidance, statesPay } from './vacancy-context.mjs';
@@ -145,7 +146,8 @@ async function prefillSlot(url, slot, { qaMap, qaDatabase, profile, resume }, { 
   // The saved answers in the contexts of each question (answer-contexts.mjs): a salary in the vacancy's currency
   const known = [vacancy?.salary, form.description, vacancy?.title, vacancy?.description, form.title, ...form.fields.map((field) => field.title)];
   const inContexts = qaDatabase ? answersInContexts(qaDatabase.readQADatabase, await loadAnswerContexts()) : null;
-  const maps = new Map(inContexts ? await Promise.all(form.fields.map(async (field) => [field.title, await inContexts(field.title, known)])) : []);
+  const titles = [...new Set(form.fields.flatMap(({ title }) => [title, ...splitQuestions(title).map(({ text }) => text)]))];
+  const maps = new Map(inContexts ? await Promise.all(titles.map(async (title) => [title, await inContexts(title, known)])) : []);
   const planned = planAnswers(form.fields, { profile, qaMap, qaMapFor: (title) => maps.get(title) ?? qaMap, company });
   if (vacancy?.salary || statesPay(form.description)) {
     planned.filter((field) => isPayQuestion(field.title) && field.kind !== 'file' && field.source !== 'company from the chat')
@@ -231,6 +233,7 @@ function report({ url, slot, title, fields }) {
 export async function loadAnswerSources() {
   const contacts = await loadContacts(path.join(DATA, 'contacts.lino'));
   const qaDatabase = withContacts(withChatHistoryAnswers(createQADatabase(path.join(DATA, 'qa.lino'), { resolveVariants: true }), { contacts }), contacts);
+  await qaDatabase.backfillQuestionAnswers();
   const { profile, resume } = await loadProfile({
     resumeMarkdown: path.join(DATA, 'resume', 'resume.md'),
     resumeJson: path.join(DATA, 'resume', 'resume.json'),

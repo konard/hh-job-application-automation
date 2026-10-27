@@ -38,17 +38,19 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createMutex, withFileLock } from './helpers/mutex.mjs';
 import { normalizeAnswerVariants, resolveAnswerConflict } from './answer-variants.mjs';
+import { composeQuestionAnswer, expandQuestionAnswers, splitQuestions } from './multi-question.mjs';
 
 /**
  * Creates a Q&A database instance with the specified file path
  * @param {string} filePath - REQUIRED: Path to the qa.lino file
  * @param {Object} [options]
  * @param {boolean} [options.resolveVariants=false] - Resolve final-period answer conflicts on save/load
+ * @param {boolean} [options.decomposeQuestions=options.resolveVariants] - Retain aligned individual Q&A alongside full questionnaires
  * @param {'with'|'without'} [options.finalPeriod] - Override the user's ANSWER_FINAL_PERIOD setting
  * @returns {Object} Q&A database instance with methods
  * @throws {Error} If filePath is not provided
  */
-export function createQADatabase(filePath, { resolveVariants = false, finalPeriod } = {}) {
+export function createQADatabase(filePath, { resolveVariants = false, finalPeriod, decomposeQuestions = resolveVariants } = {}) {
   if (!filePath) {
     throw new Error(
       'CRITICAL: QA Database file path is REQUIRED!\n' +
@@ -150,7 +152,8 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
 
   // A bad style setting must propagate to the writer, never masquerade as an empty database.
   async function readQADatabase() {
-    return new Map([...await readRawQADatabase()].map(([question, answer]) => [question, normalize(answer)]));
+    const raw = await readRawQADatabase();
+    return new Map([...(decomposeQuestions ? expandQuestionAnswers(raw) : raw)].map(([question, answer]) => [question, normalize(answer)]));
   }
 
   /**
@@ -236,7 +239,7 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
 
       // Format as indented Q&A pairs with proper multiline handling
       const lines = [];
-      for (const [question, saved] of qaMap.entries()) {
+      for (const [question, saved] of (decomposeQuestions ? expandQuestionAnswers(qaMap) : qaMap).entries()) {
         const answer = normalize(saved);
         // Question handling: escapeReference handles all cases including multiline
         const escapedQuestion = escapeReference(question);
@@ -321,6 +324,16 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
     }));
   }
 
+  /** Persist components of existing questionnaires under the same cross-process lock. */
+  function backfillQuestionAnswers() {
+    return exclusive(() => withFileLock(QA_FILE_PATH, async () => {
+      const raw = await readRawQADatabase();
+      const expanded = decomposeQuestions ? expandQuestionAnswers(raw) : raw;
+      await writeQADatabase(expanded);
+      return { before: raw.size, after: expanded.size, added: expanded.size - raw.size };
+    }));
+  }
+
   /**
    * Gets the answer for a given question
    * @param {string} question - The question
@@ -389,6 +402,7 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
     writeQADatabase,
     addOrUpdateQA,
     addQAIfMissing,
+    backfillQuestionAnswers,
     getAnswer,
     filePath: QA_FILE_PATH,
   };
@@ -697,6 +711,16 @@ export function findBestMatch(question, qaDatabase, options = {}) {
     return returnAll ? [result] : result;
   }
 
+  // A questionnaire must not receive just one of its answers or a salary/contact template.
+  // Composition is a draft even if every component was saved word for word.
+  const parts = splitQuestions(question);
+  if (parts.length > 1 && threshold > 0) {
+    const composed = composeQuestionAnswer(question, (part) => findBestMatch(part, qaDatabase, {
+      threshold: Math.max(threshold, 0.7), caseSensitive,
+    }));
+    return returnAll ? (composed ? [composed] : []) : composed;
+  }
+
   // A question template («pattern: gross») takes every wording of its question
   // The most specific one wins: «pattern: gross … usd» over «pattern: gross»
   const template = [...qaDatabase.entries()]
@@ -714,6 +738,7 @@ export function findBestMatch(question, qaDatabase, options = {}) {
     if (isPattern(dbQuestion)) {
       continue;
     }
+    if (threshold > 0 && splitQuestions(dbQuestion).length > 1) continue;
     // "опыт на C#" must not take the answer of "опыт на Go" (threshold 0 still lists everything)
     if (threshold > 0 && subjectTermsConflict(question, dbQuestion)) {
       continue;

@@ -9,9 +9,11 @@
  * @module vacancy-context
  */
 
-/** A question about pay: salary, rate, income */
+import { splitQuestions } from './multi-question.mjs';
+
+/** A question about pay: salary, rate, income. A questionnaire is never just a salary field. */
 const PAY_QUESTION = /зарплат|оплат|ставк|доход|вознагражд|\bз\s?\/\s?п\b|salary|compensation|\brate\b|\bpay\b/i;
-export const isPayQuestion = (title) => PAY_QUESTION.test(String(title ?? ''));
+export const isPayQuestion = (title) => PAY_QUESTION.test(String(title ?? '')) && splitQuestions(title).length < 2;
 
 const decode = (html) => String(html)
   .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|li|div|h\d)>/gi, '\n').replace(/<[^>]+>/g, ' ')

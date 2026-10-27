@@ -1,5 +1,5 @@
 /** Learning shared by the chat window, application panel and history slot. */
-import { learnedPairs, isSupportChat, countChatAnswers } from './chat-answers.mjs';
+import { learnedPairs, isSupportChat, countChatAnswers, ANSWER_COUNTS_VERSION } from './chat-answers.mjs';
 import { createChatHistory } from './chat-history.mjs';
 import { normalizeQuestion } from './qa-database.mjs';
 import { contractContacts } from './contacts.mjs';
@@ -22,7 +22,7 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
     const chats = await history.read();
     if (chats !== previous) {
       recordedCounts = Object.values(chats).filter((chat) => !isSupportChat(chat))
-        .flatMap((chat) => chat.answerCounts ?? countChatAnswers(chat.messages));
+        .flatMap((chat) => chat.answerCountsVersion === ANSWER_COUNTS_VERSION ? chat.answerCounts : countChatAnswers(chat.messages));
       previous = chats;
     }
     const keys = new Map([...raw.keys()].map((key) => [normalizeQuestion(key), key]));
