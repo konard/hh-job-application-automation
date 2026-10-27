@@ -2,9 +2,18 @@ import { describe, test, assert } from 'test-anywhere';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUser, focusActive, notificationSoundEnabled, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
+import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUser, browserWindowActive, focusActive, notificationSoundEnabled, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
 
 describe('alerts when the run waits for you', () => {
+  test('macOS window activity uses the actual browser process, including address-bar focus', async () => {
+    const page = { evaluate: async () => ({ hidden: false, focused: false }) };
+    const same = { platform: 'darwin', browserProcess: () => 100, frontProcess: () => 100 };
+    assert.equal(await browserWindowActive(page, same), true);
+    assert.equal(await browserWindowActive(page, { ...same, frontProcess: () => 200 }), false);
+    assert.equal(await browserWindowActive(page, { ...same, frontProcess: () => null }), null);
+    assert.equal(await browserWindowActive({ evaluate: async () => ({ hidden: true, focused: false }) }, same), false);
+  });
+
   test('on on macOS unless NOTIFY=0; never in tests or elsewhere', () => {
     assert.equal(alertsEnabled({}, 'darwin'), true);
     assert.equal(alertsEnabled({ NOTIFY: '0' }, 'darwin'), false);

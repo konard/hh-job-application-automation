@@ -191,6 +191,21 @@ function frontmostPid() {
   }
 }
 
+/** Actual window use; unknown focus never authorizes background navigation. */
+export async function browserWindowActive(page, {
+  port = MAIN_PORT, platform = process.platform, browserProcess = browserPid, frontProcess = frontmostPid,
+} = {}) {
+  const state = await page.evaluate(() => ({ hidden: document.visibilityState === 'hidden', focused: document.hasFocus() }))
+    .catch(() => null);
+  if (state?.hidden) return false;
+  if (platform === 'darwin') {
+    const browser = browserProcess(port);
+    const front = frontProcess();
+    return browser && front ? browser === front : null;
+  }
+  return state?.focused ?? null;
+}
+
 /**
  * Whether the alert is needed: not while the browser that waits for you is the app in front (you
  * are at it already)

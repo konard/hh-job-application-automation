@@ -296,14 +296,18 @@ bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 
 Alongside the application loop, unread rejections («Отказ») in hh.ru chats are opened every 2
 hours in the separate chat browser slot (port 9340), so they leave the unread chats; nothing is
-typed in them. Between those checks, a rejection that shows in the chat window is read at once
-(the page is only looked at every 10 s, no request to hh.ru): when you have not touched the window
-for 15 s and no reply is being typed, its chat is opened, then the window goes back to the chat you
-had open. Turn it off with `--no-clear-rejections`.
+typed in them. Between those checks, the unread list is checked every 10 seconds while the chat
+window is inactive. The pass covers the whole unread list, including rejections below the visible
+rows, and returns to the selected chat with its draft, selection, unread filter and scroll position
+restored. A draft does not block this background cleanup. The pass pauses when you return to the
+browser; choosing another chat keeps your new selection. A conversation ending with a clear
+review-and-follow-up acknowledgement is finished: without a draft, it is not reopened after cleanup.
+On macOS the actual foreground browser
+process determines whether the window is active. Turn cleanup off with `--no-clear-rejections`,
+or use `--no-live-rejections` with `answer-chats` to keep only the scheduled passes.
 Rejections are recognized by either the status badge or explicit rejection wording in the full
 message preview, even when it has the normal text color. Messages asking a question or requesting
-a reply remain unread. After sending an answer or switching chats, clearing resumes after the
-same 15-second idle grace; a nonempty draft continues to hold the window for you.
+a reply remain unread. Cleanup leaves the window alone while it is active, even after an idle pause.
 
 The same pass handles unread template messages: a chat whose last message, as the chat list shows it,
 is a saved template of `data/chat-templates.lino` word for word (greeting and signature aside, «Спасибо

@@ -465,7 +465,7 @@ export const patternSays = (pattern, core) => !ASKS_TO_DO.test(core) && !ASKS_FO
 /** Acknowledgements can state an active review without promising a separate follow-up. */
 const REVIEWS = /рассмотр|рассматр|анализ|изуч|ознаком|в работу|приня(?:ли|то)|получили|подходит|подойд|review|consider/iu;
 const COMES_BACK = /свяж|сообщ|верн[её]м|верн[её]тся|обратн\p{L}* связ|позвон|напиш(?:ем|ет)|результат|contact|get back|reach out/iu;
-const ABOUT_APPLICATION = /резюме|отклик|кандидат|опыт|resume|cv|application/iu;
+const ABOUT_APPLICATION = /резюме|отклик|кандидат|опыт|информаци|resume|cv|application|information/iu;
 const UNDER_REVIEW = /(?:резюме|кандидатура|отклик)\s+(?:(?:сейчас|пока)\s+)?(?:(?:находится|находятся)\s+)?(?:на\s+(?:этапе\s+)?рассмотрени[ия]|в\s+процессе\s+рассмотрения|рассматривается)|(?:resume|cv|application|candidacy)\s+(?:is\s+)?(?:currently\s+)?(?:under\s+review|being\s+(?:reviewed|considered))/iu;
 /**
  * Asks the user to do something: an imperative, an invitation, an interview (not the results of
@@ -491,6 +491,24 @@ export function isAcknowledgement(core) {
   return (UNDER_REVIEW.test(text) || (REVIEWS.test(text) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text))) && !/\?/.test(text) &&
     !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && !isRejection({ text }) &&
     patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
+}
+
+/** A finished recruiter-bot session is a notice, even if a late follow-up was learned as a reply. */
+export function isCompletionNotice(text) {
+  return /работа\s+(?:ии[- ]помощника|робота[- ]рекрутера)\s+завершена/iu.test(String(text)) &&
+    !asksSomething(text) && !ASKS_USER.test(text);
+}
+
+/** Clear wrap-ups need no return visit; an unanswered question or a sent answer alone does. */
+export function isConversationFinished(chat) {
+  if (!chat || chat.transitioning || !chat.messages?.length) return false;
+  if (chat.canReply === false || chat.turnedOff) return true;
+  const closes = (message) => !isReuseOffer(message.text) &&
+    (isSummary(message.text) || isCompletionNotice(message.text) || isRejection(message) || isAcknowledgement(templateCore(message.text, { sender: message.title })));
+  const pending = pendingMessages(chat.messages);
+  if (pending.length) return closes(pending.at(-1));
+  const previous = chat.messages.findLast((message) => !message.mine);
+  return Boolean(previous && isThanks(chat.messages.at(-1)?.text) && closes(previous));
 }
 
 /** The thanks to a message in English when none in English is saved */
@@ -531,8 +549,9 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
     return null;
   }
   // A bot's summary of the answers given is not a question to the user
-  if (isSummary(message.text)) {
-    return { answer: '', noReply: true, perfect: true, source: 'summary of the answers given', matched: '' };
+  if (isSummary(message.text) || isCompletionNotice(message.text)) {
+    return { answer: '', noReply: true, perfect: true,
+      source: isCompletionNotice(message.text) ? 'chat-templates.lino: completed recruiter-bot session' : 'summary of the answers given', matched: '' };
   }
   // A rejection gets the saved question about its reason, whatever its wording
   if (isRejection(message) && templates.has(REJECTION_KEY)) {
@@ -843,7 +862,7 @@ export function learnedPairs(messages) {
       return;
     }
     // The choice whether to reuse earlier answers depends on them: not a saved answer
-    if (isSummary(asked.text) || isReuseOffer(asked.text)) {
+    if (isSummary(asked.text) || isCompletionNotice(asked.text) || isReuseOffer(asked.text)) {
       return;
     }
     const core = templateCore(asked.text, { sender: asked.title });

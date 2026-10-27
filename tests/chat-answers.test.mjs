@@ -4,7 +4,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   formLinks, isPattern, isRejection, knownReply, learnedPairs, learnPatterns, matchesPattern, pendingMessages, PATTERN_PREFIX,
-  NO_REPLY, REJECTION_KEY, isSupportChat, questionCore, summaryPairs, templateCore, withLearnedPatterns,
+  NO_REPLY, REJECTION_KEY, isConversationFinished, isSupportChat, questionCore, summaryPairs, templateCore, withLearnedPatterns,
 } from '../src/chat-answers.mjs';
 
 const templates = new Map([
@@ -14,6 +14,26 @@ const templates = new Map([
 const qaMap = new Map([['Есть ли у вас опыт работы с моделями компьютерного зрения?', 'Да, Tesseract и vision-модели.']]);
 
 describe('chat answers', () => {
+  test('a completed recruiter-bot notice cannot reuse a late follow-up as a template answer', () => {
+    const text = 'Спасибо! На этом работа ИИ-помощника завершена. Ваши данные уже есть у представителя работодателя, и если они подойдут под требования вакансии, он продолжит обсуждение лично.';
+    const late = 'Дополню свой предыдущий ответ про опыт работы.';
+    const reply = knownReply({ text }, { templates: new Map([[text, late]]), qaMap });
+    assert.equal(reply.noReply, true);
+    assert.equal(reply.answer, '');
+    assert.equal(isConversationFinished({ canReply: true, messages: [{ mine: false, text }] }), true);
+    assert.deepEqual(learnedPairs([{ mine: false, text }, { mine: true, text: late }]).templates, []);
+  });
+
+  test('a recruiter wrap-up finishes a conversation, while a new question or request keeps it open', () => {
+    const wrapup = 'Большое спасибо! Изучим информацию и вернемся с предложением о встрече, если поймем, что по первому знакомству мы совпадаем!:-)';
+    const chat = { canReply: true, messages: [{ mine: false, text: wrapup }] };
+    assert.equal(isConversationFinished(chat), true);
+    assert.equal(isConversationFinished({ ...chat, messages: [{ mine: false, text: wrapup + ' Когда сможете приехать?' }] }), false);
+    assert.equal(isConversationFinished({ ...chat, messages: [{ mine: false, text: wrapup + ' Пришлите, пожалуйста, примеры кода.' }] }), false);
+    assert.equal(isConversationFinished({ canReply: true, messages: [{ mine: true, text: 'Мой ответ про Docker.' }] }), false);
+    assert.equal(isConversationFinished({ ...chat, messages: [...chat.messages, { mine: true, text: 'Спасибо, ожидаю.' }] }), true);
+  });
+
   test('only the messages after the user\'s last one wait for an answer', () => {
     const messages = [
       { id: '1', mine: true, text: 'Отклик' },

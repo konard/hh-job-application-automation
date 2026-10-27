@@ -26,7 +26,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, chatsShown, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isPattern, isQuestion, isSupportChat, isApplication, isRejection, isRejectionCell, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, visibleRejections, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, chatsShown, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isConversationFinished, isPattern, isQuestion, isSupportChat, isApplication, isRejection, isRejectionCell, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, templateCore, withLearnedPatterns,
   userIsActive,
 } from './chat-answers.mjs';
 import { readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
@@ -41,6 +41,8 @@ import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs'
 import { learnChatQuestions } from './chat-learning.mjs';
 import { readFullChat, setUnreadFilter, waitForChat, watchChats } from './chat-recording.mjs';
 import { createChatPrefillQueue } from './chat-prefill-queue.mjs';
+import { createBackgroundRejectionSweep } from './background-rejections.mjs';
+import { browserWindowActive } from './notify.mjs';
 import { getAnswerFinalPeriod } from './answer-variants.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
@@ -51,12 +53,13 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
                          sent are handled; at the first one that needs a message (a reply typed or drafted
                          for you to check, or none found) it stops with that chat open and waits until you
                          have answered it
-  --clear-rejections     Only open the unread rejections («Отказ»), from the chat list, so they leave the unread
+  --clear-rejections     In an inactive window, open unread rejections («Отказ») from the chat list, so they leave the unread
                          chats; nothing is typed in them (apply runs it by default every 2 hours). An unread
                          template message (a saved one word for word, «Спасибо за отклик! Мы рассмотрим Ваше
                          резюме…») is read too, and with --auto-send answered with its reply. Between
-                         those passes a rejection that shows in the chat window is read at once
-  --no-live-rejections   Read the rejections only in those passes, not as they show in the chat window
+                         those passes the unread list is checked every 10 seconds in the background; the current
+                         chat, draft, filter and list position are restored afterwards. Returning to the window stops the pass.
+  --no-live-rejections   Read rejections only in the scheduled passes, without the background checks between them
   --auto-reuse           Answer a recruiter bot's offer to reuse earlier answers («Используем эти ответы?»): «Да»
                          when each is the saved answer, «Нет» when one differs; without it you choose
   --auto-send            Send an exact answer (the saved question word for word, or a bot's button that is the saved
@@ -150,8 +153,9 @@ async function wheelChatList(by) {
 }
 
 /** The list wheeled back up to its top */
-async function wheelToTop() {
+async function wheelToTop(canContinue = async () => true) {
   for (let at = await listPosition(); at && at.top > 0; ) {
+    if (!await canContinue()) return;
     const before = at.top;
     at = await wheelChatList(-Math.round(at.view * (0.6 + Math.random() * 0.3)));
     if (!at || at.top >= before) {
@@ -185,10 +189,12 @@ async function chatsOnScreen() {
  * @param {(chat: Object) => Promise<boolean>} visit - Each chat once; true stops the walk
  * @returns {Promise<boolean>} Whether a visit stopped it
  */
-async function walkChatList(visit) {
-  await wheelToTop();
+async function walkChatList(visit, { canContinue = async () => true } = {}) {
+  if (!await canContinue()) return true;
+  await wheelToTop(canContinue);
   const done = new Set();
   for (;;) {
+    if (!await canContinue()) return true;
     const next = (await chatsOnScreen()).find((chat) => !done.has(chat.id));
     if (next) {
       done.add(next.id);
@@ -325,10 +331,12 @@ let page;
 let human;
 let chatRecording;
 let passRunning = false;
+let backgroundRejections;
+let stuckChat = null;
 const prefilledMessages = new Set();
 const handledChoices = new Set();
 const livePrefill = createChatPrefillQueue({
-  busy: async (frame) => passRunning || (!frame.isDetached() &&
+  busy: async (frame) => passRunning || backgroundRejections?.running || (!frame.isDetached() &&
     await frame.evaluate(() => Boolean(window.__chatAutomating)).catch(() => false)),
   write: writeSavedChat,
   onError: (error) => console.log(`⚠️  Saved answer prefill failed: ${error.message}`),
@@ -336,6 +344,7 @@ const livePrefill = createChatPrefillQueue({
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.once(signal, async () => {
     livePrefill.stop();
+    await backgroundRejections?.stop();
     await chatRecording?.flush();
     await session?.release();
     process.exit(0);
@@ -627,16 +636,22 @@ async function learnFromAllChats() {
  * the unread chats. Nothing is typed in a rejection
  * @returns {Promise<number|null>} How many were read; null behind a captcha
  */
-async function clearRejections() {
+async function clearRejections({
+  onlyRejections = false, canContinue = async () => true, onNavigate = () => {},
+  mayVisit = () => true, onAttempt = () => {}, live = false,
+} = {}) {
   let rejections = 0;
   // The list line holds the whole last message: a saved template is known before the chat is opened
-  const templates = await templatesDb.readQADatabase();
+  const templates = onlyRejections ? new Map() : await templatesDb.readQADatabase();
   const stopped = await walkChatList(async (chat) => {
     const template = chat.unread && !isRejectionCell(chat) ? templateCell(chat, templates) : null;
     // A template to reply to is opened only when its reply is sent (--auto-send); otherwise it stays unread for you
-    if (!chat.unread || (!isRejectionCell(chat) && !(template && (template.noReply || argv.autoSend)))) {
+    if (!chat.unread || !mayVisit(chat) || (!isRejectionCell(chat) && !(template && (template.noReply || argv.autoSend)))) {
       return false;
     }
+    if (!await canContinue()) return true;
+    onAttempt(chat);
+    onNavigate(chatUrl(chat.id));
     await openChat(chat.id);
     if (!await waitForCaptcha(page, console.log, 'chat', CHAT_SLOT_PORT)) {
       return true;
@@ -646,11 +661,11 @@ async function clearRejections() {
     } else {
       rejections += 1;
       console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
-      recordEvent('rejection_read', { chatId: chat.id, live: false });
+      recordEvent('rejection_read', { chatId: chat.id, live });
     }
     await humanPause();
     return false;
-  });
+  }, { canContinue });
   return stopped ? null : rejections;
 }
 
@@ -730,7 +745,7 @@ async function writeSavedChat(chat, frame) {
   if (frame.isDetached()) return;
   const last = pendingMessages(chat.messages).at(-1);
   const key = `${chat.id}/${last?.id}`;
-  if (!last || chat.transitioning || !chat.canReply || isSupportChat(chat) ||
+  if (!last || chat.transitioning || !chat.canReply || isSupportChat(chat) || isConversationFinished(chat) ||
     isReuseOffer(last.text) || isRejection(last) || await leftAloneBecause(chat)) return;
   const reply = await knownReplyInContexts(last, {
     readTemplates: templatesDb.readQADatabase, readQADatabase: sources.qaDatabase.readQADatabase,
@@ -742,7 +757,7 @@ async function writeSavedChat(chat, frame) {
   // Recheck after looking up the answer: the user may already have moved to another chat.
   const current = await readChatIn(frame);
   if (current.transitioning || current.id !== chat.id || pendingMessages(current.messages).at(-1)?.id !== last.id) return;
-  if (passRunning || await frame.evaluate(() => Boolean(window.__chatAutomating))) return false;
+  if (passRunning || backgroundRejections?.running || await frame.evaluate(() => Boolean(window.__chatAutomating))) return false;
   const input = frame.locator(MESSAGE_INPUT).first();
   const draft = (await input.inputValue({ timeout: 1000 }).catch(() => '')).trim();
   if (choice?.autoSend && argv.autoSend && !handledChoices.has(key) &&
@@ -767,6 +782,8 @@ async function writeSavedChat(chat, frame) {
 /** Where the chat window was at the last check: the user moving in it since, or typing, delays the next pass */
 let seenUrl = null;
 async function userIsInTheWindow() {
+  if (backgroundRejections?.running) return true;
+  if (await browserWindowActive(page, { port: CHAT_SLOT_PORT }) !== false) return true;
   const user = await page.evaluate(readUserActivity).catch(() => null);
   const moved = seenUrl !== null && !page.isClosed() && page.url() !== seenUrl;
   seenUrl = page.isClosed() ? null : page.url();
@@ -776,91 +793,37 @@ async function userIsInTheWindow() {
 // A chat whose click did not open it is tried again after this
 const LIVE_RETRY_MS = 5 * 60 * 1000;
 
-/**
- * The unread rejections read as they show in the chat window, and the saved templates answered
- * (answerTemplate): hh.ru adds them to the list as they come (the page is only read, no request). Each is opened by a click on its cell, then the window
- * goes back (browser history, no reload) to the chat the user had open; one out of sight in the list is
- * wheeled to first, and the list wheeled back after. It waits while a reply is
- * typed or the user has done something in the window in the last 15 s
- * @param {{leaveAlone: () => boolean}} options - leaveAlone: the chat pass has the window now
- */
-function readRejectionsAsTheyShow({ leaveAlone }) {
-  let busy = false;
-  // A chat with its last message, when it was tried: a new message in a chat handled before (a
-  // rejection after a template was answered) is read too, and one whose click failed is tried again
+/** Background passes cover the entire unread list and always return to the user's chat. */
+function makeBackgroundRejections() {
   const tried = new Map();
   const triedKey = (chat) => `${chat.id}\n${chat.last}`;
-  const triedLately = (chat) => Date.now() - (tried.get(triedKey(chat)) ?? 0) < LIVE_RETRY_MS;
+  return createBackgroundRejectionSweep({
+    getPage: () => page,
+    onFinished: (id) => { if (stuckChat?.id === id) stuckChat = null; },
+    isActive: () => browserWindowActive(page, { port: CHAT_SLOT_PORT }),
+    blocked: () => passRunning || !/^https:\/\/hh\.ru\/(?:chat(?:\/|$|\?)|applicant\/profile\/me(?:$|\?))/.test(page.url()),
+    scan: async ({ canContinue, onNavigate, includeTemplates = false }) => {
+      if (!await canContinue()) return null;
+      if (!/^https:\/\/hh\.ru\/chat(?:\/|$|\?)/.test(page.url())) {
+        onNavigate('https://hh.ru/chat');
+        if (!await openChatPage() || !await canContinue()) return null;
+      }
+      if ((await showUnreadOnly(true)).is !== true || !await canContinue()) return null;
+      return clearRejections({
+        onlyRejections: !includeTemplates, canContinue, onNavigate, live: true,
+        mayVisit: (chat) => Date.now() - (tried.get(triedKey(chat)) ?? 0) >= LIVE_RETRY_MS,
+        onAttempt: (chat) => tried.set(triedKey(chat), Date.now()),
+      });
+    },
+  });
+}
+
+function readRejectionsAsTheyShow() {
   const timer = setInterval(async () => {
-    if (busy || leaveAlone() || page.isClosed() || !/^https:\/\/hh\.ru\/chat(\/|$|\?)/.test(page.url())) {
-      return;
-    }
-    busy = true;
-    const userUrl = page.url();
-    let moves = 0;
-    // How far the list was wheeled to a rejection out of sight: wheeled back after
-    let wheeled = 0;
-    try {
-      for (;;) {
-        // A rejection, or a saved template to answer (--auto-send) or only read
-        const onScreen = (await chatsOnScreen()).filter((chat) => !triedLately(chat));
-        const templates = await templatesDb.readQADatabase();
-        const template = (chat) => (chat.unread && !isRejectionCell(chat) ? templateCell(chat, templates) : null);
-        // A rejection in the list but out of sight (above or below the part shown) is wheeled to
-        const hidden = () => page.evaluate(readChatList).then((chats) => visibleRejections(chats.filter((chat) => !triedLately(chat))), () => []);
-        const rejection = visibleRejections(onScreen)[0] ??
-          onScreen.find((chat) => { const reply = template(chat); return reply && (reply.noReply || argv.autoSend); }) ??
-          (await hidden())[0];
-        const user = await page.evaluate(readUserActivity).catch(() => null);
-        if (!rejection || userIsActive(user) || leaveAlone()) {
-          break;
-        }
-        tried.set(triedKey(rejection), Date.now());
-        await page.evaluate(() => { window.__chatAutomating = true; });
-        if (!onScreen.includes(rejection)) {
-          const at = await listPosition();
-          if (!at || !rejection.screen) {
-            break;
-          }
-          const by = Math.round(rejection.screen.top - (at.y + (at.view - (rejection.screen.bottom - rejection.screen.top)) / 2));
-          await wheelChatList(by);
-          wheeled += by;
-          if (!(await chatsOnScreen()).some((chat) => chat.id === rejection.id)) {
-            continue;
-          }
-        }
-        const cell = page.locator(`[data-qa="chatik-open-chat-${rejection.id}"]`).first();
-        if (!await human.click(cell) ||
-          !await page.waitForURL((url) => url.href.startsWith(chatUrl(rejection.id)), { timeout: 15000 }).then(() => true, () => false)) {
-          break;
-        }
-        moves += 1;
-        if (isRejectionCell(rejection)) {
-          console.log(`📭 Chat ${rejection.id} (${rejection.title}): rejection read (it showed in the chat window)`);
-          recordEvent('rejection_read', { chatId: rejection.id, live: true });
-        } else {
-          // The chat on the right is replaced after the address
-          await sleep(2000);
-          await answerTemplate(rejection);
-        }
-        await humanPause(2000, 4000);
-      }
-    } catch (error) {
-      console.log(`⚠️  A shown rejection was not read: ${error.message.split('\n')[0]}`);
-    } finally {
-      if (moves > 0 && !page.isClosed()) {
-        // Back to where the user was
-        await page.evaluate((steps) => window.history.go(-steps), moves).catch(() => {});
-        await page.waitForURL(userUrl, { timeout: 10000 }).catch(() => {});
-      }
-      if (wheeled !== 0 && !page.isClosed()) {
-        await sleep(1000);
-        await wheelChatList(-wheeled).catch(() => {});
-      }
-      await page.evaluate(() => { window.__chatAutomating = false; }).catch(() => {});
-      // The window moved by the tool, not by the user
+    try { await backgroundRejections.run({ includeTemplates: true }); }
+    catch (error) { console.log(`⚠️  Background rejections: ${error.message.split('\n')[0]}`); }
+    finally {
       seenUrl = page.isClosed() ? null : page.url();
-      busy = false;
     }
   }, 10000);
   timer.unref();
@@ -871,15 +834,20 @@ if (argv.watch) {
   const seen = new Set();
   const seenKey = (chat) => `${chat.id}\n${chat.last}`;
   // --auto: the chat left open for the user; nothing else is processed until it is answered
-  let stuckChat = null;
   // The pass over the chat list is going: the window is left to it
-  if (argv.liveRejections && (argv.auto || argv.clearRejections)) {
-    readRejectionsAsTheyShow({ leaveAlone: () => passRunning || stuckChat !== null });
-  }
+  backgroundRejections = makeBackgroundRejections();
+  if (argv.liveRejections && (argv.auto || argv.clearRejections)) readRejectionsAsTheyShow();
   console.log(argv.auto
     ? `💬 Processing unread chats every ${argv.poll} s (rejections first)`
     : argv.clearRejections ? `📭 Clearing unread rejections every ${argv.poll} s` : `👀 Watching the chat list every ${argv.poll} s for messages waiting for an answer`);
   for (;;) {
+    if (argv.clearRejections && !argv.auto) {
+      try { await backgroundRejections.run({ includeTemplates: true }); }
+      catch (error) { console.log(`⚠️  Background chat check: ${error.message.split('\n')[0]}`); }
+      seenUrl = page.isClosed() ? null : page.url();
+      await sleep(argv.poll * 1000);
+      continue;
+    }
     if (stuckChat) {
       // Read where it was left (the typed reply stays), without the chat list
       if (!page.url().startsWith(chatUrl(stuckChat.id))) {
@@ -908,11 +876,6 @@ if (argv.watch) {
     // Only the unread chats are gone through: without the filter the whole list would be scrolled
     if ((argv.auto || argv.clearRejections) && (await showUnreadOnly(true)).is !== true) {
       console.log('⚠️  The «Только непрочитанные» filter could not be set: the chats are left for the next check');
-    } else if (argv.clearRejections && !argv.auto) {
-      const rejections = await clearRejections();
-      if (rejections !== null) {
-        console.log(`📭 Rejections cleared: ${rejections} read; next check in ${Math.round(argv.poll / 60)} min`);
-      }
     } else if (argv.auto) {
       let opened = 0;
       // Rejections first, always before any chat is answered
