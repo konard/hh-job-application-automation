@@ -662,7 +662,9 @@ word next time, whatever the bot says first; hh.ru's AI assistant's summary («�
 кандидатом я узнал: …») is learned too and needs no reply. Salary inference uses the question after
 the acknowledgement, so thanking you for your salary information before asking for GitHub does
 not produce another salary answer. Inferred answers stay subject to review and never become
-exact template matches. A check waits while you are typing or
+exact template matches. A short confirmation to «Можем продолжить общение?» is learned for that
+reminder; a substantive answer after it still belongs to the earlier technical question. A bare
+«Да» does not prefill a request for examples or an explanation. A check waits while you are typing or
 moving around in that window. `bun run answer-chats -- --learn-all` reads the chats you answered
 before, slowly, in a window of its own (port 9341). It opens unread chats too (marking them read),
 scrolls through older message pages, and records each page before it scrolls out of view. A chat

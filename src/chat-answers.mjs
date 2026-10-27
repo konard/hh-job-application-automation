@@ -532,6 +532,9 @@ function savedThanks(templates, english = false) {
 /** Whether a message asks the user something: a question, or a request for facts about them */
 export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(text).trim());
 
+const DETAILS_REQUEST = /(?<!\p{L})(?:расскажите|опишите|поделитесь|приведите)(?!\p{L})|\b(?:describe|explain|tell us|tell me|share|give examples?)\b/iu;
+const BARE_YES = /^(?:да|yes|ага|угу|конечно)[.!\s]*$/iu;
+
 /**
  * The reply to a waiting message, when it is known
  * @param {Object} message - {title, text}
@@ -595,7 +598,10 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
       return { answer: answerText(byPattern), perfect: false, source: 'salary question by pattern', matched: message.text };
     }
     const asked = questionCore(core);
-    const saved = findBestMatch(asked, qaMap, { threshold: CHAT_QUESTION_THRESHOLD });
+    // A legacy consent reply cannot answer a request for examples or an explanation.
+    const candidates = DETAILS_REQUEST.test(asked)
+      ? new Map([...qaMap].filter(([, answer]) => !BARE_YES.test(answerText(answer).trim()))) : qaMap;
+    const saved = findBestMatch(asked, candidates, { threshold: CHAT_QUESTION_THRESHOLD });
     if (saved) {
       return { answer: answerText(saved.answer), perfect: !hasAnswerVariants(saved.answer) && (sameText(asked, saved.question) || sameText(core, saved.question)), source: `qa.lino ${saved.score.toFixed(2)}`, matched: saved.question };
     }
@@ -806,8 +812,17 @@ export function withLearnedPatterns(templates) {
 }
 
 /** An employer's reminder of a question not answered yet */
-const REMINDER = /не дождал(?:ась|ся|ись) (?:вашего )?ответа|можем продолжить (?:наше )?общение|^вы (?:ещё |еще )?здесь\?/i;
+const REMINDER = /не дождал(?:ась|ся|ись) (?:вашего )?ответа|можем продолжить (?:наше )?общение|^вы (?:ещё |еще )?здесь\?|(?:can|could) we continue|are you (?:still )?there\?/i;
 export const isReminder = (text) => REMINDER.test(String(text));
+
+const CONTINUATION_REQUEST = /можем\s+продолжить|вы\s+(?:ещё\s+|еще\s+)?здесь|(?:can|could)\s+we\s+continue|are\s+you\s+(?:still\s+)?there/iu;
+const CONTINUATION_WORDS = new Set(('да нет конечно ага угу готов готова готовы можем можно продолжим давайте продолжать продолжить общение разговор обсудить обсудим сейчас позже интересно не мне я согласен согласна здравствуйте добрый день вечер утро привет спасибо благодарю ' +
+  'yes no sure okay ok ready continue resume let s we can i am now later please thank thanks you hello hi').split(' '));
+const answersReminder = (question, answer) => {
+  const words = String(answer).toLowerCase().match(/\p{L}+/gu) ?? [];
+  return isReminder(question) && CONTINUATION_REQUEST.test(question) && !/\p{N}/u.test(answer) &&
+    words.length > 0 && words.length <= 16 && words.every((word) => CONTINUATION_WORDS.has(word));
+};
 
 /** A message that only greets */
 const GREETING_ONLY = /^(?:здравствуйте|добрый\s+(?:день|вечер|утро)|доброе\s+утро|привет|hello|hi)[\s!.,)]*$/iu;
@@ -851,14 +866,17 @@ export function learnedPairs(messages) {
         messageIds.push(messages[next].id ?? `index:${next}`);
       }
     }
-    // A reminder («не дождалась вашего ответа») is not what the user answers: the question before it is
+    const answer = parts.join('\n\n');
+    // A substantive answer after a reminder belongs to the earlier question. A short "yes,
+    // let's continue" answers the reminder itself, not that earlier technical question.
     let before = index - 1;
     // Nor is the user's own greeting sent before the answer
-    while (before > 0 && (messages[before].mine ? GREETING_ONLY.test(messages[before].text.trim()) : isReminder(messages[before].text))) {
+    while (before > 0 && (messages[before].mine ? GREETING_ONLY.test(messages[before].text.trim()) :
+      isReminder(messages[before].text) && !answersReminder(messages[before].text, answer))) {
       before -= 1;
     }
     const asked = messages[before];
-    if (!asked || asked.mine || isReminder(asked.text)) {
+    if (!asked || asked.mine || (isReminder(asked.text) && !answersReminder(asked.text, answer))) {
       return;
     }
     // The choice whether to reuse earlier answers depends on them: not a saved answer
@@ -868,7 +886,6 @@ export function learnedPairs(messages) {
     const core = templateCore(asked.text, { sender: asked.title });
     const question = questionCore(core);
     const isAsked = asksSomething(core) || asksSomething(question);
-    const answer = parts.join('\n\n');
     (isAsked ? questions : templates).push([isAsked ? question : core, answer]);
     if (isAsked) answerEvents.push({ question, answer, messageIds });
   });

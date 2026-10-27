@@ -21,6 +21,28 @@ const fixture = async (fn) => {
 };
 
 describe('durable chat recording', () => {
+  test('continuing a conversation records consent separately from the subsequent technical answer', () => fixture(async (dir) => {
+    const history = createChatHistory(path.join(dir, 'history.json'));
+    const db = createQADatabase(path.join(dir, 'qa.lino'));
+    const technical = 'Какой у вас опыт Terraform и Ansible? Поделитесь примерами.';
+    const reminder = 'Здравствуйте. К сожалению, не дождалась вашего ответа. Мы можем продолжить наше общение по вакансии?';
+    const detailed = 'Автоматизировал развёртывание инфраструктуры в облаках.';
+    const messages = [
+      { id: '1', mine: false, text: technical }, { id: '2', mine: false, text: reminder },
+      { id: '3', mine: true, text: 'Да' }, { id: '4', mine: false, text: technical },
+      { id: '5', mine: true, text: detailed },
+    ];
+    await learnChatQuestions({ id: 'consent', messages }, { history, qaDatabase: db, log: () => {} });
+    const saved = (await history.read()).consent;
+    expect(saved.messages).toEqual(messages);
+    expect(saved.answerCounts).toEqual([
+      { question: reminder, answer: 'Да', count: 1 }, { question: technical, answer: detailed, count: 1 },
+    ]);
+    const qa = await withChatHistoryAnswers(db, { history }).readQADatabase();
+    expect(qa.get(reminder)).toBe('Да');
+    expect(qa.get(technical)).toBe(detailed);
+  }));
+
   test('older history is above a negative scroll position in hh.ru’s reversed message column', () => {
     const before = { window: globalThis.window, document: globalThis.document };
     const pane = { scrollHeight: 1600, clientHeight: 400, scrollTop: 0 };

@@ -225,6 +225,38 @@ describe('hh.ru AI assistant chats', () => {
 });
 
 describe('reminders', () => {
+  test('consent to continue is learned for the reminder, never the previous technical question', () => {
+    const question = 'Какой у вас опыт описания инфраструктуры через Terraform и Ansible? Поделитесь примерами.';
+    const reminder = 'Здравствуйте. К сожалению, не дождалась вашего ответа. Мы можем продолжить наше общение по вакансии?';
+    const { questions, answerEvents } = learnedPairs([
+      { id: '1', mine: false, text: question },
+      { id: '2', mine: false, text: reminder },
+      { id: '3', mine: true, text: 'Да' },
+      { id: '4', mine: false, text: question },
+    ]);
+    assert.deepEqual(questions, [[reminder, 'Да']]);
+    assert.deepEqual(answerEvents, [{ question: reminder, answer: 'Да', messageIds: ['3'] }]);
+  });
+
+  test('a substantive answer stays attached to the technical question after a reminder', () => {
+    const question = 'Расскажите о вашем опыте с Terraform.';
+    const reminder = 'Мы можем продолжить наше общение?';
+    const answer = 'Да, Terraform использовал для развёртывания 10 узлов.';
+    assert.deepEqual(learnedPairs([{ mine: false, text: question }, { mine: false, text: reminder }, { mine: true, text: answer }]).questions,
+      [[question, answer]]);
+    const english = 'Can we continue our conversation?';
+    assert.deepEqual(learnedPairs([{ mine: false, text: question }, { mine: false, text: english }, { mine: true, text: "Yes, let's continue." }]).questions,
+      [[english, "Yes, let's continue."]]);
+  });
+
+  test('an old bare yes cannot prefill a request for details, while real yes/no answers remain usable', () => {
+    const detailed = 'Какой у вас опыт Terraform? Поделитесь примерами.';
+    assert.equal(knownReply({ text: detailed }, { templates: new Map(), qaMap: new Map([[detailed, 'Да']]) }), null);
+    const binary = 'Работали ли вы с Terraform?';
+    assert.equal(knownReply({ text: binary }, { templates: new Map(), qaMap: new Map([[binary, 'Да']]) }).answer, 'Да');
+    assert.equal(knownReply({ text: detailed }, { templates: new Map(), qaMap: new Map([[detailed, 'Нет, не работал.']]) }).answer, 'Нет, не работал.');
+  });
+
   test('the answer after a reminder is the answer to the question before it', () => {
     const { questions } = learnedPairs([
       { mine: false, title: 'Анна', text: 'Какой самый нагруженный проект у вас был?' },
