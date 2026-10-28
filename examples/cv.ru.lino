@@ -221,4 +221,5 @@ resume
       description
         'Поддержка и разработка дополнений и расширений для сайта магазина, автоматизированный импорт данных через Excel в базу данных.'
         ' '
-        'Использовавшиеся навыки: MySQL, HTML, CSS, JavaScript, PHP, Excel.'
+        'Использовавшиеся навыки:'
+        'MySQL, HTML, CSS, JavaScript, PHP, Excel, Lua'
