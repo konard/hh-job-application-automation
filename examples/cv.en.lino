@@ -65,18 +65,6 @@ resume
         'Technologies and tools:'
         'PHP 8, Symfony 7, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker, GitHub Actions, GitHub Actions Runner, Sentry, ElasticSearch, Kibana, PostHog, Okmeter, Nginx, Nginx Proxy Manager, Anthropic Claude Code CLI, OpenAI Codex CLI, Hive Mind'
     job
-      company 'ООО "ЕВИРМА"'
-      position 'AI Tech Lead'
-      start 2026-05
-      end present
-      description
-        'Развитие системы с применением AI-first подхода. Использование Hive Mind для автоматизации разработки. Консультирование команды по эффективному использованию ИИ в работе.'
-        ' '
-        'Автоматизация программирования сервисов на PHP и GO c использованием ИИ через Claude Code, Codex, автоматизация CI/CD, разработка автоматизации развёрки/сброса тестового стенда для предоставления песочницы как для команды так и для ИИ агентов, автоматизация исправления ошибок в sentry через ИИ при помощи Hive Mind. Разработка блока управления расписанием рекламных компаний. Разработка сервиса по парсингу данных с Wildberries на Go. Разработка ИИ роутера для упрощения доступа к ИИ провайдерам для автономных агентов и сотрудников компании, а так же для улучшения качества мониторинга за использованием ИИ. Общая поддержка продукта, исправление ошибок и разработка новых фичей.'
-        ' '
-        'Используемые технологии:'
-        'PHP 8, Symfony 7, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker, GitHub Actions, GitHub Actions Runner, Sentry, ElasticSearch, Kibana, PostHog, Okmeter, Nginx, Nginx Proxy Manager, Anthropic Claude Code CLI, OpenAI Codex CLI, Hive Mind'
-    job
       company 'Capico LLC'
       position 'AI Senior Engineer'
       start 2025-11
