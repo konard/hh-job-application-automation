@@ -13,6 +13,12 @@ describe('opened workplace identity', () => {
 });
 
 describe('HH.ru CV save verification', () => {
+  test('About saves are verified against the correct CV and exact owner-edited text', () => {
+    const about = { kind: 'about', resumeHash: 'en', about: 'Owner-edited About text.' };
+    assert.equal(verifyHhSavedForm(about, [{ hash: 'en', cv: { about: about.about } }]), true);
+    assert.equal(verifyHhSavedForm(about, [{ hash: 'ru', cv: { about: about.about } }]), false);
+    assert.equal(verifyHhSavedForm(about, [{ hash: 'en', cv: { about: 'Original prefill.' } }]), false);
+  });
   const form = {
     company: 'Example', title: 'AI Tech Lead', description: 'Owner added this detail.',
     startMonth: 'Май', startYear: '2026', current: true,

@@ -8,7 +8,7 @@ async function afterSave(argv, form) {
   const resumes = await exportSavedCvs({ port: argv.hhPort });
   const verified = verifyHhSavedForm(form, resumes);
   if (!verified) {
-    console.log('↪️  Save not confirmed by the export; the position remains pending.');
+    console.log('↪️  Save not confirmed by the export; the CV change remains pending.');
     return false;
   }
   if (argv.snapshotsOut) {
@@ -22,7 +22,7 @@ async function afterSave(argv, form) {
 
 /** User input is captured at Save, including edits made after the app prefilled the draft. */
 async function waitForBrowserSave(page, argv) {
-  console.log('Review this position and click Save in the browser. No automatic Save or navigation.');
+  console.log('Review this CV change and click Save in the browser. No automatic Save or navigation.');
   let resolve;
   const saved = new Promise((done) => { resolve = done; });
   const stop = await observeHhCvSaves(page, {
@@ -93,7 +93,7 @@ export async function reviewCvSequence(changes, review) {
     }
     saved.push(change);
     if (result.followup) {
-      queue.unshift(result.followup);
+      queue.unshift({ ...result.followup, ...(change.resumeHash ? { resumeHash: change.resumeHash } : {}) });
     }
   }
   return saved;

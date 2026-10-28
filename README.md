@@ -782,6 +782,8 @@ bun run cv -- import ~/my-cv.en.lino --resume <hash> --one --detach-extra
 bun run cv -- edit logs/experience/my-change.json --resume <hash> --snapshots-out examples
 bun run cv -- watch --hh-port 9351 --out examples   # observe, never edit or navigate
 bun run cv -- batch ~/cv-changes.json --resume <hash> --snapshots-out examples
+bun run cv -- technologies --hh-browser-port 9351  # private bilingual technology audit and drafts
+bun run cv -- technologies --hh-browser-port 9351 --review --snapshots-out examples
 ```
 
 Each resume becomes one indented file: title, «Навыки», «Обо мне» and the jobs, a text line
@@ -791,7 +793,7 @@ files have the same layout, so they compare line by line:
 Contacts, salary and birth date are never written: the export stops when a text holds one.
 
 `import` reads the resume again and goes to the one with the file's title (else the only one in
-its language, or `--resume`). Each changed or new job is prefilled in the hh.ru slot (port 9351)
+its language, or `--resume`). Each changed or new job and the About text is prefilled in the hh.ru slot (port 9351)
 and the owner saves it in the browser. The app captures the fields at the final Save click,
 including changes made after prefilling, and verifies the result against fresh exports. `--one`
 stops after one position. `--confirm-save` opts into the older terminal `y` confirmation.
@@ -807,25 +809,40 @@ The opened record is checked against its company, title and full description bef
 checkboxes change. Saved checkpoint follow-ups also use the exact HH.ru workplace record ID,
 so language copies with the same company and title cannot be confused.
 
-`edit` accepts JSON with `kind` (`add`, `update`, `copy`, `detach`), `target` (company, title and
+`edit` accepts JSON with `kind` (`add`, `update`, `copy`, `detach`, `about`), `target` (company, title and
 description to distinguish language copies), and `fields`. Fields can include `company`, `title`,
 `description`, `start`/`end` (`YYYY-MM`), `current`, `area`, `website`, and `industries` (whole labels
 as an array; commas within an industry name are preserved). This is the same reusable workflow
-used by `.lino` import. Title, «Навыки» and «Обо мне» differences remain listed for separate editing.
+used by `.lino` import. An `about` change uses `fields.about` and optionally `target.about` to reject
+stale plans. The owner saves the About dialog too; edits made before Save are retained and verified.
+Title and «Навыки» differences remain listed for separate editing.
 The HH.ru branches of `experience sync --to hh` and `experience edit --stack/--add` use this
 same reviewed workflow, including shared-entry protection and capture of the owner's final edits.
-`batch` accepts an array of these changes and advances after each verified browser Save,
+`batch` accepts an array of these changes and advances after each verified browser Save. Each
+item can specify its own `resumeHash` for a mixed-language queue; otherwise `--resume` is used,
 automatically inserting a copy's separate deselection step. `--after-checkpoint <file>` waits
 for an already-running review to record `saved_by_user` before starting the queue. An idle or
 closed browser is insufficient; the owner does not need to send a separate “Saved” chat message.
 
 `watch` attaches to the existing slot without opening, clicking, saving or navigating any form.
+It observes both workplace forms and About dialogs.
 It exports actual saved CVs after each confirmed Save, retains all owner edits, and writes status
 to `logs/experience/cv-watch.json`. Cancel and failed validation are not recorded as successful
 saves. `--once` stops after one confirmed save. `--snapshots-out examples` does the same after
 `import`/`edit`; use a separate desired file so snapshots do not overwrite your pending plan.
 Publication is opt-in: `--publish` commits and pushes only the sanitized `.lino` snapshot files.
 Full private exports remain gitignored; existing PDFs and backups are kept during refreshes.
+
+`technologies` reads all saved CVs and audits raw position lists before deduplication. It consolidates
+the existing About inventories and technologies evidenced in jobs into matching bilingual inventories,
+retaining the biography and personal text. Equivalent names are grouped, distinct products and versions
+stay separate, and observed valid spellings are retained in a separate ATS alias block. Job-specific
+lists stay under their jobs; only duplicates and differences from the uniquely matched counterpart are
+proposed for review. Ambiguous employer matches block the review instead of silently skipping a job.
+Drafts and `changes.json` default to gitignored `data/resume/technology-plan/`; `--out` overrides this.
+`--review` prepares each About/position change in turn, waits for the owner's verified Save, and runs a
+final coverage check against fresh exports. Technology coverage does not assert that every translated
+sentence is equivalent. Snapshots and publication always reflect actual saved CVs, never pending drafts.
 
 Browser workflow checks use an isolated fixture, never a real account:
 `bun tests/browser/hh-cv-editor.mjs` (requires local Chrome).

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm } from '../../src/hh-cv-editor.mjs';
+import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm, readHhCvForm, verifyHhSavedForm } from '../../src/hh-cv-editor.mjs';
 import { chooseHhMonth, clickHhExperienceEdit, openHhExperienceForm } from '../../src/experience-sites.mjs';
 
 function fixture() {
@@ -13,6 +13,17 @@ function fixture() {
   const main = document.querySelector('main');
   const industries = ['Consulting Services', 'Marketing, Advertising, Designer, Event and PR Agencies'];
   window.saveCount = 0;
+  window.aboutText = 'Biography.\n\nTechnical Skills\nTools:\nGit';
+  window.about = () => {
+    main.innerHTML = '<div role="dialog"><textarea data-qa="resume-editor-about" maxlength="10000"></textarea><button data-qa="resume-partial-edit-cancel">Cancel</button><button data-qa="resume-partial-edit-save">Save</button></div>';
+    main.querySelector('textarea').value = window.aboutText;
+    main.querySelector('[data-qa=resume-partial-edit-save]').onclick = () => {
+      window.aboutText = main.querySelector('textarea').value;
+      window.saveCount++;
+      window.resume();
+    };
+    main.querySelector('[data-qa=resume-partial-edit-cancel]').onclick = window.resume;
+  };
   window.list = () => {
     main.innerHTML = `<button data-qa="list-add">Add new</button>
       <article>${source.company}<div data-qa="position-title">${source.title}</div><p>English copy.</p><button data-qa="link" class="english">Edit</button></article>
@@ -22,13 +33,14 @@ function fixture() {
     main.querySelector('.english').onclick = () => { window.form(true); main.querySelector('textarea').value = 'English copy.'; };
   };
   window.resume = () => {
-    main.innerHTML = `<button data-qa="profile-experience-viewAll">Edit experience</button><section>
+    main.innerHTML = `<button data-qa="resume-edit-button-about">Edit About</button><button data-qa="profile-experience-viewAll">Edit experience</button><section>
       <div data-qa="profile-experience-company-card">${source.company} ${source.title} ${source.description}</div>
       <button data-qa="edit-experience-button-wrong">Edit</button><button data-qa="edit-experience-button-right">Edit</button></section>`;
     main.querySelector('[data-qa=profile-experience-viewAll]').onclick = () => {
       window.history.pushState({}, '', '/profile/edit/experience?resumeFrom=en');
       window.list();
     };
+    main.querySelector('[data-qa=resume-edit-button-about]').onclick = window.about;
     main.querySelector('[data-qa=edit-experience-button-wrong]').onclick = () => { window.form(true); main.querySelector('textarea').value = 'English copy.'; };
     main.querySelector('[data-qa=edit-experience-button-right]').onclick = () => window.form(true);
   };
@@ -211,6 +223,29 @@ try {
   const byId = await prepareHhCvChange(page, { kind: 'detach', target: { ...target, entryId: '123' }, fields: {} }, { resumeHash: 'en' });
   assert.equal(byId.before.description, 'Исходное описание.');
   assert.deepEqual(byId.draft.resumes.filter((resume) => resume.checked).map((resume) => resume.hash), ['ru']);
+  await page.locator('[data-qa=profile-layout-cancel-button]').click();
+  const about = await prepareHhCvChange(page, { kind: 'about', fields: { about: 'Biography.\n\nTechnical Skills\nTools:\nGit, Codex' },
+    target: { about: 'Biography.\n\nTechnical Skills\nTools:\nGit' } }, { resumeHash: 'en' });
+  assert.equal(about.draft.kind, 'about');
+  assert.equal(about.draft.resumeHash, 'en');
+  assert.equal(await page.evaluate(() => window.saveCount), 0);
+  await assert.rejects(() => prepareHhCvChange(page, { kind: 'add', fields: {} }, { resumeHash: 'en' }), /finish the existing form/);
+  let aboutSaved;
+  let aboutResolve;
+  const aboutDone = new Promise((resolve) => { aboutResolve = resolve; });
+  const stopAbout = await observeHhCvSaves(page, { onSaved: async (form) => {
+    aboutSaved = form;
+    assert.equal(verifyHhSavedForm(form, [{ hash: 'en', cv: { about: await page.evaluate(() => window.aboutText) } }]), true);
+    aboutResolve();
+    return true;
+  } });
+  await page.locator('[data-qa=resume-editor-about]').fill('Owner changed About before Save.');
+  assert.equal((await readHhCvForm(page)).about, 'Owner changed About before Save.');
+  await page.locator('[data-qa=resume-partial-edit-save]').click();
+  await aboutDone;
+  assert.equal(aboutSaved.about, 'Owner changed About before Save.');
+  assert.equal(aboutSaved.kind, 'about');
+  stopAbout();
   console.log('Browser checks passed: shared copy, metadata, language selection, draft protection, dates, exact user-save capture and deselection without deletion.');
 } finally {
   await browser.close();

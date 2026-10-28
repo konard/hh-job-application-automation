@@ -5,9 +5,9 @@
  * - export: every resume of the account read (bun run resume -- --all) into <out>/cv.<language>.lino,
  *   examples/cv.ru.lino and examples/cv.en.lino by default; contacts, salary and birth date are
  *   never written (the export stops when a text holds one)
- * - import: the jobs of a CV file brought to its hh.ru resume, each change prefilled in the hh.ru
- *   slot (port 9351) and saved by you with «Сохранить» in the slot window. Title,
- *   «Навыки» and «Обо мне» differences are listed for you to change. After saving, the resume is
+ * - import: jobs and About from a CV file brought to its hh.ru resume, each change prefilled in the hh.ru
+ *   slot (port 9351) and saved by you with «Сохранить» in the slot window. Title and
+ *   «Навыки» differences are listed for you to change. After saving, the resume is
  *   read again and what still differs is shown.
  */
 
@@ -20,18 +20,21 @@ import { formatCvChange, parseCvLino, pickResumeFor, planCvImport } from './cv.m
 import { exportSavedCvs, writeCvSnapshots, publishCvSnapshots } from './cv-store.mjs';
 import { reviewHhCvChange, reviewCvSequence, waitForSavedCvCheckpoint } from './cv-review.mjs';
 import { runCvWatch } from './cv-watch.mjs';
+import { planCvTechnologySync, verifyCvTechnologyCoverage } from './cv-technologies.mjs';
+import { loadTechnologyAliases } from './vacancy-analysis.mjs';
 import {
   discardHhExperience, hhExperienceFormOpen, saveHhExperience,
 } from './experience-sites.mjs';
 
-const USAGE = `Usage: bun run cv -- <export|import|edit|batch|watch> [file] [options]
+const USAGE = `Usage: bun run cv -- <export|import|edit|batch|watch|technologies> [file] [options]
 
   export                   Read every hh.ru resume into <out>/cv.<language>.lino
-  import [file]            Prefill hh.ru with the jobs of a CV file (default <out>/cv.<lang>.lino), one by one
-                           in the hh.ru slot; the owner saves each position in the browser
-  edit <change.json>       Prepare one add/update/copy/detach change (fields + target); requires --resume
+  import [file]            Prefill jobs and About from a CV file (default <out>/cv.<lang>.lino), one by one
+                           in the hh.ru slot; the owner saves each change in the browser
+  edit <change.json>       Prepare one add/update/copy/detach/about change (fields + target + resume hash)
   batch <changes.json>     Review a JSON array of changes, including each copy's deselection, one Save at a time
   watch                   Passively monitor the existing editor and export every confirmed Save
+  technologies            Audit all position lists and both About inventories; write private drafts and changes.json
 
   --lang <ru|en>           The file to import when none is given (default ru)
   --out <dir>              Where the files are (default examples)
@@ -48,21 +51,22 @@ const WORKFLOW_USAGE = `
   --publish                Commit/push only exported .lino files (explicit opt-in)
   --once                   Stop watch after one verified save
   --state-file <file>      Watch status (default logs/experience/cv-watch.json)
-  --after-checkpoint <f>   Start edit/batch only when the preceding checkpoint is saved_by_user`;
+  --after-checkpoint <f>   Start edit/batch only when the preceding checkpoint is saved_by_user
+  --review                Review the technology plan in the browser, one user Save at a time`;
 
 function parseArgs(args) {
   const parsed = {
     command: null, file: null, lang: 'ru', out: path.join(process.cwd(), 'examples'), resume: '', hhPort: 9351, hhBrowserPort: 9322,
     keepOpenHours: 24, trace: tracingEnabled(),
     one: false, detachExtra: false, manualSave: true, snapshotsOut: '', publish: false, once: false,
-    stateFile: 'logs/experience/cv-watch.json', afterCheckpoint: '',
+    stateFile: 'logs/experience/cv-watch.json', afterCheckpoint: '', review: false, outExplicit: false,
   };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split(/=(.*)/s);
     const value = () => inline ?? args[++i];
     const options = {
       '--lang': () => (parsed.lang = value()),
-      '--out': () => (parsed.out = path.resolve(value())),
+      '--out': () => { parsed.out = path.resolve(value()); parsed.outExplicit = true; },
       '--resume': () => (parsed.resume = value()),
       '--hh-port': () => (parsed.hhPort = Number(value())),
       '--hh-browser-port': () => (parsed.hhBrowserPort = Number(value())),
@@ -76,6 +80,7 @@ function parseArgs(args) {
       '--once': () => (parsed.once = true),
       '--state-file': () => (parsed.stateFile = path.resolve(value())),
       '--after-checkpoint': () => (parsed.afterCheckpoint = path.resolve(value())),
+      '--review': () => (parsed.review = true),
     };
     if (flag === '--help' || flag === '-h') {
       console.log(USAGE + WORKFLOW_USAGE);
@@ -90,10 +95,11 @@ function parseArgs(args) {
       throw new Error(`Unknown option ${args[i]}\n\n${USAGE}`);
     }
   }
-  if (!['export', 'import', 'edit', 'batch', 'watch'].includes(parsed.command)) {
+  if (!['export', 'import', 'edit', 'batch', 'watch', 'technologies'].includes(parsed.command)) {
     console.log(USAGE + WORKFLOW_USAGE);
     process.exit(1);
   }
+  if (parsed.command === 'technologies' && !parsed.outExplicit) parsed.out = path.join(process.cwd(), 'data', 'resume', 'technology-plan');
   return parsed;
 }
 
@@ -195,14 +201,16 @@ async function runImport(argv) {
 }
 
 async function runEdit(argv) {
-  if (!argv.file || !argv.resume) {
-    throw new Error('edit requires a change.json file and --resume <hash>');
+  if (!argv.file) {
+    throw new Error('edit/batch requires a change JSON file');
   }
   const input = JSON.parse(await fs.readFile(argv.file, 'utf8'));
   const changes = argv.command === 'batch' ? input : [input];
   if (!Array.isArray(changes) || changes.length === 0 || changes.some((change) =>
-    !['add', 'update', 'copy', 'detach'].includes(change.kind) || !change.fields || (change.kind !== 'add' && !change.target?.company))) {
-    throw new Error('Invalid changes: kind add/update/copy/detach, fields, and target.company for an existing position are required');
+    !['add', 'update', 'copy', 'detach', 'about'].includes(change.kind) || !change.fields ||
+    (change.kind === 'about' ? typeof change.fields.about !== 'string' : change.kind !== 'add' && !change.target?.company) ||
+    !(change.resumeHash ?? argv.resume))) {
+    throw new Error('Invalid changes: kind, fields, target for an existing position, and a resume hash are required');
   }
   if (argv.afterCheckpoint) {
     console.log(`Waiting for the preceding verified Save: ${argv.afterCheckpoint}`);
@@ -215,10 +223,10 @@ async function runEdit(argv) {
     if (!page) {
       throw new Error('No existing resume editor page; open the CV in the editor slot first');
     }
-    const review = (change) => reviewHhCvChange(page, change, { ...argv, manualSave: true }, argv.resume);
+    const review = (change) => reviewHhCvChange(page, change, { ...argv, manualSave: true }, change.resumeHash ?? argv.resume);
     if (argv.command === 'batch') {
       await reviewCvSequence(changes, review);
-      console.log('All queued positions were saved and verified.');
+      console.log('All queued CV changes were saved and verified.');
     } else {
       await review(changes[0]);
     }
@@ -227,11 +235,33 @@ async function runEdit(argv) {
   }
 }
 
+async function runTechnologies(argv) {
+  const resumes = await exportResumes(argv);
+  const catalog = await loadTechnologyAliases();
+  const plan = planCvTechnologySync(resumes, catalog);
+  await fs.mkdir(argv.out, { recursive: true });
+  await fs.writeFile(path.join(argv.out, 'audit.json'), `${JSON.stringify(plan, null, 2)}\n`);
+  const file = path.join(argv.out, 'changes.json');
+  await fs.writeFile(file, `${JSON.stringify(plan.changes, null, 2)}\n`);
+  for (const proposal of plan.proposals) await fs.writeFile(path.join(argv.out, `about.${proposal.language}.txt`), `${proposal.about}\n`);
+  console.log(`Technology audit: ${plan.technologies.length} unique entries, ${plan.aboutDuplicates.length} About duplicates, ${plan.positionDuplicates.length} position duplicates.`);
+  plan.proposals.forEach((proposal) => console.log(`  ${proposal.language}: ${proposal.missing.length} entries absent from About, proposed length ${proposal.about.length}.`));
+  console.log(`  Reviewed steps: ${plan.changes.length}; draft plan: ${file}`);
+  if (plan.unmatched.length) throw new Error('Some positions could not be paired unambiguously; inspect audit.json before reviewing');
+  if (argv.review && plan.changes.length) {
+    await runEdit({ ...argv, command: 'batch', file, manualSave: true });
+    const result = verifyCvTechnologyCoverage(await exportResumes(argv), catalog);
+    await fs.writeFile(path.join(argv.out, 'verification.json'), `${JSON.stringify(result, null, 2)}\n`);
+    console.log(result.complete ? 'All position lists and both About inventories passed the technology audit.' : 'Saved changes retained; the technology audit still has differences. See verification.json.');
+  }
+}
+
 async function main() {
   const argv = parseArgs(process.argv.slice(2));
   if (argv.command === 'watch') {
     return runCvWatch(argv);
   }
+  if (argv.command === 'technologies') return runTechnologies(argv);
   if (argv.command === 'edit' || argv.command === 'batch') {
     return runEdit(argv);
   }

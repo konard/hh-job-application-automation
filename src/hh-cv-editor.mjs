@@ -2,15 +2,21 @@
 import { companySimilarity, parseMonthYear, withStack } from './experience.mjs';
 import { normalizeText } from './cv.mjs';
 import {
-  discardHhExperience, fillHhExperience, hhExperienceFormOpen, hhExperienceResumes,
+  discardHhExperience, fillHhExperience, hhCvFormOpen, hhExperienceResumes,
   openHhExperienceForm, setHhExperienceResumes,
 } from './experience-sites.mjs';
 
 /** Runs in the page. Only workplace fields, never cookies or account/contact fields. */
-export function readHhWorkplace() {
+export function readHhWorkplace({ includeAbout = false } = {}) {
   const field = (selector) => document.querySelector(selector);
   const value = (selector) => field(selector)?.value ?? '';
   if (!field('input[name="position"]')) {
+    const about = field('textarea[data-qa="resume-editor-about"]');
+    if (includeAbout && about) {
+      const url = new URL(window.location.href);
+      const resumeHash = url.pathname.match(/\/resume\/([a-z0-9]+)/i)?.[1] ?? url.searchParams.get('resumeFrom') ?? url.searchParams.get('resume');
+      return { kind: 'about', url: url.href, resumeHash, about: about.value };
+    }
     return null;
   }
   const month = (part) => field(`[data-qa="resume-editor-experience-${part}-month-input"] [data-qa="trigger-values-wrapper"]`)?.textContent.trim() ?? '';
@@ -44,6 +50,38 @@ export async function readHhExperienceForm(page) {
     start: parseMonthYear(`${form.startMonth} ${form.startYear}`),
     end: form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`),
   };
+}
+
+export async function readHhCvForm(page) {
+  const form = await page.evaluate(readHhWorkplace, { includeAbout: true });
+  if (!form || form.kind === 'about') return form;
+  return { ...form, start: parseMonthYear(`${form.startMonth} ${form.startYear}`),
+    end: form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`) };
+}
+
+/** Open only this CV's About field, check its current value, and leave Save to the owner. */
+export async function prepareHhAboutChange(page, change, { resumeHash }) {
+  if (await hhCvFormOpen(page)) throw new Error('hh.ru: finish the existing CV draft before editing About');
+  await page.goto(`https://hh.ru/resume/${encodeURIComponent(resumeHash)}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  if (await page.locator('input[name*="captcha"], [data-qa="account-login-form"]').count()) {
+    throw new Error('hh.ru: the CV slot needs manual sign-in or CAPTCHA completion');
+  }
+  await page.locator('[data-qa="resume-edit-button-about"]').click();
+  const editor = page.locator('textarea[data-qa="resume-editor-about"]');
+  await editor.waitFor({ state: 'visible', timeout: 15000 });
+  const before = await readHhCvForm(page);
+  if (before?.kind !== 'about' || before.resumeHash !== resumeHash) throw new Error('hh.ru: About editor belongs to a different CV');
+  if (change.target?.about !== undefined && normalizeText(before.about) !== normalizeText(change.target.about)) {
+    throw new Error('hh.ru: saved About text changed since the audit; current draft left untouched');
+  }
+  const wanted = String(change.fields.about);
+  const max = Number(await editor.getAttribute('maxlength'));
+  if (max > 0 && wanted.length > max) throw new Error(`hh.ru: About draft exceeds its ${max}-character limit`);
+  if (await editor.inputValue() !== before.about) throw new Error('hh.ru: About was edited during comparison; left untouched');
+  await editor.fill(wanted);
+  const draft = await readHhCvForm(page);
+  if (draft.about !== wanted) throw new Error('hh.ru: About prefill did not match the requested text');
+  return { kind: 'about', before, draft, followup: null, notes: [] };
 }
 
 /** A matched card is insufficient: the opened form must be the requested record too. */
@@ -143,7 +181,8 @@ export async function fillHhExperienceMetadata(page, fields) {
  * in a separate reviewed step. Existing open forms are never navigated away from.
  */
 export async function prepareHhCvChange(page, change, { resumeHash, port = 9351 } = {}) {
-  if (await hhExperienceFormOpen(page)) {
+  if (change.kind === 'about') return prepareHhAboutChange(page, change, { resumeHash });
+  if (await hhCvFormOpen(page)) {
     throw new Error('hh.ru: finish the existing form before preparing another position');
   }
   const notes = await openHhExperienceForm(page, { resumeHash, job: change.kind === 'add' ? null : change.target, port });
@@ -200,16 +239,17 @@ export function installHhCvObserver({ readSource, binding }) {
     document.removeEventListener('input', previous.input, true);
     document.removeEventListener('click', previous.click, true);
   }
-  const read = new Function(`return (${readSource})()`); // trusted app function, no page/user code
+  const read = new Function(`return (${readSource})({ includeAbout: true })`); // trusted app function, no page/user code
   const observer = { lastActivity: Date.now() };
   observer.input = () => { observer.lastActivity = Date.now(); };
   observer.click = (event) => {
     observer.lastActivity = Date.now();
-    if (event.target.closest?.('[data-qa="profile-layout-cancel-button"]') && read()) {
+    if (event.target.closest?.('[data-qa="profile-layout-cancel-button"], [data-qa="resume-partial-edit-cancel"]') && read()) {
       window[binding]({ cancelled: true }).catch(() => {});
       return;
     }
-    if (event.target.closest?.('[data-qa="profile-layout-save-button"]') && !event.target.closest('[role="dialog"]')) {
+    const aboutSave = event.target.closest?.('[data-qa="resume-partial-edit-save"]');
+    if (aboutSave || (event.target.closest?.('[data-qa="profile-layout-save-button"]') && !event.target.closest('[role="dialog"]'))) {
       const form = read();
       if (form) {
         window[binding](form).catch(() => {});
@@ -224,6 +264,10 @@ export function installHhCvObserver({ readSource, binding }) {
 
 /** Check an attempted save against exports, including dates and deselected resumes. */
 export function verifyHhSavedForm(form, resumes) {
+  if (form.kind === 'about') {
+    const cv = resumes.find((resume) => resume.hash === form.resumeHash)?.cv;
+    return Boolean(cv && normalizeText(cv.about) === normalizeText(form.about));
+  }
   const start = parseMonthYear(`${form.startMonth} ${form.startYear}`);
   const end = form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`);
   if (!start || (!form.current && !end) || form.resumes.length === 0) {
@@ -266,7 +310,7 @@ export async function observeHhCvSaves(page, { onSaved, onState = () => {}, onEr
         return;
       }
       try {
-        if (!await hhExperienceFormOpen(page) && /\/resume\/|\/profile\/edit\/experience(?:\?|$)/.test(page.url())) {
+        if (!await hhCvFormOpen(page) && /\/resume\/|\/profile\/edit\/experience(?:\?|$)/.test(page.url())) {
           const verified = await onSaved(form);
           onState({ state: verified === false ? 'not_saved' : 'saved', form });
         } else if (++attempts < 120) {

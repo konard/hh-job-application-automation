@@ -21,12 +21,13 @@ export function planResumeAliases(resume, requested, catalog) {
   }
   const about = String(resume.about ?? '');
   if (!additions.length) return { additions, about };
-  const split = about.indexOf(`\n\n${ALIAS_HEADING}\n`);
-  const original = split < 0 ? about : about.slice(0, split);
-  const lines = split < 0 ? [] : about.slice(split + `\n\n${ALIAS_HEADING}\n`.length).split('\n').filter(Boolean);
+  const block = /^(Технологии\s*[—–-]\s*варианты названий:|Technology name variants:|Technology aliases:)\s*\n/im.exec(about);
+  const heading = block?.[1] ?? (/^Technical Skills:?$/im.test(about) ? 'Technology name variants:' : ALIAS_HEADING);
+  const original = block ? about.slice(0, block.index) : about;
+  const lines = block ? about.slice(block.index + block[0].length).split('\n').filter(Boolean) : [];
   // Our additive block keeps every existing line and adds only newly observed spellings.
   const added = additions.map((item) => `${item.canonical}: ${item.spelling}`);
-  return { additions, about: `${original.trimEnd()}\n\n${ALIAS_HEADING}\n${[...new Set([...lines, ...added])].join('\n')}` };
+  return { additions, about: `${original.trimEnd()}\n\n${heading}\n${[...new Set([...lines, ...added])].join('\n')}` };
 }
 
 /** Page logic separated for local-browser regression tests; the caller owns the résumé slot. */

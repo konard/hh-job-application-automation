@@ -57,6 +57,16 @@ describe('vacancy analysis', () => {
     expect(comparison.aliases).toEqual([]);
     expect(comparison.missing[0].canonical).toBe('NovelDatabas');
   });
+  test('alias updates retain an English About block without adding a Russian duplicate', () => {
+    const about = 'Biography.\n\nTechnical Skills\nLanguages:\nGo\nTechnology name variants:\nJavaScript: JS';
+    const plan = planResumeAliases({ ...resume, about }, [{ canonical: 'Go', spelling: 'Golang' }], catalog);
+    expect(plan.about.match(/Technology name variants:/g)).toHaveLength(1);
+    expect(plan.about).toContain('JavaScript: JS');
+    expect(plan.about).toContain('Go: Golang');
+    expect(plan.about).not.toContain(ALIAS_HEADING);
+    const withoutBlock = planResumeAliases({ ...resume, about: 'Technical Skills\nLanguages:\nGo' }, [{ canonical: 'Go', spelling: 'Golang' }], catalog);
+    expect(withoutBlock.about).toContain('Technology name variants:');
+  });
 });
 
 test('private Links Notation round-trips full descriptions, quotes, HTML and long requirement lists without loss', async () => {

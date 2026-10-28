@@ -711,7 +711,7 @@ export function clickHhExperienceEdit({ company, title, description = '', editBu
  * @returns {Promise<string[]>} Notes: what went wrong; empty when the form is open
  */
 export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 }) {
-  if (await hhExperienceFormOpen(page)) {
+  if (await hhCvFormOpen(page)) {
     return ['hh.ru: an experience form is open; finish or close it before another edit'];
   }
   if (job?.entryId && !/^\d+$/.test(String(job.entryId))) {
@@ -860,6 +860,9 @@ export const hhExperienceDescription = (page) => page.locator(HH.description).fi
 
 /** Whether hh.ru's experience form is open in the page */
 export const hhExperienceFormOpen = (page) => page.locator(HH.position).count().then((count) => count > 0, () => false);
+
+/** Any owner-reviewed CV draft, including the inline About editor. */
+export const hhCvFormOpen = (page) => page.locator(`${HH.position}, textarea[data-qa="resume-editor-about"]`).count().then((count) => count > 0, () => false);
 
 /**
  * The resumes of the profile that show the job of hh.ru's open experience form (its checkboxes):

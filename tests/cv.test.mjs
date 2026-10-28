@@ -80,12 +80,14 @@ describe('planCvImport', () => {
     wanted.skills = ['PHP', 'Go'];
     wanted.about = 'Другой текст';
     const { changes, notes } = planCvImport(current, wanted);
-    assert.equal(changes.length, 2);
+    assert.equal(changes.length, 3);
     assert.equal(changes[0].kind, 'update');
     assert.deepEqual(changes[0].target, { company: 'ООО "ЕВИРМА"', title: 'Tech Lead', description: current.jobs[0].description });
     assert.deepEqual(Object.keys(changes[0].fields).sort(), ['description', 'title']);
     assert.deepEqual(changes[1].fields, { company: 'Kaiten', title: 'Senior', start: '2024-07', end: '2025-11', current: false, description: 'Работа' });
-    assert.equal(notes.length, 5);
+    assert.equal(changes[2].kind, 'about');
+    assert.equal(changes[2].fields.about, 'Другой текст');
+    assert.equal(notes.length, 4);
     assert.ok(notes[0].startsWith('Rock\'n\'Code "Lab" (Developer) is on hh.ru but not in the file'));
     assert.ok(notes.some((note) => note.includes('lack: Go')));
     assert.ok(notes.some((note) => note.includes('the file does not: C#')));

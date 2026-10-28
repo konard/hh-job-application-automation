@@ -23,7 +23,7 @@ export const COMMON_TECH_TERMS = [
 ];
 
 /** "Технические навыки" categories that are not technologies */
-const NON_TECHNICAL_CATEGORIES = new Set(['личные']);
+const NON_TECHNICAL_CATEGORIES = new Set(['личные', 'personal']);
 
 /**
  * Split a comma or semicolon separated list, keeping parenthesised groups such as
@@ -71,16 +71,31 @@ const lines = (text) => text.split('\n').map((line) => line.trim()).filter(Boole
  * @param {string} description
  * @returns {string[]}
  */
-export function parseJobStack(description) {
-  const rows = lines(description);
-  return uniqueTerms(rows.flatMap((row, index) => {
-    const match = row.match(JOB_STACK_LABEL);
-    if (!match) {
-      return [];
+export function rawJobStack(description) {
+  const result = [];
+  let active = false;
+  let started = false;
+  for (const row of String(description ?? '').split('\n')) {
+    const match = row.trim().match(JOB_STACK_LABEL);
+    if (match) {
+      active = true;
+      started = Boolean(match[1].trim());
+      result.push(...splitList(match[1]));
+    } else if (active) {
+      if (!row.trim()) {
+        if (started) active = false;
+      } else if (/^[^:,]+:\s*$/.test(row.trim())) {
+        active = false;
+      } else {
+        result.push(...splitList(row));
+        started = true;
+      }
     }
-    return splitList(match[1] || rows[index + 1] || '');
-  }));
+  }
+  return result;
 }
+
+export const parseJobStack = (description) => uniqueTerms(rawJobStack(description));
 
 /**
  * Categories of the "Технические навыки" section: "Языки:" followed by the list on the next line
@@ -89,12 +104,15 @@ export function parseJobStack(description) {
  */
 export function parseTechnicalSkills(text) {
   const rows = lines(text);
-  const start = rows.findIndex((row) => /^технические навыки:?$/i.test(row));
+  const start = rows.findIndex((row) => /^(?:технические навыки|technical skills):?$/i.test(row));
   if (start === -1) {
     return {};
   }
   const categories = {};
   for (let index = start + 1; index < rows.length - 1; index += 2) {
+    if (/^(?:технологии\s*[—–-]\s*варианты названий|technology name variants|technology aliases)\s*:/i.test(rows[index])) {
+      break;
+    }
     const label = rows[index].match(/^([^:,]{2,40}):$/);
     if (!label) {
       break;

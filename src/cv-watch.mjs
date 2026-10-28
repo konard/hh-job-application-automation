@@ -2,7 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
-import { observeHhCvSaves, readHhExperienceForm, verifyHhSavedForm } from './hh-cv-editor.mjs';
+import { observeHhCvSaves, readHhCvForm, verifyHhSavedForm } from './hh-cv-editor.mjs';
 import { exportSavedCvs, publishCvSnapshots, writeCvSnapshots } from './cv-store.mjs';
 
 export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = false, once = false, stateFile = 'logs/experience/cv-watch.json' } = {}) {
@@ -13,7 +13,7 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
     throw new Error(`No existing HH.ru CV editor on port ${hhPort}; no page was changed`);
   }
   await fs.mkdir(path.dirname(stateFile), { recursive: true });
-  let lastSaved = null;
+  let lastSaved = await fs.readFile(`${path.dirname(stateFile)}/cv-last-saved.json`, 'utf8').then(JSON.parse).catch(() => null);
   let stopped = false;
   let queue = Promise.resolve();
   let done;
@@ -35,9 +35,11 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
           console.log('CV changed on the page, but this Save could not be confirmed in the export; snapshots reflect saved data only.');
           return false;
         }
-        lastSaved = { at: new Date().toISOString(), company: form.company, title: form.title, url: form.url, verified: true };
+        const company = form.kind === 'about' ? 'About me' : form.company;
+        const title = form.kind === 'about' ? resumes.find((resume) => resume.hash === form.resumeHash)?.cv.title : form.title;
+        lastSaved = { at: new Date().toISOString(), kind: form.kind ?? 'workplace', resumeHash: form.resumeHash, company, title, url: form.url, verified: true };
         await fs.writeFile(`${path.dirname(stateFile)}/cv-last-saved.json`, `${JSON.stringify({ ...lastSaved, form }, null, 2)}\n`);
-        console.log(`Saved and exported: ${form.company} / ${form.title}. Your exact edits were retained.`);
+        console.log(`Saved and exported: ${company} / ${title}. Your exact edits were retained.`);
         if (once) {
           done();
         }
@@ -53,10 +55,11 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
   let timer;
   const poll = async () => {
     try {
-      const form = await readHhExperienceForm(page);
+      const form = await readHhCvForm(page);
       const lastActivity = await page.evaluate(() => window.__hhCvObserver?.lastActivity ?? null);
       await fs.writeFile(stateFile, `${JSON.stringify({ pid: process.pid, at: new Date().toISOString(), url: page.url(), formOpen: Boolean(form),
-        company: form?.company ?? null, title: form?.title ?? null, lastActivity, lastSaved, passive: true }, null, 2)}\n`);
+        kind: form?.kind ?? (form ? 'workplace' : null), resumeHash: form?.resumeHash,
+        company: form?.kind === 'about' ? 'About me' : form?.company ?? null, title: form?.title ?? null, lastActivity, lastSaved, passive: true }, null, 2)}\n`);
     } catch (error) {
       console.error('CV watch:', error.message.split('\n')[0]);
     }

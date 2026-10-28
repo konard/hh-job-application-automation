@@ -17,6 +17,15 @@ Snapshot on 2026-10-28, after the owner saved both Capico steps:
 - Capico is complete in both languages as AI Senior Engineer, November 2025–May 2026. The English copy is saved, the original Russian entry is deselected from English, and the Russian CV retains its original description.
 - Older English job descriptions are unchanged from the initial export; the additional details listed below are retained for later Russian review.
 
+A subsequent raw technology audit found incomplete About inventories and duplicate items that the
+previous deduplicating parser had hidden. The reviewed plan consolidates 201 technical entries in
+both About sections, preserves their biography/personal text, removes duplicates in both languages'
+Deep.Foundation and LinksPlatform lists, and adds Lua to Russian ArtBridge from its English counterpart.
+These changes require the owner's browser Save; they are not claimed as saved in this status note.
+Run `bun run cv -- technologies --hh-browser-port 9351` for a fresh audit. Its verification covers
+technology inventories, not the older prose differences below. The example files continue to show
+only actual saved content, and are refreshed after each confirmed Save.
+
 ## English details to retain and consider adding to Russian later
 
 These details already exist in the English CV. Keep them while editing English; adding them to Russian is a later, separately reviewed change.

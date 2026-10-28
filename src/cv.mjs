@@ -251,7 +251,7 @@ export function planCvImport(current, wanted, { detachExtra = false } = {}) {
     notes.push(`«Навыки» on hh.ru have, the file does not: ${extraSkills.join(', ')}`);
   }
   if (wanted.about && !sameText(current.about, wanted.about)) {
-    notes.push('«Обо мне» differs from the file: copy it from the file into the resume\'s «Обо мне»');
+    changes.push({ kind: 'about', target: { about: current.about }, fields: { about: wanted.about }, source: wanted, notes: [] });
   }
   return { changes, notes };
 }
@@ -262,6 +262,7 @@ export function planCvImport(current, wanted, { detachExtra = false } = {}) {
  * @returns {string}
  */
 export function formatCvChange(change) {
+  if (change.kind === 'about') return `✏️  About me: ${change.fields.about.length} characters, reviewed Save required`;
   const job = change.kind === 'add' ? change.fields : change.target;
   const lines = [`${change.kind === 'detach' ? '↪️  Deselect from this resume' : change.kind === 'add' ? '➕ New job' : '✏️  Update'}: ${job.company} (${job.title})`];
   const { fields } = change;

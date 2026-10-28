@@ -36,6 +36,10 @@ describe('parseJobStack', () => {
 });
 
 describe('parseTechnicalSkills', () => {
+  test('reads English categories and excludes personal text and the ATS alias block', () => {
+    assert.deepEqual(parseTechnicalSkills('Technical Skills\nTools:\nGit, Claude Code\nPersonal:\nTouch typing.\nTechnology name variants:\nGo: Golang'), { Tools: ['Git', 'Claude Code'] });
+    assert.deepEqual(parseTechnicalSkills('Технические навыки\nИнструменты:\nGit\nТехнологии — варианты названий:\nGo: Golang'), { Инструменты: ['Git'] });
+  });
   test('reads categories and skips personal skills', () => {
     const about = 'Технические навыки\nПлатформы:\nWindows, Linux (Gentoo, Ubuntu)\nБазы данных:\nMS SQL, PostgreSQL\nЛичные:\nСлепая печать.';
     assert.deepEqual(parseTechnicalSkills(about), {

@@ -34,6 +34,14 @@ describe('reviewed CV sequence', () => {
     assert.ok(error);
     assert.deepEqual(calls, ['copy']);
   });
+  test('language-specific copies keep their target CV for the inserted deselection step', async () => {
+    const calls = [];
+    await reviewCvSequence([{ kind: 'copy', resumeHash: 'en' }, { kind: 'about', resumeHash: 'ru' }], async (change) => {
+      calls.push([change.kind, change.resumeHash]);
+      return { saved: true, ...(change.kind === 'copy' ? { followup: { kind: 'detach' } } : {}) };
+    });
+    assert.deepEqual(calls, [['copy', 'en'], ['detach', 'en'], ['about', 'ru']]);
+  });
   test('an idle/closed marker does not count as a Save', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'cv-review-'));
     const file = path.join(directory, 'checkpoint.json');
