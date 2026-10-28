@@ -82,7 +82,7 @@ describe('planCvImport', () => {
     const { changes, notes } = planCvImport(current, wanted);
     assert.equal(changes.length, 2);
     assert.equal(changes[0].kind, 'update');
-    assert.deepEqual(changes[0].target, { company: 'ООО "ЕВИРМА"', title: 'Tech Lead' });
+    assert.deepEqual(changes[0].target, { company: 'ООО "ЕВИРМА"', title: 'Tech Lead', description: current.jobs[0].description });
     assert.deepEqual(Object.keys(changes[0].fields).sort(), ['description', 'title']);
     assert.deepEqual(changes[1].fields, { company: 'Kaiten', title: 'Senior', start: '2024-07', end: '2025-11', current: false, description: 'Работа' });
     assert.equal(notes.length, 5);
@@ -95,6 +95,19 @@ describe('planCvImport', () => {
     const wanted = JSON.parse(JSON.stringify(current));
     wanted.jobs[0].end = '2026-09';
     assert.deepEqual(planCvImport(current, wanted).changes[0].fields, { start: '2026-05', end: '2026-09', current: false });
+  });
+
+  test('an exact language copy pairs before its shared original, which can be deselected separately', () => {
+    const wanted = JSON.parse(JSON.stringify(current));
+    wanted.jobs[0].description = 'AI-first product development. Owner-edited wording.';
+    const withCopy = JSON.parse(JSON.stringify(current));
+    withCopy.jobs.push(wanted.jobs[0]);
+    const plan = planCvImport(withCopy, wanted, { detachExtra: true });
+    assert.equal(plan.changes.length, 1);
+    assert.equal(plan.changes[0].kind, 'detach');
+    assert.equal(plan.changes[0].target.description, current.jobs[0].description);
+    assert.deepEqual(plan.changes[0].fields, {});
+    assert.equal(plan.changes.some((change) => change.kind === 'update'), false);
   });
 });
 

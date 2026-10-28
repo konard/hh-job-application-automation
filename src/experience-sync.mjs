@@ -33,8 +33,9 @@ import {
 } from './experience.mjs';
 import {
   closeLinkedInFollowUp, discardHhExperience, discardLinkedInPosition, hasFillableFields, LINKEDIN_PROFILE, linkedInFormOutcome, watchLinkedInSave,
-  hhExperienceDescription, hhExperienceFormOpen, prefillHhExperience, prefillHhStack, prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
+  prefillLinkedInPosition, readLinkedInExperience, saveHhExperience, saveLinkedInPosition,
 } from './experience-sites.mjs';
+import { reviewHhCvChange } from './cv-review.mjs';
 import { createTranslator, reportFormalAiFailures, TRANSLATORS, FORMAL_AI_REPO } from './translation.mjs';
 
 const USAGE = `Usage: bun run experience -- <export|diff|sync|edit> [options]
@@ -259,9 +260,13 @@ async function runSync(argv, data, diff, translator) {
       done.push({ change, result: 'left to you (nothing to fill in the form)', notes: change.notes });
       continue;
     }
-    const notes = argv.to === 'linkedin'
-      ? await prefillLinkedInPosition(page, change, { profileUrl: argv.profile, port: argv.linkedinPort }).catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`])
-      : await prefillHhExperience(page, change, { resumeHash: data.hh.hash, port: argv.hhPort }).catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`]);
+    if (argv.to === 'hh') {
+      await reviewHhCvChange(page, change, { ...argv, manualSave: true, snapshotsOut: 'examples' }, data.hh.hash);
+      done.push({ change, result: 'saved (in the browser)', notes: change.notes });
+      continue;
+    }
+    const notes = await prefillLinkedInPosition(page, change, { profileUrl: argv.profile, port: argv.linkedinPort })
+      .catch((error) => [`prefill failed: ${error.message.split('\n')[0]}`]);
     notes.forEach((note) => console.log(`   ℹ️  ${note}`));
     if (change.unchanged) {
       // Nothing could be filled (e.g. skills the profile does not have): no question, the form is closed
@@ -336,54 +341,10 @@ async function runEdit(argv) {
     },
   });
   console.log(`✏️  ${job.company} (${job.position}): technologies ${argv.add ? 'added' : 'set'}: «${argv.stack.trim()}»`);
-  const { notes, before, after } = await prefillHhStack(page, {
-    resumeHash: resume.hash, job: { company: job.company, title: job.position }, stack: argv.stack, add: argv.add, port: argv.hhPort,
-  });
-  notes.forEach((note) => console.log(`   ℹ️  ${note}`));
-  if (after === null) {
-    await session.release();
-    return;
-  }
-  console.log(`\n${after}\n`);
-  // The resume's «Навыки» are one list for the whole resume, edited on its own
-  const skills = new Set((resume.keySkills ?? []).map((skill) => skill.toLowerCase()));
-  const missing = argv.stack.split(',').map((item) => item.trim()).filter((item) => item && !skills.has(item.toLowerCase()));
-  if (missing.length > 0) {
-    console.log(`ℹ️  Not in the resume's «Навыки» (key skills): ${missing.join(', ')}`);
-  }
-  if (after === before) {
-    console.log('✅ hh.ru already has this list: nothing to save');
-    await discardHhExperience(page).catch(() => {});
-    await session.release();
-    return;
-  }
-  // «Сохранить» or «Отменить» clicked in the slot window answers the question too; the text as
-  // the form had it last (you may change it before saving) is looked for on the resume page after
-  let closedInBrowser = false;
-  let lastText = after;
-  const watch = setInterval(async () => {
-    lastText = await hhExperienceDescription(page) ?? lastText;
-    if (!closedInBrowser && !await hhExperienceFormOpen(page)) {
-      closedInBrowser = true;
-      clearInterval(watch);
-      withdrawPrompt('the form was closed in the slot window');
-    }
-  }, 2000);
-  const answer = await askUser(`Prefilled on hh.ru (slot window on port ${argv.hhPort}): check it, then save it?`, {
-    skip: 'leave it unsaved', port: argv.hhPort,
-  }).finally(() => clearInterval(watch));
-  if (answer === 'continue') {
-    await saveHhExperience(page);
-    console.log('💾 Saved');
-  } else if (closedInBrowser) {
-    const stackLine = lastText.trim().split('\n').at(-1).trim();
-    const saved = await page.waitForFunction((line) => document.body.textContent.includes(line), stackLine, { timeout: 10000 })
-      .then(() => true, () => false);
-    console.log(saved ? '💾 Saved by you in the browser' : '↪️  Closed in the browser: not saved');
-  } else {
-    await discardHhExperience(page).catch(() => {});
-    console.log('↪️  Not saved');
-  }
+  await reviewHhCvChange(page, {
+    kind: 'update', target: { company: job.company, title: job.position, description: job.description },
+    fields: { stack: argv.stack, addStack: argv.add },
+  }, { ...argv, manualSave: true, snapshotsOut: 'examples' }, resume.hash);
   await session.release();
 }
 

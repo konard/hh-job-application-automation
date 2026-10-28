@@ -179,6 +179,12 @@ function pairJobs(current, wanted) {
   const added = [];
   for (const job of wanted) {
     const index = [
+      // A language-specific copy can coexist with the old shared record until its next
+      // reviewed save. Pair the exact saved copy first rather than overwriting either one.
+      left.findIndex((item) => companySimilarity(item.company, job.company) === 1 && item.start === job.start &&
+        item.end === job.end && item.position === job.position && sameText(item.description, job.description)),
+      left.findIndex((item) => companySimilarity(item.company, job.company) === 1 && item.start === job.start &&
+        item.position === job.position && detectLanguage(item.description) === detectLanguage(job.description)),
       left.findIndex((item) => companySimilarity(item.company, job.company) === 1 && item.start === job.start),
       left.findIndex((item) => companySimilarity(item.company, job.company) === 1),
     ].find((found) => found >= 0);
@@ -199,7 +205,7 @@ function pairJobs(current, wanted) {
  * @param {Object} wanted - parseCvLino of the file
  * @returns {{changes: Object[], notes: string[]}}
  */
-export function planCvImport(current, wanted) {
+export function planCvImport(current, wanted, { detachExtra = false } = {}) {
   const { pairs, added, removed } = pairJobs(current.jobs, wanted.jobs);
   const changes = [];
   for (const pair of pairs) {
@@ -215,7 +221,7 @@ export function planCvImport(current, wanted) {
     }
     if (Object.keys(fields).length > 0) {
       changes.push({
-        kind: 'update', target: { company: pair.current.company, title: pair.current.position }, source: pair.wanted, fields, notes: [],
+        kind: 'update', target: { company: pair.current.company, title: pair.current.position, description: pair.current.description }, source: pair.wanted, fields, notes: [],
       });
     }
   }
@@ -228,7 +234,11 @@ export function planCvImport(current, wanted) {
       notes: [],
     });
   }
-  const notes = removed.map((job) => `${job.company} (${job.position}) is on hh.ru but not in the file: remove it there yourself if it should go`);
+  // Detaching changes this resume's selection; it never deletes the profile's workplace.
+  if (detachExtra) {
+    removed.forEach((job) => changes.push({ kind: 'detach', target: { company: job.company, title: job.position, description: job.description }, fields: {}, source: job, notes: [] }));
+  }
+  const notes = detachExtra ? [] : removed.map((job) => `${job.company} (${job.position}) is on hh.ru but not in the file: remove it there yourself if it should go`);
   if (wanted.title && current.title !== wanted.title) {
     notes.push(`The resume's title on hh.ru is «${current.title}», the file has «${wanted.title}»: change it in the resume's «Желаемая должность»`);
   }
@@ -253,7 +263,7 @@ export function planCvImport(current, wanted) {
  */
 export function formatCvChange(change) {
   const job = change.kind === 'add' ? change.fields : change.target;
-  const lines = [`${change.kind === 'add' ? '➕ New job' : '✏️  Update'}: ${job.company} (${job.title})`];
+  const lines = [`${change.kind === 'detach' ? '↪️  Deselect from this resume' : change.kind === 'add' ? '➕ New job' : '✏️  Update'}: ${job.company} (${job.title})`];
   const { fields } = change;
   if (fields.title && change.kind === 'update') {
     lines.push(`   position: «${change.target.title}» → «${fields.title}»`);

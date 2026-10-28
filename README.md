@@ -778,6 +778,9 @@ because it holds personal data:
 bun run cv -- export                       # every resume to examples/cv.<language>.lino
 bun run cv -- import --lang en             # bring hh.ru in line with examples/cv.en.lino
 bun run cv -- import ~/my-cv.ru.lino --resume <hash>
+bun run cv -- import ~/my-cv.en.lino --resume <hash> --one --detach-extra
+bun run cv -- edit logs/experience/my-change.json --resume <hash> --snapshots-out examples
+bun run cv -- watch --hh-port 9351 --out examples   # observe, never edit or navigate
 ```
 
 Each resume becomes one indented file: title, «Навыки», «Обо мне» and the jobs, a text line
@@ -788,11 +791,36 @@ Contacts, salary and birth date are never written: the export stops when a text 
 
 `import` reads the resume again and goes to the one with the file's title (else the only one in
 its language, or `--resume`). Each changed or new job is prefilled in the hh.ru slot (port 9351)
-and saved only when you type `y` or click «Сохранить» there; `s` leaves it unsaved. Then the
-resume is read again and what still differs is shown. hh.ru keeps jobs for the whole profile:
-editing a job that other resumes show changes it there too (it says so), and a new job is shown
-in the target resume only. Title, «Навыки» and «Обо мне» differences are listed for you to
-change.
+and the owner saves it in the browser. The app captures the fields at the final Save click,
+including changes made after prefilling, and verifies the result against fresh exports. `--one`
+stops after one position. `--confirm-save` opts into the older terminal `y` confirmation.
+
+HH.ru keeps workplaces for the whole profile. Changing a shared entry automatically prepares
+a separate copy for the target CV, retaining the city, website, industries, dates and unchanged
+description. After its reviewed save, a checkpoint in `logs/experience/cv-edits/` gives the next
+`cv edit ...next.json` command: deselect the old entry from this CV in another reviewed save.
+It does not delete the workplace or change other CVs. An existing open form blocks new editing,
+so unsaved user changes are never navigated away from. `--detach-extra` offers the same reviewed
+deselection for extra entries absent from the desired file. Exact saved copies are matched first.
+
+`edit` accepts JSON with `kind` (`add`, `update`, `copy`, `detach`), `target` (company, title and
+description to distinguish language copies), and `fields`. Fields can include `company`, `title`,
+`description`, `start`/`end` (`YYYY-MM`), `current`, `area`, `website`, and `industries` (whole labels
+as an array; commas within an industry name are preserved). This is the same reusable workflow
+used by `.lino` import. Title, «Навыки» and «Обо мне» differences remain listed for separate editing.
+The HH.ru branches of `experience sync --to hh` and `experience edit --stack/--add` use this
+same reviewed workflow, including shared-entry protection and capture of the owner's final edits.
+
+`watch` attaches to the existing slot without opening, clicking, saving or navigating any form.
+It exports actual saved CVs after each confirmed Save, retains all owner edits, and writes status
+to `logs/experience/cv-watch.json`. Cancel and failed validation are not recorded as successful
+saves. `--once` stops after one confirmed save. `--snapshots-out examples` does the same after
+`import`/`edit`; use a separate desired file so snapshots do not overwrite your pending plan.
+Publication is opt-in: `--publish` commits and pushes only the sanitized `.lino` snapshot files.
+Full private exports remain gitignored; existing PDFs and backups are kept during refreshes.
+
+Browser workflow checks use an isolated fixture, never a real account:
+`bun tests/browser/hh-cv-editor.mjs` (requires local Chrome).
 
 ### Captcha, Pauses and the Chat Panel
 

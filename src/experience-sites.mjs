@@ -6,7 +6,7 @@
  * @module experience-sites
  */
 
-import { formatMonthYear, withStack } from './experience.mjs';
+import { formatMonthYear } from './experience.mjs';
 import { alertUser } from './notify.mjs';
 import { waitForCaptcha } from './form-slots.mjs';
 import { pageLanguage } from './hh-words.mjs';
@@ -663,11 +663,16 @@ const HH = {
  * @param {{company: string, title: string, editButton: string, card: string}} target
  * @returns {boolean}
  */
-export function clickHhExperienceEdit({ company, title, editButton, card }) {
+export function clickHhExperienceEdit({ company, title, description = '', editButton, card }) {
   const norm = (text) => String(text).toLowerCase().replace(/\s+/g, ' ').trim();
   const cards = [...document.querySelectorAll(card)];
-  const match = cards.find((element) => norm(element.innerText).includes(norm(company)) && norm(element.innerText).includes(norm(title))) ??
-    cards.find((element) => norm(element.innerText).includes(norm(company)));
+  const matches = cards.filter((element) => norm(element.innerText).includes(norm(company)) &&
+    (!title || norm(element.innerText).includes(norm(title))) && (!description || norm(element.innerText).includes(norm(description))));
+  // Same company/title can be present in both languages. Ambiguity must not pick the first.
+  if (matches.length !== 1) {
+    return false;
+  }
+  const match = matches[0];
   const button = match?.querySelector(editButton) ?? match?.parentElement?.querySelector(editButton) ?? match;
   button?.click();
   return Boolean(button);
@@ -684,6 +689,9 @@ export function clickHhExperienceEdit({ company, title, editButton, card }) {
  * @returns {Promise<string[]>} Notes: what went wrong; empty when the form is open
  */
 export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 }) {
+  if (await hhExperienceFormOpen(page)) {
+    return ['hh.ru: an experience form is open; finish or close it before another edit'];
+  }
   await page.goto(`https://hh.ru/resume/${resumeHash}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // While hh.ru shows a captcha nothing is touched: the user solves it in the slot
   if (!await waitForCaptcha(page, console.log, 'slot', port)) {
@@ -703,21 +711,19 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
   }
   if (job) {
     const found = await page.evaluate(clickHhExperienceEdit, {
-      company: job.company, title: job.title ?? '', editButton: HH.editButton, card: HH.experienceCard,
+      company: job.company, title: job.title ?? '', description: job.description ?? '', editButton: HH.editButton, card: HH.experienceCard,
     });
     if (!found) {
       return [`hh.ru: no experience card of ${job.company} found on the resume page`];
     }
   } else {
-    const added = await page.evaluate(() => {
-      const add = (selector) => [...document.querySelectorAll(selector)].find((element) => /^(добавить|add)/i.test(element.innerText.trim()));
-      const button = add('[data-qa="resume-list-card-experience"] button, [data-qa="resume-list-card-experience"] a') ?? add('main button');
-      button?.click();
-      return Boolean(button);
-    });
-    if (!added) {
+    const add = page.locator('[data-qa="list-add"]:visible').first();
+    const fallback = page.locator('main').getByRole('button', { name: /^(добавить|add)( new| новый)?$/i }).first();
+    const button = await add.count() > 0 ? add : fallback;
+    if (await button.count() === 0) {
       return ['hh.ru: the «Добавить» button of the experience list was not found'];
     }
+    await button.click();
   }
   return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => sleep(1000).then(() => []), () => ['hh.ru: the experience form did not open']);
 }
@@ -732,9 +738,14 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
  * @returns {Promise<string[]>} Notes: fields that could not be set
  */
 export async function prefillHhExperience(page, change, { resumeHash, port = 9351 }) {
-  const notes = await openHhExperienceForm(page, { resumeHash, job: change.kind === 'update' ? change.target : null, port });
-  if (notes.some((note) => !note.endsWith('did not open'))) {
-    return notes;
+  const { prepareHhCvChange } = await import('./hh-cv-editor.mjs');
+  return (await prepareHhCvChange(page, change, { resumeHash, port })).notes;
+}
+
+/** Fill an already open form. Opening, copying, selecting resumes and saving stay separate. */
+export async function fillHhExperience(page, fields, { notes = [] } = {}) {
+  if (!await hhExperienceFormOpen(page)) {
+    throw new Error('hh.ru: no experience form is open');
   }
   const fill = async (selector, value) => {
     const field = page.locator(selector).first();
@@ -744,14 +755,13 @@ export async function prefillHhExperience(page, change, { resumeHash, port = 935
     }
     await field.fill(String(value));
   };
-  const { fields } = change;
-  if (fields.company && change.kind === 'add') {
+  if ('company' in fields) {
     await fill(HH.company, fields.company);
   }
   if (fields.title) {
     await fill(HH.position, fields.title);
   }
-  if (fields.description) {
+  if ('description' in fields) {
     await fill(HH.description, fields.description);
   }
   if (fields.start) {
@@ -770,9 +780,6 @@ export async function prefillHhExperience(page, change, { resumeHash, port = 935
   }
   if (fields.skills?.length) {
     notes.push(`hh.ru: skills are kept for the whole resume («Навыки»), check that it has: ${fields.skills.join(', ')}`);
-  }
-  if (change.kind === 'add') {
-    notes.push('hh.ru: fill «Город или регион» and the industry of the new job yourself if hh.ru asks for them');
   }
   return notes;
 }
@@ -839,10 +846,18 @@ export const hhExperienceResumes = (page) => page.evaluate((prefix) => [...docum
  * @param {string[]} hashes
  */
 export async function setHhExperienceResumes(page, hashes) {
-  for (const { hash, checked } of await hhExperienceResumes(page)) {
+  const available = await hhExperienceResumes(page);
+  if (available.length === 0 || hashes.some((hash) => !available.some((resume) => resume.hash === hash))) {
+    throw new Error('hh.ru: requested resume selection is unavailable');
+  }
+  for (const { hash, checked } of available) {
     if (checked !== hashes.includes(hash)) {
-      await page.locator(`[data-qa="${HH.resumeCheckbox}${hash}"]`).first().click({ force: true }).catch(() => {});
+      await page.locator(`[data-qa="${HH.resumeCheckbox}${hash}"]`).first().click({ force: true });
     }
+  }
+  const selected = (await hhExperienceResumes(page)).filter((resume) => resume.checked).map((resume) => resume.hash).sort();
+  if (JSON.stringify(selected) !== JSON.stringify([...hashes].sort())) {
+    throw new Error('hh.ru: resume selection did not match the requested checkboxes');
   }
 }
 
@@ -901,13 +916,7 @@ export async function discardLinkedInPosition(page) {
  * @returns {Promise<{notes: string[], before: string|null, after: string|null}>}
  */
 export async function prefillHhStack(page, { resumeHash, job, stack, add = false, port = 9351 }) {
-  const notes = await openHhExperienceForm(page, { resumeHash, job, port });
-  const field = page.locator(HH.description).first();
-  if (notes.length > 0 || await field.count() === 0) {
-    return { notes: notes.length > 0 ? notes : ['hh.ru: no description field in the experience form'], before: null, after: null };
-  }
-  const before = await field.inputValue();
-  const after = withStack(before, stack, { add });
-  await field.fill(after);
-  return { notes, before, after };
+  const { prepareHhCvChange } = await import('./hh-cv-editor.mjs');
+  const result = await prepareHhCvChange(page, { kind: 'update', target: job, fields: { stack, addStack: add } }, { resumeHash, port });
+  return { notes: result.notes, before: result.before.description, after: result.draft.description };
 }
