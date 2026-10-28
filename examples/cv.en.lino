@@ -65,15 +65,6 @@ resume
         'Используемые технологии:'
         'PHP 8, Symfony 7, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker, GitHub Actions, GitHub Actions Runner, Sentry, ElasticSearch, Kibana, PostHog, Okmeter, Nginx, Nginx Proxy Manager, Anthropic Claude Code CLI, OpenAI Codex CLI, Hive Mind'
     job
-      company 'Kaiten'
-      position 'Старший инженер-программист'
-      start 2024-07
-      end present
-      description
-        'Development and support of the business process management system Kaiten.ru.'
-        ' '
-        'Participation in the development of the add-ons subsystem and the creation of the Yandex.Disk add-on. Contributed to the development of the Convertinator application, specifically for converting data from ClickUp into a format for universal import into Kaiten.'
-    job
       company 'Capico LLC'
       position 'AI Senior Engineer'
       start 2025-11
@@ -85,6 +76,23 @@ resume
         ' '
         'Используемые технологии:'
         'GitLab, GitLab CI/CD, GitLab CI/CD Runner, Git, PostgreSQL, InfluxDB, Redis, Rust, Vue.js, Node.js, TradingView, Anthropic Claude Code CLI, OpenAI Codex CLI'
+    job
+      company 'Kaiten'
+      position 'Development Team Lead'
+      start 2024-07
+      end 2025-11
+      description
+        'AI-first software development. Developed an automated CI/CD pipeline to prepare draft fixes for errors reported in Sentry. And tools for automatic conflicts resolution on high frequency merges from team members and AI agents.'
+        ' '
+        'Led a team of five senior developers.'
+        ' '
+        "Developed and maintained Kaiten.ru, a business process management system: added new features, fixed bugs and improved internal developer tooling. Contributed to Kaiten's iOS and Android applications and billing system."
+        ' '
+        'Contributed to the add-ons subsystem and developed the Yandex.Disk add-on.'
+        "Contributed to Convertinator, including converting ClickUp data into Kaiten's universal import format."
+        ' '
+        'Technologies and tools:'
+        'GitHub, GitHub Actions, GitHub Actions Runner, Ansible, Terraform, Docker, Kubernetes, PostgreSQL, Redis, RabbitMQ, Redux, Node.js, React.js, Electron, Capacitor, ElasticSearch, Kibana, Prometheus, Grafana, Sentry, Selectel Cloud, Yandex Cloud, Anthropic Claude Code CLI, OpenAI Codex CLI, GitHub Copilot, Cursor, Visual Studio Code'
     job
       company 'Deep.Foundation'
       position 'Co-founder, CTO'

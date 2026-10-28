@@ -778,29 +778,41 @@ export async function prefillHhExperience(page, change, { resumeHash, port = 935
 }
 
 /** Choose the month of hh.ru's start (0) or end (1) date in its custom select */
-async function chooseHhMonth(page, index, date, notes) {
+export async function chooseHhMonth(page, index, date, notes) {
   if (!date.includes('-')) {
     return;
   }
-  // The months are named in hh.ru's language
-  const name = formatMonthYear(date, pageLanguage(await page.evaluate(() => document.documentElement.lang).catch(() => ''))).split(' ')[0];
-  // The visible trigger shows "Месяц" (Month) and the chosen month; its combobox input is hidden
-  const trigger = page.locator(`${HH.monthSelect}:visible`).filter({ hasText: /^\s*(Месяц|Month)/ }).nth(index);
-  if (await trigger.count() === 0) {
-    notes.push(`hh.ru: set the ${index === 0 ? 'start' : 'end'} month (${name}) yourself`);
+  // An English page can still offer Russian months. HH.ru also replaces the trigger with a
+  // searchable input while it is focused, including after Escape closed its option list.
+  const language = pageLanguage(await page.evaluate(() => document.documentElement.lang).catch(() => ''));
+  const names = [...new Set([language, 'ru', 'en'].map((lang) => formatMonthYear(date, lang).split(' ')[0]))];
+  const field = page.locator(`[data-qa="resume-editor-experience-${index === 0 ? 'start' : 'end'}-month-input"]`).first();
+  const scoped = await field.count() > 0;
+  const trigger = scoped ? field.locator(`${HH.monthSelect}:visible`).first()
+    : page.locator(`${HH.monthSelect}:visible`).filter({ hasText: /^\s*(Месяц|Month)/ }).nth(index);
+  const value = scoped ? field.locator('[data-qa="trigger-values-wrapper"]').first() : trigger.locator('[data-qa="trigger-values-wrapper"]');
+  const current = await value.textContent({ timeout: 1000 }).catch(() => '');
+  if (names.some((name) => current?.trim().toLowerCase() === name.toLowerCase())) {
     return;
   }
-  const current = await trigger.locator('[data-qa="trigger-values-wrapper"]').innerText().catch(() => '');
-  if (current.trim().toLowerCase() === name.toLowerCase()) {
-    return;
+  const input = scoped ? field.locator('input[role="combobox"]:visible').first() : null;
+  if (!input || await input.count() === 0) {
+    if (await trigger.count() === 0) {
+      notes.push(`hh.ru: set the ${index === 0 ? 'start' : 'end'} month (${names[0]}) yourself`);
+      return;
+    }
+    await trigger.click();
   }
-  await trigger.click();
-  const option = page.getByRole('option', { name, exact: true }).first();
+  if (input && await input.count() > 0) {
+    await input.fill('');
+    await input.press('ArrowDown');
+  }
+  const option = page.getByRole('option', { name: new RegExp(`^(?:${names.join('|')})$`, 'iu') }).first();
   if (await option.waitFor({ timeout: 5000 }).then(() => true, () => false)) {
     await option.click();
   } else {
     await page.keyboard.press('Escape');
-    notes.push(`hh.ru: set the ${index === 0 ? 'start' : 'end'} month (${name}) yourself`);
+    notes.push(`hh.ru: set the ${index === 0 ? 'start' : 'end'} month (${names[0]}) yourself`);
   }
 }
 

@@ -8,11 +8,11 @@ HH.ru changes are prepared one position at a time. The owner reviews and saves e
 
 ## Synchronization status
 
-Snapshot on 2026-10-28, before the English edits:
+Snapshot on 2026-10-28, after the owner saved English Kaiten:
 
 - The Russian CV contains the saved AI-first Evirma, Capico and Kaiten descriptions, including the owner's edits to the proposed text.
-- Both CVs contain the same 12 jobs.
-- English Kaiten still has a senior-engineer title and an open-ended employment period. It needs the Team Lead title and July 2024–November 2025 dates from the Russian CV; this also restores the Evirma → Capico → Kaiten order.
+- Both CVs contain the same 12 jobs in the same order, with matching dates.
+- English Kaiten has the Development Team Lead title and July 2024–November 2025 dates, restoring the Evirma → Capico → Kaiten order. Its saved description includes the owner's addition about automatic conflict resolution for frequent merges from team members and AI agents. The equivalent Russian sentence is prefilled for the owner's review and save; it is not yet part of the saved Russian snapshot.
 - English Evirma and Capico still display the shared Russian descriptions. Their English translations are pending individual review and saves.
 
 ## English details to retain and consider adding to Russian later
