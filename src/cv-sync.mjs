@@ -18,18 +18,19 @@ import { seedHhSession } from './login.mjs';
 import { enableConfirmations, askUser, withdrawPrompt } from './confirmations.mjs';
 import { formatCvChange, parseCvLino, pickResumeFor, planCvImport } from './cv.mjs';
 import { exportSavedCvs, writeCvSnapshots, publishCvSnapshots } from './cv-store.mjs';
-import { reviewHhCvChange } from './cv-review.mjs';
+import { reviewHhCvChange, reviewCvSequence, waitForSavedCvCheckpoint } from './cv-review.mjs';
 import { runCvWatch } from './cv-watch.mjs';
 import {
   discardHhExperience, hhExperienceFormOpen, saveHhExperience,
 } from './experience-sites.mjs';
 
-const USAGE = `Usage: bun run cv -- <export|import|edit|watch> [file] [options]
+const USAGE = `Usage: bun run cv -- <export|import|edit|batch|watch> [file] [options]
 
   export                   Read every hh.ru resume into <out>/cv.<language>.lino
   import [file]            Prefill hh.ru with the jobs of a CV file (default <out>/cv.<lang>.lino), one by one
                            in the hh.ru slot; the owner saves each position in the browser
   edit <change.json>       Prepare one add/update/copy/detach change (fields + target); requires --resume
+  batch <changes.json>     Review a JSON array of changes, including each copy's deselection, one Save at a time
   watch                   Passively monitor the existing editor and export every confirmed Save
 
   --lang <ru|en>           The file to import when none is given (default ru)
@@ -46,14 +47,15 @@ const WORKFLOW_USAGE = `
   --snapshots-out <dir>     Export actual saved CVs here after each import/edit save
   --publish                Commit/push only exported .lino files (explicit opt-in)
   --once                   Stop watch after one verified save
-  --state-file <file>      Watch status (default logs/experience/cv-watch.json)`;
+  --state-file <file>      Watch status (default logs/experience/cv-watch.json)
+  --after-checkpoint <f>   Start edit/batch only when the preceding checkpoint is saved_by_user`;
 
 function parseArgs(args) {
   const parsed = {
     command: null, file: null, lang: 'ru', out: path.join(process.cwd(), 'examples'), resume: '', hhPort: 9351, hhBrowserPort: 9322,
     keepOpenHours: 24, trace: tracingEnabled(),
     one: false, detachExtra: false, manualSave: true, snapshotsOut: '', publish: false, once: false,
-    stateFile: 'logs/experience/cv-watch.json',
+    stateFile: 'logs/experience/cv-watch.json', afterCheckpoint: '',
   };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split(/=(.*)/s);
@@ -73,6 +75,7 @@ function parseArgs(args) {
       '--publish': () => (parsed.publish = true),
       '--once': () => (parsed.once = true),
       '--state-file': () => (parsed.stateFile = path.resolve(value())),
+      '--after-checkpoint': () => (parsed.afterCheckpoint = path.resolve(value())),
     };
     if (flag === '--help' || flag === '-h') {
       console.log(USAGE + WORKFLOW_USAGE);
@@ -81,13 +84,13 @@ function parseArgs(args) {
       options[flag]();
     } else if (!parsed.command && !flag.startsWith('-')) {
       parsed.command = flag;
-    } else if (['import', 'edit'].includes(parsed.command) && !parsed.file && !flag.startsWith('-')) {
+    } else if (['import', 'edit', 'batch'].includes(parsed.command) && !parsed.file && !flag.startsWith('-')) {
       parsed.file = path.resolve(flag);
     } else {
       throw new Error(`Unknown option ${args[i]}\n\n${USAGE}`);
     }
   }
-  if (!['export', 'import', 'edit', 'watch'].includes(parsed.command)) {
+  if (!['export', 'import', 'edit', 'batch', 'watch'].includes(parsed.command)) {
     console.log(USAGE + WORKFLOW_USAGE);
     process.exit(1);
   }
@@ -195,9 +198,15 @@ async function runEdit(argv) {
   if (!argv.file || !argv.resume) {
     throw new Error('edit requires a change.json file and --resume <hash>');
   }
-  const change = JSON.parse(await fs.readFile(argv.file, 'utf8'));
-  if (!['add', 'update', 'copy', 'detach'].includes(change.kind) || !change.fields || (change.kind !== 'add' && !change.target?.company)) {
-    throw new Error('Invalid change: kind add/update/copy/detach, fields, and target.company for an existing position are required');
+  const input = JSON.parse(await fs.readFile(argv.file, 'utf8'));
+  const changes = argv.command === 'batch' ? input : [input];
+  if (!Array.isArray(changes) || changes.length === 0 || changes.some((change) =>
+    !['add', 'update', 'copy', 'detach'].includes(change.kind) || !change.fields || (change.kind !== 'add' && !change.target?.company))) {
+    throw new Error('Invalid changes: kind add/update/copy/detach, fields, and target.company for an existing position are required');
+  }
+  if (argv.afterCheckpoint) {
+    console.log(`Waiting for the preceding verified Save: ${argv.afterCheckpoint}`);
+    await waitForSavedCvCheckpoint(argv.afterCheckpoint);
   }
   const { chromium } = await import('playwright');
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${argv.hhPort}`);
@@ -206,7 +215,13 @@ async function runEdit(argv) {
     if (!page) {
       throw new Error('No existing resume editor page; open the CV in the editor slot first');
     }
-    await reviewHhCvChange(page, change, { ...argv, manualSave: true }, argv.resume);
+    const review = (change) => reviewHhCvChange(page, change, { ...argv, manualSave: true }, argv.resume);
+    if (argv.command === 'batch') {
+      await reviewCvSequence(changes, review);
+      console.log('All queued positions were saved and verified.');
+    } else {
+      await review(changes[0]);
+    }
   } finally {
     await browser.close();
   }
@@ -217,7 +232,7 @@ async function main() {
   if (argv.command === 'watch') {
     return runCvWatch(argv);
   }
-  if (argv.command === 'edit') {
+  if (argv.command === 'edit' || argv.command === 'batch') {
     return runEdit(argv);
   }
   return argv.command === 'export' ? runExport(argv) : runImport(argv);

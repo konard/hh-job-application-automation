@@ -57,7 +57,44 @@ export async function reviewHhCvChange(page, change, argv, resumeHash) {
       await fs.writeFile(followup, `${JSON.stringify(prepared.followup, null, 2)}\n`);
       console.log(`Next reviewed step: bun run cv -- edit ${followup} --resume ${resumeHash}`);
     }
-    return true;
+    return { saved: true, followup: prepared.followup, checkpoint };
   }
   return false;
+}
+
+/** Continue only after a verified user save, never from an idle or merely closed browser. */
+export async function waitForSavedCvCheckpoint(file, { intervalMs = 1000 } = {}) {
+  for (;;) {
+    const state = await fs.readFile(file, 'utf8').then(JSON.parse).catch((error) => {
+      if (error instanceof SyntaxError) {
+        return null; // another process is finishing an atomic-sized checkpoint write
+      }
+      throw error;
+    });
+    if (state?.status === 'saved_by_user') {
+      return state;
+    }
+    if (state?.status?.startsWith('discarded') || state?.status === 'cancelled') {
+      throw new Error('The preceding CV edit was cancelled; sequence not continued');
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+/** Each review promise resolves only after Save was verified. Copies add their deselection step. */
+export async function reviewCvSequence(changes, review) {
+  const queue = [...changes];
+  const saved = [];
+  while (queue.length > 0) {
+    const change = queue.shift();
+    const result = await review(change);
+    if (!result?.saved) {
+      throw new Error('CV review was not saved; remaining positions left untouched');
+    }
+    saved.push(change);
+    if (result.followup) {
+      queue.unshift(result.followup);
+    }
+  }
+  return saved;
 }

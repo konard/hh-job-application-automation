@@ -781,6 +781,7 @@ bun run cv -- import ~/my-cv.ru.lino --resume <hash>
 bun run cv -- import ~/my-cv.en.lino --resume <hash> --one --detach-extra
 bun run cv -- edit logs/experience/my-change.json --resume <hash> --snapshots-out examples
 bun run cv -- watch --hh-port 9351 --out examples   # observe, never edit or navigate
+bun run cv -- batch ~/cv-changes.json --resume <hash> --snapshots-out examples
 ```
 
 Each resume becomes one indented file: title, «Навыки», «Обо мне» and the jobs, a text line
@@ -813,6 +814,10 @@ as an array; commas within an industry name are preserved). This is the same reu
 used by `.lino` import. Title, «Навыки» and «Обо мне» differences remain listed for separate editing.
 The HH.ru branches of `experience sync --to hh` and `experience edit --stack/--add` use this
 same reviewed workflow, including shared-entry protection and capture of the owner's final edits.
+`batch` accepts an array of these changes and advances after each verified browser Save,
+automatically inserting a copy's separate deselection step. `--after-checkpoint <file>` waits
+for an already-running review to record `saved_by_user` before starting the queue. An idle or
+closed browser is insufficient; the owner does not need to send a separate “Saved” chat message.
 
 `watch` attaches to the existing slot without opening, clicking, saving or navigating any form.
 It exports actual saved CVs after each confirmed Save, retains all owner edits, and writes status
