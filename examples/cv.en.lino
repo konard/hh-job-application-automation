@@ -70,6 +70,18 @@ resume
       start 2025-11
       end 2026-05
       description
+        'AI-first product development.'
+        ' '
+        'Developed a Grid trading bot for ByBit and BitGet. Maintained and improved the UI/UX of the trading terminal and other components of the trading aggregator.'
+        ' '
+        'Technologies and tools:'
+        'GitLab, GitLab CI/CD, GitLab CI/CD Runner, Git, PostgreSQL, InfluxDB, Redis, Rust, Vue.js, Node.js, TradingView, Anthropic Claude Code CLI, OpenAI Codex CLI'
+    job
+      company 'Capico LLC'
+      position 'AI Senior Engineer'
+      start 2025-11
+      end 2026-05
+      description
         'Разработка и развитие продукта с применением AI-first подхода.'
         ' '
         'Разработка торгового Grid бота для бирж ByBit и BitGet. Поддержка и улучшения UI/UX для торгового терминала и других компонентов системы торгового агрегатора.'
