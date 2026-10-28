@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm, readHhCvForm, verifyHhSavedForm, discardUnchangedHhAbout } from '../../src/hh-cv-editor.mjs';
-import { chooseHhMonth, clickHhExperienceEdit, openHhExperienceForm } from '../../src/experience-sites.mjs';
+import { chooseHhMonth, clickHhExperienceEdit, openHhExperienceForm, discardHhExperience } from '../../src/experience-sites.mjs';
 import { applyResumeAliases } from '../../src/resume-aliases.mjs';
 
 function fixture() {
@@ -182,6 +182,19 @@ try {
   } }), []);
   assert.equal((await readHhExperienceForm(page)).description, 'Исходное описание.');
   assert.equal(new URL(page.url()).pathname, '/profile/edit/experience');
+  await page.evaluate(() => {
+    const cancel = document.querySelector('[data-qa=profile-layout-cancel-button]');
+    cancel.onclick = () => {
+      const button = document.createElement('button');
+      button.textContent = "Don't";
+      button.onclick = window.list;
+      document.querySelector('main').append(button);
+    };
+  });
+  await page.locator('[data-qa=profile-layout-cancel-button]').click();
+  await discardHhExperience(page);
+  assert.equal(await readHhExperienceForm(page), null);
+  assert.equal(await page.evaluate(() => window.saveCount), 0);
   await page.goto('https://hh.ru/resume/en');
   await page.setContent(`<main><div data-qa="profile-experience-company-card"><h2>Example</h2>
     <section>AI Tech Lead<p>English copy.</p><button data-qa="edit-experience-button-en" onclick="window.clicked='en'">Edit</button></section>

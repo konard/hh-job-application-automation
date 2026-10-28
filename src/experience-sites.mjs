@@ -922,8 +922,8 @@ export async function discardHhExperience(page) {
   const onDialog = (dialog) => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss();
   page.on('dialog', onDialog);
   try {
-    await page.locator(HH.cancel).first().click();
-    const discard = page.getByRole('button', { name: /^(не надо|don['’]?t save|discard)$/i });
+    const discard = page.getByRole('button', { name: /^(не надо|don['’]?t(?: save)?|discard)$/i });
+    if (!await discard.isVisible()) await page.locator(HH.cancel).first().click();
     if (await discard.waitFor({ timeout: 1500 }).then(() => true, () => false)) {
       await discard.click();
     }
