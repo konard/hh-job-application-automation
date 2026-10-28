@@ -147,7 +147,7 @@ resume
         'Managing a team of programmers from multiple countries, tasks formulation and decomposition, coordinating task execution, ensuring code quality and adherence to code style conventions, guidelines and best practices, guaranteeing that code is covered with documentation, code examples, tests, and benchmarks, verifying the operability of the developed software solutions, developing continuous integration and delivery.'
         'Managing social media and interacting with the audience.'
         'Developing associative engine constructors for associative databases (Doublets, Triplets, Sequences).'
-        'Developing source code translators between languages based on rules (C# -> C++, C# -> Python, C++ -> Java, Python -> Nim, C# -> Python, Java -> C++).'
+        'Developing source code translators between languages based on rules (C# -> C++, C# -> Python, C++ -> Java, Python -> Nim, Java -> C++).'
         'Developing bots: VK bot for organizing interactions within the programmer community, Discord bot for automatic GitHub user registration, GitHub bot for generating repositories with source code and performing routine tasks, trading scalping bot trading via Tinkoff Invest API.'
         'Developing a search robot (web crawler) that loads web pages into associative storage.'
         'Developing additional libraries for developers.'
@@ -157,7 +157,8 @@ resume
         'Conducting research and experiments.'
         'Developing demonstration projects.'
         ' '
-        'Skills, technologies, and tools: Rust, C# (.NET Core, .NET Framework), C/C++, JavaScript, HTML, CSS, Visual Studio, Visual Studio Code, Rider, Git, GitHub, NuGet, PVS-Studio, ASP.NET MVC, SQLite, jQuery, OBS-Studio, Unix shell, Python, TeX, DocFX, Travis CI, git, GitHub, GitHub Actions.'
+        'Skills, technologies, and tools:'
+        'Rust, C# (.NET Core, .NET Framework), C/C++, JavaScript, HTML, CSS, Visual Studio, Visual Studio Code, Rider, Git, GitHub, NuGet, PVS-Studio, ASP.NET MVC, SQLite, jQuery, OBS-Studio, Unix shell, Python, TeX, DocFX, Travis CI, GitHub Actions'
     job
       company 'ELAR JSC'
       position 'Programmer'
