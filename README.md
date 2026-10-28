@@ -808,6 +808,11 @@ its language, or `--resume`). Each changed or new job and the About text is pref
 and the owner saves it in the browser. The app captures the fields at the final Save click,
 including changes made after prefilling, and verifies the result against fresh exports. `--one`
 stops after one position. `--confirm-save` opts into the older terminal `y` confirmation.
+Save attempts are recorded before export verification. Transient verification failures retry
+without another click. A resumed About queue can recover an earlier Save only when HH.ru's
+matching Save-return URL, changed saved export and displayed About text agree; closing or
+cancelling an unchanged draft never counts as a Save. Export navigation waits for the response
+commit so unrelated slow page resources do not stall the workflow.
 
 HH.ru keeps workplaces for the whole profile. Changing a shared entry automatically prepares
 a separate copy for the target CV, retaining the city, website, industries, dates and unchanged

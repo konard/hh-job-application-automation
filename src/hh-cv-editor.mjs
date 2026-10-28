@@ -93,6 +93,8 @@ export async function prefillHhAboutDraft(page, change, { resumeHash }) {
     const field = document.querySelector('textarea[data-qa="resume-editor-about"]');
     return field && Object.keys(field).some((name) => name.startsWith('__reactProps$') && typeof field[name]?.onChange === 'function');
   }, null, { timeout: 20000 });
+  await editor.focus();
+  await page.evaluate(() => new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
   const before = await readHhCvForm(page);
   if (before?.kind !== 'about' || before.resumeHash !== resumeHash) throw new Error('hh.ru: About editor belongs to a different CV');
   if (change.target?.about !== undefined && exportText(before.about) !== exportText(change.target.about)) {
@@ -102,14 +104,12 @@ export async function prefillHhAboutDraft(page, change, { resumeHash }) {
   const max = Number(await editor.getAttribute('maxlength'));
   if (max > 0 && wanted.length > max) throw new Error(`hh.ru: About draft exceeds its ${max}-character limit`);
   if (await editor.inputValue() !== before.about) throw new Error('hh.ru: About was edited during comparison; left untouched');
-  await editor.fill(wanted);
-  const controlledValue = await editor.evaluate((field) => field[Object.keys(field).find((name) => name.startsWith('__reactProps$'))]?.value);
-  if (controlledValue !== wanted) {
-    // Some HH.ru builds update the DOM on bulk input without updating controlled state.
-    // A native keystroke and its undo go through the same onChange path as owner typing.
-    await editor.press('Space');
-    await editor.press('Backspace');
-  }
+  // Focus is settled before native insertion. Always finish through the keyboard onChange
+  // path: HH.ru can briefly report a bulk DOM value before restoring its old controlled state.
+  await editor.press('ControlOrMeta+A');
+  await page.keyboard.insertText(wanted);
+  await editor.press('Space');
+  await editor.press('Backspace');
   await page.waitForFunction((wanted) => {
     const field = document.querySelector('textarea[data-qa="resume-editor-about"]');
     const props = field?.[Object.keys(field).find((name) => name.startsWith('__reactProps$'))];
@@ -117,6 +117,7 @@ export async function prefillHhAboutDraft(page, change, { resumeHash }) {
   }, wanted, { timeout: 5000 });
   await editor.blur();
   await page.evaluate(() => new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
+  await page.waitForTimeout(750);
   const draft = await readHhCvForm(page);
   if (draft.about !== wanted) throw new Error('hh.ru: About prefill did not match the requested text');
   return { kind: 'about', before, draft, followup: null, notes: [] };
@@ -329,7 +330,7 @@ export function verifyHhSavedForm(form, resumes) {
 }
 
 /** Passive save monitoring. A save is reported only after the form closes, never for Cancel. */
-export async function observeHhCvSaves(page, { onSaved, onState = () => {}, onError = console.error } = {}) {
+export async function observeHhCvSaves(page, { onSaved, onAttempt = async () => {}, onState = () => {}, onError = console.error } = {}) {
   const timers = new Set();
   let stopped = false;
   let generation = 0;
@@ -346,8 +347,17 @@ export async function observeHhCvSaves(page, { onSaved, onState = () => {}, onEr
       return;
     }
     const attempt = ++generation;
+    await onAttempt(form);
     onState({ state: 'saving', form });
     let attempts = 0;
+    let verificationAttempts = 0;
+    const retryVerification = () => {
+      verificationAttempts++;
+      if (!stopped && attempt === generation && verificationAttempts < 5) {
+        timer = setTimeout(check, Math.min(verificationAttempts * 1000, 5000));
+        timers.add(timer);
+      }
+    };
     const check = async () => {
       timers.delete(timer);
       if (stopped || attempt !== generation) {
@@ -357,6 +367,7 @@ export async function observeHhCvSaves(page, { onSaved, onState = () => {}, onEr
         if (!await hhCvFormOpen(page) && /\/resume\/|\/profile\/edit\/experience(?:\?|$)/.test(page.url())) {
           const verified = await onSaved(form);
           onState({ state: verified === false ? 'not_saved' : 'saved', form });
+          if (verified === false) retryVerification();
         } else if (++attempts < 120) {
           timer = setTimeout(check, 1000);
           timers.add(timer);
@@ -365,6 +376,7 @@ export async function observeHhCvSaves(page, { onSaved, onState = () => {}, onEr
         }
       } catch (error) {
         onError(error);
+        retryVerification();
       }
     };
     let timer = setTimeout(check, 500);

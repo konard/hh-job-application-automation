@@ -27,6 +27,9 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
     return resumes;
   };
   const stopObserver = await observeHhCvSaves(page, {
+    onAttempt: async (form) => {
+      await fs.writeFile(`${path.dirname(stateFile)}/cv-last-save-attempt.json`, `${JSON.stringify({ at: new Date().toISOString(), form, verificationPending: true }, null, 2)}\n`);
+    },
     onSaved: async (form) => {
       queue = queue.catch(() => {}).then(async () => {
         const resumes = await snapshot();
@@ -39,6 +42,7 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
         const title = form.kind === 'about' ? resumes.find((resume) => resume.hash === form.resumeHash)?.cv.title : form.title;
         lastSaved = { at: new Date().toISOString(), kind: form.kind ?? 'workplace', resumeHash: form.resumeHash, company, title, url: form.url, verified: true };
         await fs.writeFile(`${path.dirname(stateFile)}/cv-last-saved.json`, `${JSON.stringify({ ...lastSaved, form }, null, 2)}\n`);
+        await fs.writeFile(`${path.dirname(stateFile)}/cv-last-save-attempt.json`, `${JSON.stringify({ at: lastSaved.at, form, verificationPending: false, verified: true }, null, 2)}\n`);
         console.log(`Saved and exported: ${company} / ${title}. Your exact edits were retained.`);
         if (once) {
           done();

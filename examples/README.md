@@ -8,7 +8,7 @@ HH.ru changes are prepared one position at a time. The owner reviews and saves e
 
 ## Synchronization status
 
-Snapshot on 2026-10-28, after the owner saved both Capico steps:
+Snapshot on 2026-10-28, after the latest verified Russian About save:
 
 - The Russian CV contains the saved AI-first Evirma, Capico and Kaiten descriptions, including the owner's edits to the proposed text.
 - Both saved CVs contain the same 12 jobs, with matching order and dates. The latest three roles' technology lists match across languages, including Claude Code and Codex in all three and Hive Mind in Evirma.
@@ -21,14 +21,18 @@ A subsequent raw technology audit found incomplete About inventories and duplica
 previous deduplicating parser had hidden. The reviewed plan consolidates 201 technical entries in
 both About sections, preserves their biography/personal text, removes duplicates in both languages'
 Deep.Foundation and LinksPlatform lists, and adds Lua to Russian ArtBridge from its English counterpart.
-These changes require the owner's browser Save; they are not claimed as saved in this status note.
+Russian About has now been saved and independently verified from fresh exports. It contains all
+201 technical entries and the owner's additional wording about other water-related technologies.
+English About and the position-list cleanups still require the owner's browser Save.
 Canonical technology names use inline parentheses only for verified alternative spellings actually
 found in the local vacancy corpus and absent elsewhere in the CV. The old separate name-variant
 section is removed in the proposed About updates.
 The revised drafts alphabetize each technical category, use lowercase `k8s`, and distinguish
 `npm (JS/TS)` from `Nginx Proxy Manager (NPM)`. Their introductions now include AI engineering,
 teaching effective AI use, and interest in water treatment, medical, mining and space technologies.
-These introduction changes also await the owner's Save; snapshots remain actual saved data.
+Russian introduction changes are saved; their English counterpart is prefilled for review.
+Snapshots remain actual saved data. A transient export timeout initially stalled the queue;
+the Russian Save has been recovered and its exact owner edits retained.
 Run `bun run cv -- technologies --hh-browser-port 9351` for a fresh audit. Its verification covers
 technology inventories, not the older prose differences below. The example files continue to show
 only actual saved content, and are refreshed after each confirmed Save.

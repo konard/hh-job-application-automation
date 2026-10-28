@@ -2,9 +2,19 @@ import { describe, test, assert } from 'test-anywhere';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { reviewCvSequence, waitForSavedCvCheckpoint } from '../src/cv-review.mjs';
+import { reviewCvSequence, waitForSavedCvCheckpoint, verifiedAboutSaveReturn } from '../src/cv-review.mjs';
 
 describe('reviewed CV sequence', () => {
+  test('About recovery requires a changed saved export, the matching Save return and rendered text', () => {
+    const evidence = { url: 'https://hh.ru/resume/ru?hhtmFrom=resume_partial_edit', resumeHash: 'ru',
+      change: { kind: 'about', target: { about: 'Before.' }, fields: { about: 'Draft.' } },
+      cv: { about: 'Owner added water-related technology interests.' }, renderedAbout: 'Owner added water-related technology interests.\nСвернуть' };
+    assert.equal(verifiedAboutSaveReturn(evidence).about, evidence.cv.about);
+    assert.equal(verifiedAboutSaveReturn({ ...evidence, url: 'https://hh.ru/resume/ru' }), null);
+    assert.equal(verifiedAboutSaveReturn({ ...evidence, resumeHash: 'en' }), null);
+    assert.equal(verifiedAboutSaveReturn({ ...evidence, cv: { about: 'Before.' } }), null);
+    assert.equal(verifiedAboutSaveReturn({ ...evidence, renderedAbout: 'Different saved text.' }), null);
+  });
   test('waits for a verified Save, then deselects the original before the next position', async () => {
     const calls = [];
     let save;

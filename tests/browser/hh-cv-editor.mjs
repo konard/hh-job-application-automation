@@ -275,6 +275,21 @@ try {
   assert.equal(aliasDraft.pending, true);
   assert.ok((await readHhCvForm(page)).about.includes('Go (Golang)'));
   assert.equal(await page.evaluate(() => window.saveCount), 0); // fresh fixture document, no Save
+  let verificationAttempts = 0;
+  let saveAttempts = 0;
+  let retriedResolve;
+  const retried = new Promise((resolve) => { retriedResolve = resolve; });
+  const stopRetry = await observeHhCvSaves(page, { onAttempt: () => { saveAttempts++; }, onError: () => {}, onSaved: () => {
+    verificationAttempts++;
+    if (verificationAttempts === 1) throw new Error('Temporary export timeout');
+    retriedResolve();
+    return true;
+  } });
+  await page.locator('[data-qa=resume-partial-edit-save]').click();
+  await retried;
+  assert.equal(saveAttempts, 1);
+  assert.equal(verificationAttempts, 2);
+  stopRetry();
   console.log('Browser checks passed: shared copy, metadata, language selection, draft protection, dates, exact user-save capture and deselection without deletion.');
 } finally {
   await browser.close();

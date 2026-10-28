@@ -144,7 +144,7 @@ async function main() {
 
     let hashes = argv.resume ? [argv.resume] : [];
     if (hashes.length === 0) {
-      await page.goto(RESUMES_URL, { waitUntil: 'domcontentloaded' });
+      await page.goto(RESUMES_URL, { waitUntil: 'commit', timeout: 60000 });
       await page.waitForSelector(SELECTORS.resume, { timeout: 20000 }).catch(() => {});
       const resumes = await readResumes({ evaluate: (fn, arg) => page.evaluate(fn, arg) });
       const choice = pickResume(resumes);
@@ -173,7 +173,7 @@ async function main() {
 async function exportResume(page, hash, formats, out) {
   // Download from inside the page, so the browser's own TLS stack and cookies are used
   // and no error message can carry the cookie header
-  await page.goto(`https://hh.ru/resume/${hash}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`https://hh.ru/resume/${hash}`, { waitUntil: 'commit', timeout: 60000 });
   await fs.mkdir(out, { recursive: true });
   const saved = {};
   for (const format of formats) {
