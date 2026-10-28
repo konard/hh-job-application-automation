@@ -6,7 +6,7 @@ import { collectStack } from './resume-stack.mjs';
 export const TECHNOLOGY_ALIASES_FILE = path.join(process.cwd(), 'data/technology-aliases.lino');
 const escape = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const key = (text) => String(text).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
-const regex = (term) => new RegExp(`(?<![\\p{L}\\p{N}#+])${term === 'Go' ? '(?:Go|GO)' : escape(term).replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}#+])`, term === 'Go' ? 'gu' : 'giu');
+const regex = (term) => new RegExp(`(?<![\\p{L}\\p{N}#+])${term === 'Go' ? '(?:Go|GO)' : escape(term).replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}#+])`, ['Go', 'npm'].includes(term) ? 'gu' : 'giu');
 export const containsTechnologySpelling = (text, spelling) => regex(spelling).test(text);
 
 export async function loadTechnologyAliases(file = TECHNOLOGY_ALIASES_FILE) {
@@ -34,6 +34,13 @@ export function technologyMentions(text, aliases) {
 
 export const resumeText = (resume) => [resume.title, ...(resume.keySkills ?? []), resume.about,
   ...(resume.jobs ?? []).flatMap((job) => [job.position, job.description])].filter(Boolean).join('\n');
+
+/** Uppercase NPM alone can name either product; only the full contextual labels resolve it. */
+export function ambiguousTechnologyNames(text) {
+  const rest = String(text).replace(/Nginx Proxy Manager\s*(?:\(NPM\))?/gi, '').replace(/npm\s*\(JS\/TS\)/gi, '');
+  return /(?<![\p{L}\p{N}])NPM(?![\p{L}\p{N}])/u.test(rest)
+    ? [{ spelling: 'NPM', candidates: ['npm (JS/TS)', 'Nginx Proxy Manager'] }] : [];
+}
 
 /** Exact observed spellings in the private corpus, once per vacancy and ignoring duplicate IDs. */
 export function observedTechnologyNames(vacancies, aliases) {
@@ -91,7 +98,7 @@ export function vacancyRequirements(description) {
 export function compareVacancyToResume(vacancy, resume, aliases) {
   aliases = new Map(aliases);
   for (const skill of vacancy.skills ?? []) {
-    if (skill.length > 1 && !technologyMentions(skill, aliases).length) aliases.set(skill, [skill]);
+    if (skill.length > 1 && skill !== 'NPM' && !technologyMentions(skill, aliases).length) aliases.set(skill, [skill]);
   }
   const sections = vacancyRequirements(vacancy.description);
   const explicit = [...vacancy.skills ?? [], ...sections.required].join('\n');
@@ -112,7 +119,7 @@ export function compareVacancyToResume(vacancy, resume, aliases) {
       .filter((candidate) => candidate.similarity >= 0.8).sort((a, b) => b.similarity - a.similarity).slice(0, 3);
     return candidates.length ? [{ technology: item.canonical, candidates: candidates.map((candidate) => candidate.name) }] : [];
   });
-  return { scope, matched, missing, aliases: variants, similarNames, total: wanted.length,
+  return { scope, matched, missing, aliases: variants, similarNames, ambiguousNames: ambiguousTechnologyNames(explicit.trim() ? explicit : vacancy.description), total: wanted.length,
     coverage: wanted.length ? Math.round(100 * matched.length / wanted.length) : null, ...sections };
 }
 
@@ -120,7 +127,7 @@ export function compareVacancyToResume(vacancy, resume, aliases) {
 export function withResumeVocabulary(aliases, resume) {
   const expanded = new Map(aliases);
   for (const name of collectStack(resume).all) {
-    if (name.length > 1 && name.length < 70 && !technologyMentions(name, aliases).length) expanded.set(name, [name]);
+    if (name.length > 1 && name.length < 70 && name !== 'NPM' && !technologyMentions(name, aliases).length) expanded.set(name, [name]);
   }
   return expanded;
 }
@@ -134,11 +141,12 @@ export function formatVacancyMatch(vacancy, comparison) {
     `   No résumé evidence: ${names(comparison.missing)}`,
     `   Equivalent spellings to add: ${comparison.aliases.map((item) => `${item.spelling} = ${item.canonical} (${item.evidence.join(', ')})`).join('; ') || '—'}`,
     ...(comparison.similarNames.length ? [`   Similar names to review: ${comparison.similarNames.map((item) => `${item.technology} ≈ ${item.candidates.join(', ')}`).join('; ')}`] : []),
+    ...(comparison.ambiguousNames?.length ? [`   Ambiguous names to review: ${comparison.ambiguousNames.map((item) => `${item.spelling}: ${item.candidates.join(' / ')}`).join('; ')}`] : []),
   ].join('\n');
 }
 
 export function vacancyStatistics(vacancies, resume, aliases) {
-  const technologies = new Map(), requirements = new Map(), signals = new Map();
+  const technologies = new Map(), requirements = new Map(), signals = new Map(), ambiguousNames = new Map();
   const comparisons = [];
   const histogram = (field) => [...vacancies.reduce((counts, vacancy) => {
     if (vacancy[field]) counts.set(vacancy[field], (counts.get(vacancy[field]) ?? 0) + 1);
@@ -147,6 +155,10 @@ export function vacancyStatistics(vacancies, resume, aliases) {
   for (const vacancy of vacancies) {
     const comparison = compareVacancyToResume(vacancy, resume, aliases);
     comparisons.push(comparison);
+    for (const item of comparison.ambiguousNames) {
+      const previous = ambiguousNames.get(item.spelling);
+      ambiguousNames.set(item.spelling, { ...item, vacancies: (previous?.vacancies ?? 0) + 1 });
+    }
     const requiredText = comparison.required.length ? comparison.required.join('\n') : vacancy.description;
     for (const [name, pattern] of REQUIREMENT_SIGNALS) if (pattern.test(requiredText)) signals.set(name, (signals.get(name) ?? 0) + 1);
     const missing = new Set(comparison.missing.map((item) => item.canonical));
@@ -168,5 +180,6 @@ export function vacancyStatistics(vacancies, resume, aliases) {
       .map((item) => [key(item.spelling), item])).values()],
     similarNames: [...new Map(comparisons.flatMap((comparison) => comparison.similarNames)
       .map((item) => [key(item.technology), item])).values()],
+    ambiguousNames: [...ambiguousNames.values()],
   };
 }

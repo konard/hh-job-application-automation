@@ -237,6 +237,9 @@ When a vacancy uses a verified equivalent spelling absent from the résumé, the
 the canonical brand name with observed alternatives in parentheses, such as `Go (Golang)`.
 The private vacancy cache supplies the evidence; case-only variants, known typos and spellings
 already present elsewhere in that CV are omitted. Legacy name-variant sections are removed.
+Each technical category is sorted alphabetically. `k8s` stays lowercase; `npm (JS/TS)` and
+`Nginx Proxy Manager (NPM)` remain distinct. Bare uppercase `NPM` in vacancies is reported as
+ambiguous rather than silently assigned to either product.
 The update is prepared in its own browser slot (9352); the owner presses final Save.
 Existing prose is retained; no missing technology is added as experience. The original text and
 changes are backed up under private `data/resume/alias-updates/`, and the local résumé export is

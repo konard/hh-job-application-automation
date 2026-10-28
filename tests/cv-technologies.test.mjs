@@ -1,5 +1,5 @@
 import { describe, test, assert } from 'test-anywhere';
-import { auditCvTechnologies, createTechnologyNormalizer, parseAboutInventory, planCvTechnologySync, verifyCvTechnologyCoverage } from '../src/cv-technologies.mjs';
+import { auditCvTechnologies, compareTechnologyNames, createTechnologyNormalizer, parseAboutInventory, planCvTechnologySync, verifyCvTechnologyCoverage } from '../src/cv-technologies.mjs';
 import { rawJobStack } from '../src/resume-stack.mjs';
 
 const aliases = new Map([['PostgreSQL', ['PostgreSQL', 'Postgres']], ['.NET Core', ['.NET Core']], ['.NET Framework', ['.NET Framework']]]);
@@ -57,6 +57,18 @@ describe('bilingual About technology consolidation', () => {
     assert.ok(normalize('PHP').id !== normalize('PHP 8').id);
     assert.equal(normalize('Postgres').id, normalize('PostgreSQL').id);
     assert.ok(normalize('Amazon S3').id !== normalize('S3-compatible storage').id);
+  });
+  test('categories are alphabetical, k8s stays lowercase, and the two NPM names stay distinct', () => {
+    const catalog = new Map([['Kubernetes', ['Kubernetes', 'K8s']], ['npm', ['npm', 'npm (JS/TS)']], ['Nginx Proxy Manager', ['Nginx Proxy Manager (NPM)']]]);
+    const cv = { language: 'ru', skills: [], about: 'Биография.\n\nТехнические навыки\nИнструменты:\nZoo, NPM, Kubernetes, Nginx Proxy Manager, Alpha', jobs: [] };
+    const proposal = auditCvTechnologies([cv], catalog, { observed: [{ canonical: 'Kubernetes', spelling: 'K8s' }], introOverrides: { ru: 'AI-инженер.\n\nИнтересы.' } }).proposals[0];
+    assert.deepEqual(proposal.categories.tools, [...proposal.categories.tools].sort((a, b) => compareTechnologyNames(a, b, 'ru')));
+    assert.ok(proposal.about.startsWith('AI-инженер.\n\nИнтересы.'));
+    assert.ok(proposal.about.includes('Kubernetes (k8s)'));
+    assert.ok(proposal.about.includes('npm (JS/TS)'));
+    assert.ok(proposal.about.includes('Nginx Proxy Manager (NPM)'));
+    const second = auditCvTechnologies([{ ...cv, about: proposal.about }], catalog, { observed: [{ canonical: 'Kubernetes', spelling: 'K8s' }] }).proposals[0];
+    assert.equal(second.about, proposal.about);
   });
   test('compatible storage does not become evidence of using the provider; corrected typos are not ATS aliases', () => {
     const result = auditCvTechnologies([{ language: 'en', about: 'Technical Skills\nTools:\nCuter, Teleric',

@@ -25,6 +25,10 @@ These changes require the owner's browser Save; they are not claimed as saved in
 Canonical technology names use inline parentheses only for verified alternative spellings actually
 found in the local vacancy corpus and absent elsewhere in the CV. The old separate name-variant
 section is removed in the proposed About updates.
+The revised drafts alphabetize each technical category, use lowercase `k8s`, and distinguish
+`npm (JS/TS)` from `Nginx Proxy Manager (NPM)`. Their introductions now include AI engineering,
+teaching effective AI use, and interest in water treatment, medical, mining and space technologies.
+These introduction changes also await the owner's Save; snapshots remain actual saved data.
 Run `bun run cv -- technologies --hh-browser-port 9351` for a fresh audit. Its verification covers
 technology inventories, not the older prose differences below. The example files continue to show
 only actual saved content, and are refreshed after each confirmed Save.

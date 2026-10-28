@@ -76,6 +76,13 @@ describe('vacancy analysis', () => {
     expect(seen.find((item) => item.spelling === 'Golang')).toEqual({ canonical: 'Go', spelling: 'Golang', vacancies: 2 });
     expect(seen.find((item) => item.spelling === 'k8s')).toEqual({ canonical: 'Kubernetes', spelling: 'k8s', vacancies: 1 });
   });
+  test('npm and Nginx Proxy Manager have distinct names; a bare NPM is left ambiguous', () => {
+    expect(technologyMentions('Nginx Proxy Manager (NPM), npm (JS/TS)', catalog).map((item) => item.canonical).sort()).toEqual(['Nginx Proxy Manager', 'npm']);
+    expect(technologyMentions('NPM', catalog)).toEqual([]);
+    const comparison = compareVacancyToResume({ skills: ['NPM'], description: '' }, { ...resume, about: 'npm (JS/TS), Nginx Proxy Manager (NPM)' }, catalog);
+    expect(comparison.matched).toEqual([]);
+    expect(comparison.ambiguousNames[0].candidates).toEqual(['npm (JS/TS)', 'Nginx Proxy Manager']);
+  });
 });
 
 test('private Links Notation round-trips full descriptions, quotes, HTML and long requirement lists without loss', async () => {

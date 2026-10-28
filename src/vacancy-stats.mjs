@@ -28,6 +28,10 @@ else {
   console.log('\nSimilar names for review (never added automatically):');
   for (const row of stats.similarNames.slice(0, limit)) console.log(`  ${row.technology} ≈ ${row.candidates.join(', ')}`);
   console.log('\nCommon requirement categories:');
+  if (stats.ambiguousNames.length) {
+    console.log('\nAmbiguous abbreviations (not assigned to a product):');
+    for (const row of stats.ambiguousNames) console.log(`  ${row.spelling} · ${row.vacancies} vacancies · ${row.candidates.join(' / ')}`);
+  }
   for (const row of stats.requirementCategories.slice(0, limit)) console.log(`  ${row.vacancies}\t${row.requirement}`);
   console.log('\nMost repeated requirement lines:');
   for (const row of stats.requirements.slice(0, limit)) console.log(`  ${row.vacancies}\t${row.requirement}`);

@@ -31,13 +31,17 @@ const EXTRA_ALIASES = new Map([
   ['S3-compatible storage', ['Amazon AWS S3 compatible', 'Amazon AWS S3 совместимым']],
   ['RSS', ['RSS']], ['OCR', ['OCR']], ['Saperion', ['Saperion']],
   ['Tinkoff Invest API', ['Tinkoff Invest API']],
+  ['npm', ['NPM', 'npm (JS/TS)']],
+  ['Nginx Proxy Manager', ['Nginx Proxy Manager (NPM)']],
 ]);
 const DISPLAY = { 'Claude Code': 'Anthropic Claude Code CLI', Codex: 'OpenAI Codex CLI',
-  'GitHub Copilot': 'GitHub Copilot', npm: 'npm', NPM: 'npm',
+  'GitHub Copilot': 'GitHub Copilot', npm: 'npm (JS/TS)', NPM: 'npm (JS/TS)',
+  'Nginx Proxy Manager': 'Nginx Proxy Manager (NPM)',
   '1С:Документооборот': { ru: '1С:Документооборот', en: '1C:Document Management' } };
 const BLOCK = new RegExp(`\\n*^${JOB_STACK_HEADINGS}\\s*:[^\\n]*(?:\\n(?!\\s*\\n)[^\\n]*)*`, 'imu');
 const CORRECTED_TYPOS = new Set(['cuter', 'teleric']);
 const INVALID_ALIASES = new Set([...CORRECTED_TYPOS, 'с#']);
+export const compareTechnologyNames = (a, b, language = 'en') => a.localeCompare(b, language, { sensitivity: 'base', numeric: true });
 
 /** Dates must also match at the call site. Keep translated business descriptions out of brand matching. */
 function sameEmployer(a, b) {
@@ -107,7 +111,7 @@ const categoryFor = (term) => {
   return 'tools';
 };
 
-export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [] } = {}) {
+export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [], introOverrides = {} } = {}) {
   const normalize = createTechnologyNormalizer(catalog);
   const inventories = cvs.map((cv) => parseAboutInventory(cv.about));
   const registry = new Map();
@@ -192,18 +196,21 @@ export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [] } 
       if (!registry.has(canonical.id) || equivalent.id !== canonical.id || INVALID_ALIASES.has(key(item.spelling)) ||
         containsTechnologySpelling(body, item.spelling)) continue;
       const names = aliases.get(canonical.id) ?? [];
-      if (!names.some((name) => key(name) === key(item.spelling))) {
-        names.push(item.spelling);
-        addedAliases.push(item);
+      const spelling = canonical.id === 'kubernetes' && key(item.spelling) === 'k8s' ? 'k8s' : item.spelling;
+      if (!names.some((name) => key(name) === key(spelling))) {
+        names.push(spelling);
+        addedAliases.push({ ...item, spelling });
       }
       aliases.set(canonical.id, names);
     }
     for (const terms of Object.values(categories)) {
       for (let i = 0; i < terms.length; i++) {
         const names = aliases.get(normalize(terms[i]).id);
-        if (names?.length) terms[i] += ` (${names.join(', ')})`;
+        if (names?.length) terms[i] += ` (${names.sort((a, b) => compareTechnologyNames(a, b, cv.language)).join(', ')})`;
       }
+      terms.sort((a, b) => compareTechnologyNames(a, b, cv.language));
     }
+    original.intro = introOverrides[cv.language] ?? original.intro;
     return { language: cv.language, categories, original, addedAliases,
       missingAliases: addedAliases.filter((item) => !containsTechnologySpelling(originalBody, item.spelling)),
       missing: [...registry.values()].filter((item) => !aboutIds.has(item.id)).map((item) => item.canonical) };
@@ -289,10 +296,15 @@ export function verifyCvTechnologyCoverage(resumes, catalog = new Map(), options
   const positionDifferences = plan.changes.filter((change) => change.kind === 'update');
   const aliasGaps = audit.proposals.map((proposal) => ({ language: proposal.language, missing: proposal.missingAliases }));
   const legacyAliasSections = resumes.filter(({ cv }) => parseAboutInventory(cv.about).aliases.length).map(({ cv }) => cv.language);
+  const categoryDifferences = resumes.flatMap(({ cv }, index) => {
+    const actual = parseAboutInventory(cv.about).categories;
+    return Object.entries(audit.proposals[index].categories).filter(([category, terms]) => JSON.stringify(actual[category]) !== JSON.stringify(terms))
+      .map(([category]) => ({ language: cv.language, category }));
+  });
   const complete = inventories.every((item) => !item.duplicates.length && !item.missing.length) && !positionDifferences.length && !plan.unmatched.length &&
-    aliasGaps.every((item) => !item.missing.length) && !legacyAliasSections.length;
+    aliasGaps.every((item) => !item.missing.length) && !legacyAliasSections.length && !categoryDifferences.length;
   return { complete,
     technologies: audit.technologies.length, inventories, positionDuplicates: audit.positionDuplicates,
-    unmatched: plan.unmatched, aliasGaps, legacyAliasSections,
+    unmatched: plan.unmatched, aliasGaps, legacyAliasSections, categoryDifferences,
     positionDifferences: positionDifferences.map((change) => ({ resumeHash: change.resumeHash, company: change.target.company, ...change.audit })) };
 }
