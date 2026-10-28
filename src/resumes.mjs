@@ -1,5 +1,5 @@
 /**
- * Resume (CV) selection: find the most recently updated resume and its suggested vacancies
+ * Resume (CV) selection: Russian by default for search; date ordering within each language.
  *
  * The resumes page shows no update date, but it embeds hh.ru's own page state in a
  * `<template class="ResumeProfileFront-InitialState">`: every resume with its `hash` and
@@ -11,6 +11,9 @@
  */
 
 import { SELECTORS } from './hh-selectors.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { resumeLanguage } from './cv.mjs';
 
 const MONTHS = ['январ', 'феврал', 'март', 'апрел', 'ма', 'июн', 'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'];
 const MONTHS_EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -241,6 +244,25 @@ export async function readResumes(commander) {
 
 const PROFILE_URL = 'https://hh.ru/applicant/resumes';
 
+/** Saved exports identify the actual CV language even when its job title is English. */
+export async function loadApplicationResumes(directory = path.join(process.cwd(), 'data/resume/cv')) {
+  const entries = await fs.readdir(directory).catch(() => []);
+  const resumes = await Promise.all(entries.filter((entry) => /^[a-z0-9]+$/i.test(entry)).map(async (hash) => {
+    const resume = await fs.readFile(path.join(directory, hash, 'resume.json'), 'utf8').then(JSON.parse).catch(() => null);
+    return resume?.hash === hash ? { hash, title: resume.title, language: resumeLanguage(resume), updatedText: resume.updated } : null;
+  }));
+  return resumes.filter(Boolean);
+}
+
+/** Prefer Russian for suggested vacancies, regardless of which translation was edited last. */
+export function pickSearchResume(resumes, knownResumes = []) {
+  const languages = new Map(knownResumes.map((resume) => [resume.hash, resume.language]));
+  const russian = resumes.filter((resume) => languages.has(resume.hash)
+    ? languages.get(resume.hash) === 'ru' : /[а-яё]/iu.test(resume.title ?? ''));
+  const choice = pickResume(russian.length ? russian : resumes);
+  return russian.length ? { ...choice, reason: `Russian CV is the search default; ${choice.reason}` } : choice;
+}
+
 /**
  * Log line naming the chosen resume and why
  * @param {Object} choice - pickResume result
@@ -252,17 +274,17 @@ export function describeChoice({ resume, reason }, count) {
 }
 
 /**
- * URL of the suggested vacancies for the most recently updated resume
+ * Suggested vacancies for the Russian search CV, falling back to the latest available CV.
  * @param {Object} commander - Browser commander instance
  * @returns {Promise<string|null>}
  */
-export async function findSuggestedVacanciesUrl(commander) {
+export async function findSuggestedVacanciesUrl(commander, { knownResumes } = {}) {
   if (await commander.count({ selector: SELECTORS.resume }) === 0) {
     // hh.ru's beacons keep the network busy: waiting for it to go idle took the 4-minute timeout
     await commander.goto({ url: PROFILE_URL, waitForNetworkIdle: false, waitForStableUrlBefore: false });
   }
   const resumes = await readResumes(commander);
-  const choice = pickResume(resumes);
+  const choice = pickSearchResume(resumes, knownResumes ?? await loadApplicationResumes());
   if (!choice.resume) {
     return null;
   }
@@ -271,13 +293,13 @@ export async function findSuggestedVacanciesUrl(commander) {
 }
 
 /**
- * The open search page's URL, switched to the most recently updated resume when it shows another one.
+ * Switch the open matching search to the Russian CV when it shows another one.
  * Its filters are kept; the resume list is fetched once from inside the page (no navigation).
  * @param {Object} commander - Browser commander instance
  * @param {string} url - Search URL with a `resume` parameter
  * @returns {Promise<string>}
  */
-export async function latestResumeSearchUrl(commander, url) {
+export async function latestResumeSearchUrl(commander, url, { knownResumes } = {}) {
   const current = new URL(url).searchParams.get('resume');
   const html = await commander.evaluate(async (resumesUrl) => {
     try {
@@ -288,7 +310,7 @@ export async function latestResumeSearchUrl(commander, url) {
     }
   }, PROFILE_URL).catch(() => null);
   const state = parseResumeState(resumeStateFromHtml(html ?? ''));
-  const choice = state ? pickResume(state.resumes) : { resume: undefined };
+  const choice = state ? pickSearchResume(state.resumes, knownResumes ?? await loadApplicationResumes()) : { resume: undefined };
   if (!choice.resume) {
     console.log('📄 Keeping the resume of the open search page: the resume list could not be read');
     return url;

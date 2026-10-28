@@ -375,6 +375,7 @@ export function isFormLeftDuringWait(error, url) {
 export async function handleVacancyResponsePage({
   commander,
   MESSAGE,
+  selectApplicationResume = null,
   readQADatabase,
   addOrUpdateQA,
   contacts = {},
@@ -454,6 +455,10 @@ export async function handleVacancyResponsePage({
       return;
     }
 
+    const selectedResume = await selectApplicationResume?.({ commander, questions: form.questions,
+      context: [form.vacancy, vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? ''] });
+    if (selectedResume?.ready === false) return;
+
     if (await resumeVisibility(commander, { vacancyId }) === 'skip') {
       await skipVacancy('resume_not_visible');
       await returnToList();
@@ -477,7 +482,7 @@ export async function handleVacancyResponsePage({
     const textareaSelector = await prepareCoverLetterTextarea({ commander });
 
     // The English letter when the vacancy's questions are in English
-    const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question));
+    const letter = coverLetterFor(MESSAGE, form.questions, selectedResume?.language ?? null);
     if (letter && textareaSelector) {
       const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter, scrollIntoView: true });
       console.log(filled

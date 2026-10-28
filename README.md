@@ -77,8 +77,17 @@ cookies like «Continue where you left off» does (`--restore-last-session`, unt
 keeps them for every persistent profile by default: browser-commander #187).
 
 **Run with defaults:** `bun run apply -- --message-file data/cover-letter.txt` needs no other option
-(the cover letter is the one choice the run asks of you): it logs in, picks your most recently updated
-resume and applies to the vacancies hh.ru suggests for it:
+(the cover letter is the one choice the run asks of you): it logs in, defaults the matching search
+to your Russian CV (the most recently updated Russian version when there are several), and
+applies to the vacancies hh.ru suggests for it. If no Russian CV is available, it uses the latest CV.
+
+Each application selects its own CV: dollar-denominated pay (USD, USDT or USDC) or English
+questions select the English version; Russian questions select the Russian version. Vacancy
+text decides when there are no questions. The app opens the full application form, checks the
+available CV hashes against local exports, selects the version and verifies the checked option
+before sending. The cover letter follows that language. This prevents a one-click application
+from sending HH.ru's default CV before the language check. Export both versions with
+`bun run cv -- export` first. `--no-auto-select-resume-language` disables this behavior.
 
 - **Alerts** - on macOS, whenever the run waits for you (a question to answer or confirm, a
   login, a captcha that still needs manual input after background work has finished, a form to fill by hand), it plays a sound and
@@ -109,7 +118,7 @@ resume and applies to the vacancies hh.ru suggests for it:
   automation window, or else with a browser of yours. Log in once: a login made in any hh.ru window
   of the automation (main, chat, forms) is copied into the others that show signed out, checked
   every minute. Cookie values are never printed or stored outside the profiles.
-- **Resume** - the suggested vacancies of the most recently updated resume are opened, unless `--url`
+- **Resume** - suggested vacancies for the Russian CV are opened by default, unless `--url`
   is given. The update dates come from hh.ru's own state embedded in the resumes page (the page shows
   none), so choosing costs no extra request; the log names the resume and why it was chosen. A
   kept-open browser already on a search page keeps its filters and only switches the resume.

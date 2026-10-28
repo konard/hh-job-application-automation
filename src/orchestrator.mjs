@@ -29,6 +29,7 @@ import { noteSkip } from './skipped-vacancies.mjs';
 import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-attach.mjs';
 import { coverLetterFor } from './cover-letter.mjs';
 import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
+import { createApplicationResumeSelector } from './application-resume.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -54,6 +55,7 @@ export function createOrchestrator({
 }) {
   let START_URL = argv.url;
   const MESSAGE = argv.messageEn ? { ru: argv.message, en: argv.messageEn } : argv.message;
+  const selectApplicationResume = argv.autoSelectResumeLanguage !== false ? createApplicationResumeSelector() : null;
   // A fixed pace when --job-application-interval is given, else the adaptive one (pacing.mjs)
   const FIXED_INTERVAL_MS = argv.jobApplicationInterval > 0 ? argv.jobApplicationInterval * 1000 : null;
   const intervalNow = () => FIXED_INTERVAL_MS ?? adaptivePace(readEvents()).intervalMs;
@@ -256,6 +258,7 @@ export function createOrchestrator({
   const runVacancyResponseHandler = () => handleVacancyResponsePage({
     commander,
     MESSAGE,
+    selectApplicationResume,
     readQADatabase: qaDB.readQADatabase,
     addOrUpdateQA: qaDB.addOrUpdateQA,
     contacts,
@@ -459,6 +462,7 @@ export function createOrchestrator({
         } else result = await findAndProcessVacancyButton({
           commander,
           MESSAGE,
+          selectApplicationResume,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
           deferredQuestions,
           readQADatabase: qaDB.readQADatabase,

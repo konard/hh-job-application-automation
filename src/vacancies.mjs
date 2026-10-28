@@ -114,6 +114,7 @@ async function waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQ
 export async function processModalApplication({
   commander,
   MESSAGE,
+  selectApplicationResume = null,
   ignoreVacanciesWithQuestionnaire = false,
   vacancyId = null,
   vacancy = '',
@@ -155,6 +156,12 @@ export async function processModalApplication({
     await vacancyFilters.remember(vacancyId, filterMatch, { title });
     return skipModal({ commander, reason: 'filtered_out' });
   }
+  const selectedResume = selectApplicationResume ? await selectApplicationResume({ commander,
+    questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
+    context: [vacancy, vacancyFilters?.description?.(vacancyId) ?? ''] }) : null;
+  if (selectedResume?.ready === false) {
+    return waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQA, skippedVacancies });
+  }
   if (await resumeVisibility(commander, { scopeSelector: SELECTORS.applicationForm, vacancyId }) === 'skip') {
     return skip('resume_not_visible');
   }
@@ -178,7 +185,7 @@ export async function processModalApplication({
     return FULL_FORM_OPENED;
   }
   // The English letter when the vacancy's questions are in English
-  const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question));
+  const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question), selectedResume?.language ?? null);
   if (letter) {
     const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter });
     if (isFullFormOpened(commander)) return FULL_FORM_OPENED;
@@ -734,6 +741,7 @@ const CLICK_SKIP_REASONS = { button_disabled: 'apply_button_disabled', click_err
 export async function findAndProcessVacancyButton({
   commander,
   MESSAGE,
+  selectApplicationResume = null,
   ignoreVacanciesWithQuestionnaire = false,
   deferredQuestions = null,
   readQADatabase = null,
@@ -799,6 +807,14 @@ export async function findAndProcessVacancyButton({
     console.log(`🧪 Applying to ${describeVacancyCard(cardLines)}`);
   }
 
+  // A card can submit immediately with HH.ru's default CV. Open the chooser first so
+  // employer questions and the exact selected CV can be checked before anything is sent.
+  if (selectApplicationResume && vacancyId) {
+    await commander.goto({ url: `https://hh.ru/applicant/vacancy_response?vacancyId=${encodeURIComponent(vacancyId)}&startedWithQuestion=false`,
+      waitForStableUrlBefore: false, waitForNetworkIdle: false });
+    return { status: 'vacancy_response_detected', vacancyId, descriptionRead };
+  }
+
   const clickResult = await clickVacancyButton({ commander, selector, buttonIndex });
   if (!clickResult.success) {
     if (CLICK_SKIP_REASONS[clickResult.status]) {
@@ -848,6 +864,7 @@ export async function findAndProcessVacancyButton({
     submitResult = await processModalApplication({
       commander,
       MESSAGE,
+      selectApplicationResume,
       ignoreVacanciesWithQuestionnaire,
       vacancyId,
       vacancy: card,

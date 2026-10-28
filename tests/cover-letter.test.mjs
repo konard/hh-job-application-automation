@@ -7,6 +7,10 @@ describe('cover letter language', () => {
   test('English questions take the English letter', () => {
     assert.equal(coverLetterFor(message, ['What is the minimum net salary you would consider?', 'What is your spoken English level?']), 'Hello');
   });
+  test('a verified CV language also controls the cover letter', () => {
+    assert.equal(coverLetterFor(message, ['Сколько лет опыта?'], 'en'), 'Hello');
+    assert.equal(coverLetterFor(message, ['What is your experience?'], 'ru'), 'Здравствуйте');
+  });
 
   test('Russian or mixed questions, or none, keep the Russian letter', () => {
     assert.equal(coverLetterFor(message, ['Какой у вас опыт работы с Go?']), 'Здравствуйте');

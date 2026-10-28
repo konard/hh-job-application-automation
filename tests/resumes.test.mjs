@@ -7,6 +7,7 @@ import {
   parseUpdatedAt,
   chooseResume,
   pickResume,
+  pickSearchResume,
   parseResumeState,
   resumeStateFromHtml,
   mergeResumeState,
@@ -168,6 +169,17 @@ describe('latestResumeSearchUrl()', () => {
     const parsed = new URL(url);
     assert.equal(parsed.searchParams.get('resume'), 'bbb222');
     assert.equal(parsed.searchParams.get('work_format'), 'REMOTE');
+  });
+  test('defaults the matching search to Russian even when English was edited last', async () => {
+    const knownResumes = [{ hash: 'aaa111', language: 'ru' }, { hash: 'bbb222', language: 'en' }];
+    const url = await latestResumeSearchUrl({ evaluate: async () => page },
+      'https://hh.ru/search/vacancy?resume=bbb222&work_format=REMOTE&page=2', { knownResumes });
+    assert.equal(new URL(url).searchParams.get('resume'), 'aaa111');
+    assert.equal(new URL(url).searchParams.get('work_format'), 'REMOTE');
+    assert.equal(new URL(url).searchParams.get('page'), '2');
+    assert.equal(pickSearchResume([{ hash: 'en', title: 'Engineer', updatedAt: 100 },
+      { hash: 'ru', title: 'Разработчик', updatedAt: 1 }]).resume.hash, 'ru');
+    assert.equal(pickSearchResume(parseResumeState(stateText).resumes, knownResumes).resume.hash, 'aaa111');
   });
 
   test('keeps the URL when it already shows the latest resume or the list cannot be read', async () => {

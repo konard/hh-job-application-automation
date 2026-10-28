@@ -49,7 +49,7 @@ export function createConfig() {
         .option('url', {
           alias: 'u',
           type: 'string',
-          description: 'Vacancy search URL (default: suggested vacancies for the most recently updated resume)',
+          description: 'Vacancy search URL (default: suggested vacancies for the Russian CV, or the latest CV if unavailable)',
           default: getenv('START_URL', ''),
         })
         .option('manual-login', {
@@ -103,6 +103,11 @@ export function createConfig() {
           description: 'Send a form with questions without asking when every question is a saved question word for word ' +
             'and autofill answered it with the saved answer; other forms are autofilled and wait for you',
           default: getenv('AUTO_SEND_EXACT_ANSWERS', true),
+        })
+        .option('auto-select-resume-language', {
+          type: 'boolean',
+          description: 'Select and verify the English CV for dollar pay or English questions; use Russian for Russian applications',
+          default: getenv('AUTO_SELECT_RESUME_LANGUAGE', true),
         })
         .option('answer-final-period', {
           type: 'string', choices: ['with', 'without'],

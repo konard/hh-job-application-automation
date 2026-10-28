@@ -39,8 +39,11 @@ export function createVacancyInsights({ enabled = true, collect = true, compare 
         const sections = vacancyRequirements(vacancy.description);
         if (collect) await cache.record({ ...vacancy, ...sections, status: 'encountered' });
         if (compare || update) {
-          const resume = await fs.readFile(resumeFile, 'utf8').then(JSON.parse).catch(() => null);
+          let resume = await fs.readFile(resumeFile, 'utf8').then(JSON.parse).catch(() => null);
           const expectedHash = new URL(returnUrl).searchParams.get('resume');
+          if (expectedHash && resume?.hash !== expectedHash && /^[a-z0-9]+$/i.test(expectedHash)) {
+            resume = await fs.readFile(path.join(path.dirname(resumeFile), 'cv', expectedHash, 'resume.json'), 'utf8').then(JSON.parse).catch(() => null);
+          }
           if (!resume || (expectedHash && resume.hash !== expectedHash)) log('⚠️  No local export matching the selected résumé: run bun run resume; vacancy text was still collected');
           else {
             const aliases = withResumeVocabulary(await loadTechnologyAliases(), resume);

@@ -20,13 +20,14 @@ export function isClearlyEnglish(texts) {
  * The cover letter to type
  * @param {string|{ru: string, en?: string}} message - The letter, or the letter with its English version
  * @param {string[]} questions - The vacancy's questions on the page
+ * @param {'ru'|'en'|null} language - Verified application CV language, when available
  * @returns {string}
  */
-export function coverLetterFor(message, questions = []) {
+export function coverLetterFor(message, questions = [], language = null) {
   if (typeof message === 'string' || !message) {
     return message ?? '';
   }
-  return message.en && isClearlyEnglish(questions) ? message.en : message.ru;
+  return message.en && (language === 'en' || (language === null && isClearlyEnglish(questions))) ? message.en : message.ru;
 }
 
 /**

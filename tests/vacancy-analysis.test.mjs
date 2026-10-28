@@ -116,6 +116,13 @@ test('the full vacancy is visited, collected and compared before returning to th
     expect((await insights.cache.read('123')).description).toBe('Requirements:\nGolang');
     expect(reports.some((line) => line.includes('Technology coverage: 1/1 (100%)'))).toBe(true);
     expect(updates[0].aliases[0].spelling).toBe('Golang');
+    // A different CV may be the latest root export while the search uses Russian.
+    await fs.mkdir(path.join(dir, 'cv', 'resume1'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'cv', 'resume1', 'resume.json'), JSON.stringify(resume));
+    await fs.writeFile(resumeFile, JSON.stringify({ ...resume, hash: 'othercv', keySkills: [], jobs: [], about: '' }));
+    reports.length = 0;
+    await insights.visit({ commander, vacancyId: '123', returnUrl: url });
+    expect(reports.some((line) => line.includes('Technology coverage: 1/1 (100%)'))).toBe(true);
     expect(createVacancyInsights({ enabled: false }).enabled).toBe(false);
     const noCache = createVacancyInsights({ collect: false, compare: false, update: false, directory: path.join(dir, 'disabled') });
     expect(noCache.enabled).toBe(false);
