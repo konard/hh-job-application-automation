@@ -665,17 +665,39 @@ const HH = {
  */
 export function clickHhExperienceEdit({ company, title, description = '', editButton, card }) {
   const norm = (text) => String(text).toLowerCase().replace(/\s+/g, ' ').trim();
-  const cards = [...document.querySelectorAll(card)];
-  const matches = cards.filter((element) => norm(element.innerText).includes(norm(company)) &&
-    (!title || norm(element.innerText).includes(norm(title))) && (!description || norm(element.innerText).includes(norm(description))));
-  // Same company/title can be present in both languages. Ambiguity must not pick the first.
-  if (matches.length !== 1) {
+  const controls = [...new Set([...document.querySelectorAll(`${editButton}, main button, main a`)])]
+    .filter((element) => element.matches(editButton) || /^(edit|редактировать)$/i.test(element.innerText.trim()));
+  const matches = controls.filter((button) => {
+    // A company card can group several positions: the company name is shared, but the
+    // description and Edit control must belong to the same individual position.
+    const companyCard = button.closest(card);
+    const companyMatches = companyCard && norm(companyCard.innerText).includes(norm(company));
+    for (let element = button.parentElement; element && element !== document.body; element = element.parentElement) {
+      // Never borrow the first button of an ancestor containing neighbouring workplaces.
+      if (controls.filter((control) => element.contains(control)).length > 1) {
+        return false;
+      }
+      const text = norm(element.innerText);
+      if ((companyMatches || text.includes(norm(company))) && (!title || text.includes(norm(title))) && (!description || text.includes(norm(description)))) {
+        return true;
+      }
+    }
+    return false;
+  });
+  if (matches.length === 1) {
+    matches[0].click();
+    return true;
+  }
+  if (controls.length > 0) {
     return false;
   }
-  const match = matches[0];
-  const button = match?.querySelector(editButton) ?? match?.parentElement?.querySelector(editButton) ?? match;
-  button?.click();
-  return Boolean(button);
+  const cards = [...document.querySelectorAll(card)].filter((element) => element.matches('a[href]') &&
+    norm(element.innerText).includes(norm(company)) && (!description || norm(element.innerText).includes(norm(description))));
+  if (cards.length === 1) {
+    cards[0].click();
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -692,10 +714,19 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
   if (await hhExperienceFormOpen(page)) {
     return ['hh.ru: an experience form is open; finish or close it before another edit'];
   }
-  await page.goto(`https://hh.ru/resume/${resumeHash}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  if (job?.entryId && !/^\d+$/.test(String(job.entryId))) {
+    return ['hh.ru: invalid workplace record ID'];
+  }
+  const url = job?.entryId
+    ? `https://hh.ru/profile/edit/experience/${job.entryId}?resumeFrom=${encodeURIComponent(resumeHash)}&hhtmFrom=resume`
+    : `https://hh.ru/resume/${resumeHash}`;
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // While hh.ru shows a captcha nothing is touched: the user solves it in the slot
   if (!await waitForCaptcha(page, console.log, 'slot', port)) {
     return ['hh.ru: the captcha was not solved, nothing prefilled'];
+  }
+  if (job?.entryId) {
+    return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => [], () => ['hh.ru: the requested workplace form did not open']);
   }
   await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
   // The list shows the latest jobs until it is expanded
@@ -703,10 +734,10 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
     .filter((button) => /развернуть|показать (все|ещё)|show (all|more)|expand/i.test(button.innerText)).forEach((button) => button.click()));
   await sleep(1000);
   const viewAll = page.locator(HH.viewAll).first();
-  if (await page.locator(HH.editButton).count() === 0 && await viewAll.count() > 0) {
+  if (await viewAll.count() > 0) {
     await viewAll.click();
     await page.waitForURL(/\/experience(\?|$)/, { timeout: 30000 }).catch(() => {});
-    await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
+    await page.waitForSelector(`${HH.experienceCard}, [data-qa="position-title"]`, { timeout: 30000 }).catch(() => {});
     await sleep(1000);
   }
   if (job) {
@@ -879,10 +910,19 @@ export async function saveHhExperience(page) {
  * @param {Object} page
  */
 export async function discardHhExperience(page) {
-  await page.locator(HH.cancel).first().click().catch(() => {});
-  const discard = page.getByRole('button', { name: /^(не надо|don'?t save|discard)$/i });
-  if (await discard.waitFor({ timeout: 5000 }).then(() => true, () => false)) {
-    await discard.click();
+  // The caller explicitly chose to discard this draft. HH.ru can use beforeunload instead
+  // of a page dialog; dismissing that browser prompt would leave the form open.
+  const onDialog = (dialog) => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss();
+  page.on('dialog', onDialog);
+  try {
+    await page.locator(HH.cancel).first().click();
+    const discard = page.getByRole('button', { name: /^(не надо|don['’]?t save|discard)$/i });
+    if (await discard.waitFor({ timeout: 1500 }).then(() => true, () => false)) {
+      await discard.click();
+    }
+    await page.locator(HH.position).waitFor({ state: 'detached', timeout: 15000 });
+  } finally {
+    page.off('dialog', onDialog);
   }
 }
 

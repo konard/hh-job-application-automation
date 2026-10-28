@@ -1,5 +1,16 @@
 import { describe, test, assert } from 'test-anywhere';
-import { industryPrefix, verifyHhSavedForm } from '../src/hh-cv-editor.mjs';
+import { assertHhExperienceTarget, industryPrefix, verifyHhSavedForm } from '../src/hh-cv-editor.mjs';
+
+describe('opened workplace identity', () => {
+  test('a neighbouring language entry is rejected before any field changes', () => {
+    const target = { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.' };
+    assert.throws(() => assertHhExperienceTarget({ ...target, description: 'English copy.' }, target), /does not match/);
+    assert.throws(() => assertHhExperienceTarget({ ...target, title: 'Other position' }, target), /does not match/);
+    assert.throws(() => assertHhExperienceTarget({ ...target, url: 'https://hh.ru/profile/edit/experience/12' }, { ...target, entryId: '1' }), /does not match/);
+    assertHhExperienceTarget({ ...target, url: 'https://hh.ru/profile/edit/experience/1' }, { ...target, entryId: '1' });
+    assertHhExperienceTarget(target, target);
+  });
+});
 
 describe('HH.ru CV save verification', () => {
   const form = {

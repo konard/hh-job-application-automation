@@ -1,5 +1,5 @@
 /** Reusable HH.ru workplace editing, language copies and observation. Never saves a workplace. */
-import { parseMonthYear, withStack } from './experience.mjs';
+import { companySimilarity, parseMonthYear, withStack } from './experience.mjs';
 import { normalizeText } from './cv.mjs';
 import {
   discardHhExperience, fillHhExperience, hhExperienceFormOpen, hhExperienceResumes,
@@ -44,6 +44,26 @@ export async function readHhExperienceForm(page) {
     start: parseMonthYear(`${form.startMonth} ${form.startYear}`),
     end: form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`),
   };
+}
+
+/** A matched card is insufficient: the opened form must be the requested record too. */
+export function assertHhExperienceTarget(form, target) {
+  if (!form || !target || companySimilarity(form.company, target.company) !== 1 ||
+    (target.entryId && form.url?.match(/\/experience\/(\d+)(?:[/?#]|$)/)?.[1] !== String(target.entryId)) ||
+    (target.title && normalizeText(form.title) !== normalizeText(target.title)) ||
+    (target.description !== undefined && normalizeText(form.description) !== normalizeText(target.description))) {
+    throw new Error('hh.ru: opened workplace does not match the requested record; no fields changed');
+  }
+}
+
+/** Roll back an app-owned checkbox draft, refusing to overwrite subsequent user edits. */
+export async function restoreHhExperienceSelection(page, { before, draft }) {
+  const current = await readHhExperienceForm(page);
+  if (JSON.stringify(current) !== JSON.stringify(draft)) {
+    throw new Error('hh.ru: draft changed after preparation; user edits left untouched');
+  }
+  await setHhExperienceResumes(page, before.resumes.filter((resume) => resume.checked).map((resume) => resume.hash));
+  return readHhExperienceForm(page);
 }
 
 /** Resolve labels containing commas without splitting them into separate industries. */
@@ -131,6 +151,9 @@ export async function prepareHhCvChange(page, change, { resumeHash, port = 9351 
     throw new Error(notes.join('; '));
   }
   const before = await readHhExperienceForm(page);
+  if (change.kind !== 'add') {
+    assertHhExperienceTarget(before, change.target);
+  }
   let fields = { ...change.fields };
   if (fields.stack) {
     fields.description = withStack(before.description, fields.stack, { add: Boolean(fields.addStack) });
@@ -143,7 +166,8 @@ export async function prepareHhCvChange(page, change, { resumeHash, port = 9351 
   const shared = before.resumes.some((resume) => resume.checked && resume.hash !== resumeHash);
   if (change.kind === 'copy' || (change.kind === 'update' && shared)) {
     fields = { ...before, ...fields };
-    followup = { kind: 'detach', target: { company: before.company, title: before.title, description: before.description }, fields: {} };
+    const entryId = before.url.match(/\/experience\/(\d+)/)?.[1];
+    followup = { kind: 'detach', target: { company: before.company, title: before.title, description: before.description, ...(entryId ? { entryId } : {}) }, fields: {} };
     // No user input should be discarded if they started typing while we read the source.
     if (JSON.stringify(await readHhExperienceForm(page)) !== JSON.stringify(before)) {
       throw new Error('hh.ru: the source changed while it was being read; left open for you');

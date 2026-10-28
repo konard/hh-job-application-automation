@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm } from '../../src/hh-cv-editor.mjs';
-import { chooseHhMonth } from '../../src/experience-sites.mjs';
+import { chooseHhMonth, clickHhExperienceEdit } from '../../src/experience-sites.mjs';
 
 function fixture() {
   const source = { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.',
@@ -14,10 +14,23 @@ function fixture() {
   const industries = ['Consulting Services', 'Marketing, Advertising, Designer, Event and PR Agencies'];
   window.saveCount = 0;
   window.list = () => {
-    main.innerHTML = `<button data-qa="list-add">Add new</button><div data-qa="profile-experience-company-card">${source.company}
-      ${source.title}<p>${source.description}</p><button data-qa="edit-experience-button-1">Edit</button></div>`;
+    main.innerHTML = `<button data-qa="list-add">Add new</button>
+      <article>${source.company}<div data-qa="position-title">${source.title}</div><p>English copy.</p><button data-qa="link" class="english">Edit</button></article>
+      <article>${source.company}<div data-qa="position-title">${source.title}</div><p>${source.description}</p><button data-qa="link" class="russian">Edit</button></article>`;
     main.querySelector('[data-qa=list-add]').onclick = () => window.form(false);
-    main.querySelector('[data-qa^=edit-experience-button]').onclick = () => window.form(true);
+    main.querySelector('.russian').onclick = () => window.form(true);
+    main.querySelector('.english').onclick = () => { window.form(true); main.querySelector('textarea').value = 'English copy.'; };
+  };
+  window.resume = () => {
+    main.innerHTML = `<button data-qa="profile-experience-viewAll">Edit experience</button><section>
+      <div data-qa="profile-experience-company-card">${source.company} ${source.title} ${source.description}</div>
+      <button data-qa="edit-experience-button-wrong">Edit</button><button data-qa="edit-experience-button-right">Edit</button></section>`;
+    main.querySelector('[data-qa=profile-experience-viewAll]').onclick = () => {
+      window.history.pushState({}, '', '/profile/edit/experience?resumeFrom=en');
+      window.list();
+    };
+    main.querySelector('[data-qa=edit-experience-button-wrong]').onclick = () => { window.form(true); main.querySelector('textarea').value = 'English copy.'; };
+    main.querySelector('[data-qa=edit-experience-button-right]').onclick = () => window.form(true);
   };
   window.form = (existing) => {
     main.innerHTML = `<label>Company<input name="company"></label><label>Position<input name="position"></label>
@@ -102,7 +115,11 @@ function fixture() {
       document.body.append(dialog);
     };
   };
-  window.list();
+  if (window.location.pathname === '/profile/edit/experience/123') {
+    window.form(true);
+  } else {
+    window.resume();
+  }
 }
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -111,6 +128,16 @@ try {
   await context.route('**/*', (route) => route.fulfill({ contentType: 'text/html',
     body: `<!doctype html><html lang="en"><main></main><script>(${fixture.toString()})()</script></html>` }));
   const page = await context.newPage();
+  await page.goto('https://hh.ru/resume/en');
+  await page.setContent(`<main><div data-qa="profile-experience-company-card"><h2>Example</h2>
+    <section>AI Tech Lead<p>English copy.</p><button data-qa="edit-experience-button-en" onclick="window.clicked='en'">Edit</button></section>
+    <section>AI Tech Lead<p>Исходное описание.</p><button data-qa="edit-experience-button-ru" onclick="window.clicked='ru'">Edit</button></section>
+    </div></main>`);
+  const target = { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.',
+    editButton: '[data-qa^="edit-experience-button-"]', card: '[data-qa="profile-experience-company-card"]' };
+  assert.equal(await page.evaluate(clickHhExperienceEdit, target), true);
+  assert.equal(await page.evaluate(() => window.clicked), 'ru');
+  assert.equal(await page.evaluate(clickHhExperienceEdit, { ...target, description: '' }), false);
   await page.goto('https://hh.ru/resume/en');
   const prepared = await prepareHhCvChange(page, {
     kind: 'update', target: { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.' },
@@ -163,6 +190,10 @@ try {
   await page.waitForTimeout(1100);
   assert.equal(cancelledSaveCalls, 0);
   stopCancelled();
+  // A checkpoint's stored record ID bypasses layout matching, still verifying all fields.
+  const byId = await prepareHhCvChange(page, { kind: 'detach', target: { ...target, entryId: '123' }, fields: {} }, { resumeHash: 'en' });
+  assert.equal(byId.before.description, 'Исходное описание.');
+  assert.deepEqual(byId.draft.resumes.filter((resume) => resume.checked).map((resume) => resume.hash), ['ru']);
   console.log('Browser checks passed: shared copy, metadata, language selection, draft protection, dates, exact user-save capture and deselection without deletion.');
 } finally {
   await browser.close();

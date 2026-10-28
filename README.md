@@ -802,6 +802,9 @@ description. After its reviewed save, a checkpoint in `logs/experience/cv-edits/
 It does not delete the workplace or change other CVs. An existing open form blocks new editing,
 so unsaved user changes are never navigated away from. `--detach-extra` offers the same reviewed
 deselection for extra entries absent from the desired file. Exact saved copies are matched first.
+The opened record is checked against its company, title and full description before fields or
+checkboxes change. Saved checkpoint follow-ups also use the exact HH.ru workplace record ID,
+so language copies with the same company and title cannot be confused.
 
 `edit` accepts JSON with `kind` (`add`, `update`, `copy`, `detach`), `target` (company, title and
 description to distinguish language copies), and `fields`. Fields can include `company`, `title`,
