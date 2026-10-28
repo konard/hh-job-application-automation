@@ -65,7 +65,7 @@ describe('automatic chat options', () => {
     expect(chooseChatOption({ question, options, contacts: {} })).toBe(null);
     expect(chooseChatOption({ question, options, contacts: { salary_net: '175 000 ₽', salary_gross: '175 000 ₽' } })).toBe(null);
     expect(chooseChatOption({ question, options: ['USD 180,000 or more'], contacts })).toBe(null);
-    expect(chooseChatOption({ question, options: ['RUB 180k or more'], contacts })).toBe(null);
+    expect(chooseChatOption({ question, options: ['RUB 180k or more'], contacts })).toMatchObject({ option: 'RUB 180k or more' });
   });
 
   test('a specific saved amount is not replaced with a different default', () => {

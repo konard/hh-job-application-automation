@@ -106,7 +106,7 @@ async function fill(field) {
   await control.fill(date ? `${date[3]}-${date[2]}-${date[1]}` : field.answer);
 }
 
-async function prefillSlot(url, slot, { qaMap, qaDatabase, profile, resume }, { draft, keepOpenHours, company, vacancyUrl }) {
+async function prefillSlot(url, slot, { qaMap, qaDatabase, profile, resume, contacts }, { draft, keepOpenHours, company, vacancyUrl }) {
   const log = (message) => console.log(`[slot ${slot}] ${message}`);
   const port = 9330 + slot;
   const session = await openSlot({ name: `form-slot-${slot}`, port, keepOpenHours });
@@ -148,7 +148,7 @@ async function prefillSlot(url, slot, { qaMap, qaDatabase, profile, resume }, { 
   const inContexts = qaDatabase ? answersInContexts(qaDatabase.readQADatabase, await loadAnswerContexts()) : null;
   const titles = [...new Set(form.fields.flatMap(({ title }) => [title, ...splitQuestions(title).map(({ text }) => text)]))];
   const maps = new Map(inContexts ? await Promise.all(titles.map(async (title) => [title, await inContexts(title, known)])) : []);
-  const planned = planAnswers(form.fields, { profile, qaMap, qaMapFor: (title) => maps.get(title) ?? qaMap, company });
+  const planned = planAnswers(form.fields, { profile, qaMap, qaMapFor: (title) => maps.get(title) ?? qaMap, contacts, company });
   if (vacancy?.salary || statesPay(form.description)) {
     planned.filter((field) => isPayQuestion(field.title) && field.kind !== 'file' && field.source !== 'company from the chat')
       .forEach((field) => Object.assign(field, { open: true, answer: undefined, choices: undefined, source: undefined }));

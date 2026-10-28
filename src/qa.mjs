@@ -3,6 +3,8 @@
  * Handles extraction, matching, and auto-filling of questions and answers
  */
 import { ANSWER_SEPARATOR, normalizeAnswerVariants } from './answer-variants.mjs';
+import { selectSalaryOption } from './salary-options.mjs';
+import { salaryQuestion } from './salary-questions.mjs';
 export { ANSWER_SEPARATOR } from './answer-variants.mjs';
 
 /**
@@ -438,6 +440,13 @@ const toArray = (answer) => (Array.isArray(answer) ? answer : [answer]);
  */
 export async function fillRadioQuestion({ commander, questionData, verbose = false }) {
   const answers = toArray(questionData.answer);
+  if (salaryQuestion(questionData.question)) {
+    const choice = selectSalaryOption({ question: questionData.question, options: questionData.options.map((option) => option.optionText),
+      answer: answerText(questionData.answer), closest: true });
+    const option = choice && questionData.options.find((item) => item.optionText === choice.option);
+    if (!option) return false;
+    return selectOption({ commander, questionData, option, verbose });
+  }
   const answerIndex = answers.findIndex((ans) => findMatchingOption(questionData.options, ans));
 
   if (answerIndex === -1) {

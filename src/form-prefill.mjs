@@ -14,6 +14,8 @@ import { findBestMatch } from './qa-database.mjs';
 import { composeQuestionAnswer, splitQuestions } from './multi-question.mjs';
 import { expandContacts } from './contacts.mjs';
 import { answerText, findMatchingOption } from './qa.mjs';
+import { salaryQuestion } from './salary-questions.mjs';
+import { selectSalaryOption } from './salary-options.mjs';
 
 /** Placeholder a draft uses where only the user knows the fact */
 export const TO_CHECK = 'уточнить';
@@ -147,7 +149,7 @@ export function pickOptions(options, saved) {
  *   question (answer-contexts.mjs), e.g. a salary in the vacancy's currency
  * @returns {Array<Object>} The fields with {answer|choices, source, note} or {open: true}
  */
-export function planAnswers(fields, { profile, qaMap, qaMapFor = () => qaMap, company = '' }) {
+export function planAnswers(fields, { profile, qaMap, qaMapFor = () => qaMap, contacts = {}, company = '' }) {
   return fields.map((field) => {
     // The employer's own poll (rating.hh.ru) asks to find the company; the ratings are the user's
     if (company && field.kind === 'text' && splitQuestions(field.title).length < 2 && /компани|работодател|organization|company/i.test(field.title)) {
@@ -176,6 +178,12 @@ export function planAnswers(fields, { profile, qaMap, qaMapFor = () => qaMap, co
     // A question asking for a link takes only a saved answer with a link
     if (match && /ссылк|\blink\b|\burl\b/i.test(field.title) && !/https?:\/\/|www\.|\w\.(ru|com|io|org|me)\b/i.test(answerText(match.answer))) {
       match = null;
+    }
+    if (isChoice && field.kind !== 'checkbox' && salaryQuestion(field.title)) {
+      const choice = selectSalaryOption({ question: field.title, options: field.options ?? [], contacts,
+        answer: match ? answerText(match.answer) : '', closest: true });
+      return choice ? { ...field, choices: [choice.option], source: 'salary target', note: choice.contained ? '' : 'closest available range; review before submitting' }
+        : { ...field, open: true, note: 'salary range needs review' };
     }
     if (match) {
       if (isChoice) {
