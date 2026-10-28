@@ -3,6 +3,7 @@ import { auditCvTechnologies, createTechnologyNormalizer, parseAboutInventory, p
 import { rawJobStack } from '../src/resume-stack.mjs';
 
 const aliases = new Map([['PostgreSQL', ['PostgreSQL', 'Postgres']], ['.NET Core', ['.NET Core']], ['.NET Framework', ['.NET Framework']]]);
+const observed = [{ canonical: 'PostgreSQL', spelling: 'Postgres', vacancies: 3 }];
 const cvs = [
   { language: 'ru', skills: [], about: 'Моя биография.\n\nТехнические навыки\nЯзыки:\nC#, C/C++\nИнструменты:\nGit, git, Silverlight\nТехнологии:\nSilverlight, .NET Core, .NET Framework\nБазы данных:\nPostgreSQL\nЛичные:\nПечатаю быстро.\n\nТехнологии — варианты названий:\nPostgreSQL: Postgres',
     jobs: [{ company: 'A', description: 'Используемые технологии:\nAnthropic Claude Code CLI, Git, git, PostgreSQL' }] },
@@ -12,7 +13,7 @@ const cvs = [
 
 describe('bilingual About technology consolidation', () => {
   test('retains biography, personal text and ATS spelling variants while deduplicating globally', () => {
-    const result = auditCvTechnologies(cvs, aliases);
+    const result = auditCvTechnologies(cvs, aliases, { observed });
     assert.ok(result.aboutDuplicates.some((item) => item.duplicate === 'git'));
     assert.ok(result.aboutDuplicates.some((item) => item.duplicate === 'Silverlight'));
     assert.equal(result.positionDuplicates.length, 1);
@@ -24,7 +25,9 @@ describe('bilingual About technology consolidation', () => {
       assert.ok(values.includes('.NET Framework'));
       assert.ok(values.includes('Anthropic Claude Code CLI'));
       assert.ok(values.includes('OpenAI Codex CLI'));
-      assert.ok(proposal.about.includes('Postgres'));
+      assert.ok(proposal.about.includes('PostgreSQL (Postgres)'));
+      assert.ok(!proposal.about.includes('варианты названий:'));
+      assert.ok(!proposal.about.includes('Technology name variants:'));
     }
     assert.ok(result.proposals[0].about.startsWith('Моя биография.'));
     assert.ok(result.proposals[0].about.includes('Печатаю быстро.'));
@@ -32,12 +35,21 @@ describe('bilingual About technology consolidation', () => {
     assert.ok(result.proposals[1].about.includes('Typing.'));
   });
   test('saving and reloading the proposed inventory does not create new duplicates or aliases', () => {
-    const first = auditCvTechnologies(cvs, aliases);
+    const first = auditCvTechnologies(cvs, aliases, { observed });
     const updated = cvs.map((cv, index) => ({ ...cv, about: first.proposals[index].about }));
-    const second = auditCvTechnologies(updated, aliases);
+    const second = auditCvTechnologies(updated, aliases, { observed });
     assert.equal(second.aboutDuplicates.length, 0);
     assert.deepEqual(second.proposals.map((item) => item.about), first.proposals.map((item) => item.about));
     assert.deepEqual(second.proposals.map((item) => item.missing), [[], []]);
+    assert.deepEqual(second.proposals.map((item) => item.missingAliases), [[], []]);
+  });
+  test('unobserved variants and aliases already present in a job are not added to About', () => {
+    const current = JSON.parse(JSON.stringify(cvs));
+    current[0].jobs[0].description += '\n\nPostgres is used here.';
+    const result = auditCvTechnologies(current, aliases, { observed });
+    assert.ok(!result.proposals[0].about.includes('PostgreSQL (Postgres)'));
+    assert.ok(result.proposals[1].about.includes('PostgreSQL (Postgres)'));
+    assert.ok(!auditCvTechnologies(cvs, aliases).proposals[0].about.includes('(Postgres)'));
   });
   test('related frameworks and recorded versions are not collapsed as spelling aliases', () => {
     const normalize = createTechnologyNormalizer(aliases);

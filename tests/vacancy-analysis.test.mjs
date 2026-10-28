@@ -2,7 +2,7 @@ import { describe, test, expect } from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { loadTechnologyAliases, technologyMentions, compareVacancyToResume, vacancyStatistics, vacancyRequirements } from '../src/vacancy-analysis.mjs';
+import { loadTechnologyAliases, technologyMentions, compareVacancyToResume, vacancyStatistics, vacancyRequirements, observedTechnologyNames } from '../src/vacancy-analysis.mjs';
 import { createVacancyCache } from '../src/vacancy-cache.mjs';
 import { createVacancyInsights } from '../src/vacancy-insights.mjs';
 import { planResumeAliases, createResumeAliasUpdater, ALIAS_HEADING } from '../src/resume-aliases.mjs';
@@ -44,11 +44,13 @@ describe('vacancy analysis', () => {
     const plan = planResumeAliases(resume, requested, catalog);
     expect(plan.additions).toEqual(requested.slice(0, 2));
     expect(plan.about.startsWith(resume.about)).toBe(true);
-    expect(plan.about).toContain(ALIAS_HEADING);
+    expect(plan.about).not.toContain(ALIAS_HEADING);
+    expect(plan.about).toContain('Go (Golang)');
+    expect(plan.about).toContain('JavaScript (JS)');
     expect(planResumeAliases({ ...resume, about: plan.about }, requested, catalog).additions).toEqual([]);
     const next = planResumeAliases({ ...resume, about: plan.about }, [{ canonical: 'PostgreSQL', spelling: 'Postgres' }], catalog);
-    expect(next.about).toContain('JavaScript: JS');
-    expect(next.about).toContain('PostgreSQL: Postgres');
+    expect(next.about).toContain('JavaScript');
+    expect(next.about).toContain('PostgreSQL (Postgres)');
   });
   test('close names of unfamiliar brands are suggestions only, with no automatic résumé claim', () => {
     const comparison = compareVacancyToResume({ skills: ['NovelDatabas'], description: '' },
@@ -57,15 +59,22 @@ describe('vacancy analysis', () => {
     expect(comparison.aliases).toEqual([]);
     expect(comparison.missing[0].canonical).toBe('NovelDatabas');
   });
-  test('alias updates retain an English About block without adding a Russian duplicate', () => {
+  test('legacy alias blocks migrate to inline names evidenced by vacancies', () => {
     const about = 'Biography.\n\nTechnical Skills\nLanguages:\nGo\nTechnology name variants:\nJavaScript: JS';
     const plan = planResumeAliases({ ...resume, about }, [{ canonical: 'Go', spelling: 'Golang' }], catalog);
-    expect(plan.about.match(/Technology name variants:/g)).toHaveLength(1);
-    expect(plan.about).toContain('JavaScript: JS');
-    expect(plan.about).toContain('Go: Golang');
+    expect(plan.about).not.toContain('Technology name variants:');
+    expect(plan.about).not.toContain('JavaScript: JS');
+    expect(plan.about).toContain('Go (Golang)');
     expect(plan.about).not.toContain(ALIAS_HEADING);
     const withoutBlock = planResumeAliases({ ...resume, about: 'Technical Skills\nLanguages:\nGo' }, [{ canonical: 'Go', spelling: 'Golang' }], catalog);
-    expect(withoutBlock.about).toContain('Technology name variants:');
+    expect(withoutBlock.about).toContain('Go (Golang)');
+    expect(withoutBlock.about).not.toContain('Technology name variants:');
+  });
+  test('corpus spelling frequencies count each vacancy once, including its description', () => {
+    const seen = observedTechnologyNames([{ id: '1', skills: ['Golang'], description: 'Golang and golang, plus k8s.' },
+      { id: '1', description: 'Golang' }, { id: '2', description: 'Golang' }], catalog);
+    expect(seen.find((item) => item.spelling === 'Golang')).toEqual({ canonical: 'Go', spelling: 'Golang', vacancies: 2 });
+    expect(seen.find((item) => item.spelling === 'k8s')).toEqual({ canonical: 'Kubernetes', spelling: 'k8s', vacancies: 1 });
   });
 });
 

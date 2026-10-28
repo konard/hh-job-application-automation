@@ -438,10 +438,10 @@ const toArray = (answer) => (Array.isArray(answer) ? answer : [answer]);
  * @param {boolean} options.verbose - Enable verbose logging
  * @returns {Promise<boolean>} - True if filled
  */
-export async function fillRadioQuestion({ commander, questionData, verbose = false }) {
+export async function fillRadioQuestion({ commander, questionData, contacts = {}, verbose = false }) {
   const answers = toArray(questionData.answer);
   if (salaryQuestion(questionData.question)) {
-    const choice = selectSalaryOption({ question: questionData.question, options: questionData.options.map((option) => option.optionText),
+    const choice = selectSalaryOption({ question: questionData.question, contacts, options: questionData.options.map((option) => option.optionText),
       answer: answerText(questionData.answer), closest: true });
     const option = choice && questionData.options.find((item) => item.optionText === choice.option);
     if (!option) return false;

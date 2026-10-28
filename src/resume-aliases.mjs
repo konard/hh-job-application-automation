@@ -1,33 +1,22 @@
-/** Append only catalogued alternative spellings supported by existing résumé evidence. */
+/** Prepare canonical technology labels with vacancy-observed aliases inline; owner saves. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createMutex } from './helpers/mutex.mjs';
-import { quoteLino } from './cv.mjs';
-import { containsTechnologySpelling, loadTechnologyAliases, resumeText, technologyMentions } from './vacancy-analysis.mjs';
+import { quoteLino, resumeToCv } from './cv.mjs';
+import { loadTechnologyAliases, observedTechnologyNames } from './vacancy-analysis.mjs';
+import { createVacancyCache } from './vacancy-cache.mjs';
+import { auditCvTechnologies } from './cv-technologies.mjs';
+import { prefillHhAboutDraft } from './hh-cv-editor.mjs';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { openSlot } from './browser-slots.mjs';
 import { seedHhSession } from './login.mjs';
 
 export const ALIAS_HEADING = 'Технологии — варианты названий:';
-const normalize = (value) => String(value).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 
 export function planResumeAliases(resume, requested, catalog) {
-  const known = new Map(technologyMentions(resumeText(resume), catalog).map((item) => [item.canonical, item]));
-  const additions = [];
-  const existing = resumeText(resume);
-  for (const { canonical, spelling } of requested) {
-    if (!known.has(canonical) || !catalog.get(canonical)?.some((name) => normalize(name) === normalize(spelling))) continue;
-    if (containsTechnologySpelling(existing, spelling)) continue;
-    if (!additions.some((item) => normalize(item.spelling) === normalize(spelling))) additions.push({ canonical, spelling });
-  }
-  const about = String(resume.about ?? '');
-  if (!additions.length) return { additions, about };
-  const block = /^(Технологии\s*[—–-]\s*варианты названий:|Technology name variants:|Technology aliases:)\s*\n/im.exec(about);
-  const heading = block?.[1] ?? (/^Technical Skills:?$/im.test(about) ? 'Technology name variants:' : ALIAS_HEADING);
-  const original = block ? about.slice(0, block.index) : about;
-  const lines = block ? about.slice(block.index + block[0].length).split('\n').filter(Boolean) : [];
-  // Our additive block keeps every existing line and adds only newly observed spellings.
-  const added = additions.map((item) => `${item.canonical}: ${item.spelling}`);
-  return { additions, about: `${original.trimEnd()}\n\n${heading}\n${[...new Set([...lines, ...added])].join('\n')}` };
+  const proposal = auditCvTechnologies([resumeToCv(resume)], catalog, { observed: requested }).proposals[0];
+  return { additions: proposal.missingAliases, about: proposal.about };
 }
 
 /** Page logic separated for local-browser regression tests; the caller owns the résumé slot. */
@@ -40,7 +29,7 @@ export async function applyResumeAliases(page, { resume, aliases, catalog, backu
   await editor.waitFor({ state: 'visible', timeout: 15000 });
   const before = await editor.inputValue();
   const plan = planResumeAliases({ ...resume, about: before }, aliases, catalog);
-  if (!plan.additions.length) {
+  if (plan.about === before) {
     await page.locator('[data-qa="resume-partial-edit-cancel"]').click();
     return { ...plan, before };
   }
@@ -48,12 +37,8 @@ export async function applyResumeAliases(page, { resume, aliases, catalog, backu
   if (max > 0 && plan.about.length > max) throw new Error('Alias additions exceed the résumé About field limit');
   await backup({ before, after: plan.about, additions: plan.additions });
   if (await editor.inputValue() !== before) throw new Error('The résumé draft changed during comparison; nothing was overwritten');
-  await editor.fill(plan.about);
-  await page.locator('[data-qa="resume-partial-edit-save"]').click();
-  await editor.waitFor({ state: 'detached', timeout: 15000 });
-  const saved = await page.locator('[data-qa="resume-about-card"]').innerText();
-  if (!plan.additions.every((item) => saved.includes(item.spelling))) throw new Error('The saved résumé did not confirm all alias additions');
-  return { ...plan, before };
+  await prefillHhAboutDraft(page, { kind: 'about', target: { about: before }, fields: { about: plan.about } }, { resumeHash: resume.hash });
+  return { ...plan, before, pending: true };
 }
 
 export function createResumeAliasUpdater({ fromPort = 9322, port = 9352,
@@ -69,7 +54,9 @@ export function createResumeAliasUpdater({ fromPort = 9322, port = 9352,
         return;
       }
       if (!await seed({ page: session.page, fromPort, log })) return;
-      const result = await applyResumeAliases(session.page, { ...request, catalog: await loadTechnologyAliases(),
+      const catalog = await loadTechnologyAliases();
+      const observed = observedTechnologyNames(await createVacancyCache().all(), catalog);
+      const result = await applyResumeAliases(session.page, { ...request, aliases: [...observed, ...request.aliases], catalog,
         backup: async ({ before, after, additions }) => {
           const directory = path.join(path.dirname(resumeFile), 'alias-updates');
           await fs.mkdir(directory, { recursive: true });
@@ -78,13 +65,14 @@ export function createResumeAliasUpdater({ fromPort = 9322, port = 9352,
             .map(([field, value]) => `${field}\n  ${quoteLino(value || ' ')}`).join('\n') + '\n';
           await fs.writeFile(path.join(directory, `${new Date().toISOString().replace(/[:.]/g, '-')}.lino`), text);
         } });
-      if (result.additions.length) {
-        const latest = JSON.parse(await fs.readFile(resumeFile, 'utf8'));
-        if (latest.hash === request.resume.hash) {
-          await fs.writeFile(`${resumeFile}.tmp`, JSON.stringify({ ...latest, about: result.about }, null, 2) + '\n');
-          await fs.rename(`${resumeFile}.tmp`, resumeFile);
-        }
-        log(`📝 Résumé updated with existing technology spellings: ${result.additions.map((item) => item.spelling).join(', ')}`);
+      if (result.pending) {
+        // A separate passive process outlives this request's CDP connection. Only the owner
+        // can save; it then exports actual saved data, never this pending draft.
+        const child = spawn(process.execPath, [fileURLToPath(new URL('./cv-sync.mjs', import.meta.url)), 'watch',
+          '--hh-port', String(port), '--out', 'examples', '--once', '--state-file', `logs/experience/alias-watch-${port}.json`],
+        { detached: true, stdio: 'ignore', cwd: process.cwd() });
+        child.unref();
+        log(`📝 Résumé draft prepared with inline name variants in slot ${port}; review it and click Save. No automatic Save.`);
       }
     } catch (error) { log(`⚠️  Résumé alias update deferred: ${error.message.split('\n')[0]}`); }
     finally { await session.release(); }

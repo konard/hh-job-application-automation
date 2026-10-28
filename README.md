@@ -233,8 +233,11 @@ The complete original text remains available for later analysis.
 Known equivalent names are listed in `data/technology-aliases.lino`. For example, Golang can match
 Go and Postgres can match PostgreSQL. Related technologies and versions are kept distinct: knowing
 Angular does not establish AngularJS experience, and .NET does not establish .NET Core experience.
-When a vacancy uses a verified equivalent spelling absent from the résumé, it is added to an
-additive technology-names section of the résumé's About text in its own browser slot (9352).
+When a vacancy uses a verified equivalent spelling absent from the résumé, the About draft uses
+the canonical brand name with observed alternatives in parentheses, such as `Go (Golang)`.
+The private vacancy cache supplies the evidence; case-only variants, known typos and spellings
+already present elsewhere in that CV are omitted. Legacy name-variant sections are removed.
+The update is prepared in its own browser slot (9352); the owner presses final Save.
 Existing prose is retained; no missing technology is added as experience. The original text and
 changes are backed up under private `data/resume/alias-updates/`, and the local résumé export is
 updated after the site confirms the save. An already-open edit draft is left for the user.
@@ -624,6 +627,11 @@ for review. Explicit choice-only questions never get a free-text draft, and a bo
 question after an answer does not get the same text suggested again. Buttons arriving after their
 question are detected too; clearing an unsent draft retries the choice. Saved answers and frequency counts are retained; plain salary
 suggestions are filtered to the requested net or gross basis.
+Salary radio/select prefills in HH.ru and external forms use numeric ranges rather than fuzzy
+text matching. They understand `тыс.`, `k`, ranges and open upper bands such as «Свыше 241 тыс. руб».
+The configured currency and net/gross target choose the containing band, or the unique nearest
+band for a reviewed form prefill. Ties and currency mismatches remain open. Chat auto-send still
+requires a uniquely containing band; a previously saved lower band does not override the current target.
 Salary follow-ups such as «цифры в долларах и до вычета налогов» inherit the recent salary
 topic even without repeating «зарплата». The reply's language, currency and net/gross basis are
 chosen independently: Russian messages can request USD gross, and a new explicit currency
@@ -836,7 +844,8 @@ Full private exports remain gitignored; existing PDFs and backups are kept durin
 `technologies` reads all saved CVs and audits raw position lists before deduplication. It consolidates
 the existing About inventories and technologies evidenced in jobs into matching bilingual inventories,
 retaining the biography and personal text. Equivalent names are grouped, distinct products and versions
-stay separate, and observed valid spellings are retained in a separate ATS alias block. Job-specific
+stay separate, and vacancy-observed valid spellings absent elsewhere in the CV go inline in parentheses.
+No separate alias block is generated. Job-specific
 lists stay under their jobs; only duplicates and differences from the uniquely matched counterpart are
 proposed for review. Ambiguous employer matches block the review instead of silently skipping a job.
 Drafts and `changes.json` default to gitignored `data/resume/technology-plan/`; `--out` overrides this.

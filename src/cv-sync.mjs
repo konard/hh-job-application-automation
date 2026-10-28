@@ -21,7 +21,8 @@ import { exportSavedCvs, writeCvSnapshots, publishCvSnapshots } from './cv-store
 import { reviewHhCvChange, reviewCvSequence, waitForSavedCvCheckpoint } from './cv-review.mjs';
 import { runCvWatch } from './cv-watch.mjs';
 import { planCvTechnologySync, verifyCvTechnologyCoverage } from './cv-technologies.mjs';
-import { loadTechnologyAliases } from './vacancy-analysis.mjs';
+import { loadTechnologyAliases, observedTechnologyNames } from './vacancy-analysis.mjs';
+import { createVacancyCache, VACANCY_CACHE_DIR } from './vacancy-cache.mjs';
 import {
   discardHhExperience, hhExperienceFormOpen, saveHhExperience,
 } from './experience-sites.mjs';
@@ -238,19 +239,23 @@ async function runEdit(argv) {
 async function runTechnologies(argv) {
   const resumes = await exportResumes(argv);
   const catalog = await loadTechnologyAliases();
-  const plan = planCvTechnologySync(resumes, catalog);
+  const vacancies = await createVacancyCache(VACANCY_CACHE_DIR).all();
+  const observed = observedTechnologyNames(vacancies, catalog);
+  const plan = planCvTechnologySync(resumes, catalog, { observed });
   await fs.mkdir(argv.out, { recursive: true });
   await fs.writeFile(path.join(argv.out, 'audit.json'), `${JSON.stringify(plan, null, 2)}\n`);
+  await fs.writeFile(path.join(argv.out, 'vacancy-spellings.json'), `${JSON.stringify({ vacancies: vacancies.length, observed }, null, 2)}\n`);
   const file = path.join(argv.out, 'changes.json');
   await fs.writeFile(file, `${JSON.stringify(plan.changes, null, 2)}\n`);
   for (const proposal of plan.proposals) await fs.writeFile(path.join(argv.out, `about.${proposal.language}.txt`), `${proposal.about}\n`);
   console.log(`Technology audit: ${plan.technologies.length} unique entries, ${plan.aboutDuplicates.length} About duplicates, ${plan.positionDuplicates.length} position duplicates.`);
+  console.log(`  Inline name variants are evidenced by ${vacancies.length} locally cached vacancies; no separate alias section.`);
   plan.proposals.forEach((proposal) => console.log(`  ${proposal.language}: ${proposal.missing.length} entries absent from About, proposed length ${proposal.about.length}.`));
   console.log(`  Reviewed steps: ${plan.changes.length}; draft plan: ${file}`);
   if (plan.unmatched.length) throw new Error('Some positions could not be paired unambiguously; inspect audit.json before reviewing');
   if (argv.review && plan.changes.length) {
     await runEdit({ ...argv, command: 'batch', file, manualSave: true });
-    const result = verifyCvTechnologyCoverage(await exportResumes(argv), catalog);
+    const result = verifyCvTechnologyCoverage(await exportResumes(argv), catalog, { observed });
     await fs.writeFile(path.join(argv.out, 'verification.json'), `${JSON.stringify(result, null, 2)}\n`);
     console.log(result.complete ? 'All position lists and both About inventories passed the technology audit.' : 'Saved changes retained; the technology audit still has differences. See verification.json.');
   }

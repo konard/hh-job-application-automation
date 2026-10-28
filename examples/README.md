@@ -22,6 +22,9 @@ previous deduplicating parser had hidden. The reviewed plan consolidates 201 tec
 both About sections, preserves their biography/personal text, removes duplicates in both languages'
 Deep.Foundation and LinksPlatform lists, and adds Lua to Russian ArtBridge from its English counterpart.
 These changes require the owner's browser Save; they are not claimed as saved in this status note.
+Canonical technology names use inline parentheses only for verified alternative spellings actually
+found in the local vacancy corpus and absent elsewhere in the CV. The old separate name-variant
+section is removed in the proposed About updates.
 Run `bun run cv -- technologies --hh-browser-port 9351` for a fresh audit. Its verification covers
 technology inventories, not the older prose differences below. The example files continue to show
 only actual saved content, and are refreshed after each confirmed Save.
@@ -35,4 +38,7 @@ These details already exist in the English CV. Keep them while editing English; 
 - **Pegas:** form validation includes guided help.
 - **ArtBridge:** Lua is listed among the technologies used.
 
-The ELAR English description expands the Russian abbreviation “СУВ” as “database management system.” Verify that interpretation with the owner before propagating it; retain the original wording until reviewed.
+The ELAR English description incorrectly expands “СУВ” as “database management system.”
+[The platform developer's project page](https://cinimex.ru/projects/gazprombank/) identifies it as
+“Система управления взаимодействием,” Gazprombank's integration platform. A correction in both
+CVs is prepared for separate owner review; this note does not claim that it is already saved.

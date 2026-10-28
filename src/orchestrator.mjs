@@ -48,7 +48,7 @@ const PAGE_READY_TIMEOUT = 120000;
  * @returns {Object} Orchestrator with start method
  */
 export function createOrchestrator({
-  commander, page, argv, qaDB, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, vacancyInsights = null, onPageClosed,
+  commander, page, argv, qaDB, contacts = {}, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, vacancyInsights = null, onPageClosed,
   onApplicationSent = async () => {},
   answerInstantChat = async () => {},
 }) {
@@ -258,6 +258,7 @@ export function createOrchestrator({
     MESSAGE,
     readQADatabase: qaDB.readQADatabase,
     addOrUpdateQA: qaDB.addOrUpdateQA,
+    contacts,
     // A form with a non-exact answer is sent after the user's `y` (decideSend); unattended only with this flag
     autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
     onMissingAnswers: argv.onMissingAnswers,

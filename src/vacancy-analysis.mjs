@@ -35,6 +35,25 @@ export function technologyMentions(text, aliases) {
 export const resumeText = (resume) => [resume.title, ...(resume.keySkills ?? []), resume.about,
   ...(resume.jobs ?? []).flatMap((job) => [job.position, job.description])].filter(Boolean).join('\n');
 
+/** Exact observed spellings in the private corpus, once per vacancy and ignoring duplicate IDs. */
+export function observedTechnologyNames(vacancies, aliases) {
+  const counts = new Map(), seen = new Set();
+  for (const vacancy of vacancies) {
+    if (vacancy.id && seen.has(vacancy.id)) continue;
+    if (vacancy.id) seen.add(vacancy.id);
+    const body = [...vacancy.skills ?? [], vacancy.description ?? ''].join('\n');
+    for (const { canonical, spellings } of technologyMentions(body, aliases)) {
+      for (const spelling of new Set(spellings.map(key))) {
+        const names = counts.get(canonical) ?? new Map();
+        const previous = names.get(spelling);
+        names.set(spelling, { canonical, spelling: previous?.spelling ?? spellings.find((name) => key(name) === spelling), vacancies: (previous?.vacancies ?? 0) + 1 });
+        counts.set(canonical, names);
+      }
+    }
+  }
+  return [...counts.values()].flatMap((names) => [...names.values()]).sort((a, b) => b.vacancies - a.vacancies || a.spelling.localeCompare(b.spelling));
+}
+
 const REQUIRED = /^(?:требования|основные требования|что (?:мы )?(?:ожидаем|жд[её]м)|мы (?:ожидаем|ищем)|нам важно|вам потребуется|необходимые навыки|requirements|must[- ]have|what you (?:bring|need)|qualifications)\s*[:：]?$/iu;
 const PREFERRED = /^(?:будет плюсом|желательно|преимуществом будет|nice[- ]to[- ]have|preferred|bonus)\s*[:：]?$/iu;
 const OTHER = /^(?:обязанности|задачи|чем предстоит заниматься|что предстоит делать|мы предлагаем|условия|о компании|responsibilities|what we offer|benefits|about us)\s*[:：]?$/iu;

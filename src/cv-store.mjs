@@ -7,6 +7,23 @@ import { formatCvLino, parseCvLino, privateDetails, resumeToCv } from './cv.mjs'
 
 export const CV_EXPORT_DIR = path.join(process.cwd(), 'data', 'resume', 'cv');
 
+/** Keep the app's selected résumé cache aligned with real exports, retaining existing PDFs. */
+export async function refreshSelectedCvCache(directory = CV_EXPORT_DIR, selectedDirectory = path.dirname(directory)) {
+  const selected = await fs.readFile(path.join(selectedDirectory, 'resume.json'), 'utf8').then(JSON.parse).catch(() => null);
+  if (!selected?.hash || !/^[a-z0-9]+$/i.test(selected.hash)) return false;
+  const source = path.join(directory, selected.hash);
+  if (!await fs.access(path.join(source, 'resume.json')).then(() => true, () => false)) return false;
+  for (const name of ['resume.json', 'resume.md', 'resume.txt', 'stack.md']) {
+    const from = path.join(source, name);
+    if (!await fs.access(from).then(() => true, () => false)) continue;
+    const to = path.join(selectedDirectory, name);
+    const temporary = `${to}.${process.pid}.tmp`;
+    await fs.copyFile(from, temporary);
+    await fs.rename(temporary, to);
+  }
+  return true;
+}
+
 export const runCvCommand = (command, args, options = {}) => new Promise((resolve, reject) => {
   const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'inherit'], ...options });
   child.on('error', reject);
@@ -39,6 +56,7 @@ export async function exportSavedCvs({ port = 9322, directory = CV_EXPORT_DIR } 
     // Only this invocation's temporary directory, never the existing exported CVs.
     await fs.rm(refresh, { recursive: true, force: true });
   }
+  await refreshSelectedCvCache(directory);
   return resumes;
 }
 

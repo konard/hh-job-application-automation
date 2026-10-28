@@ -6,6 +6,9 @@ import {
   openHhExperienceForm, setHhExperienceResumes,
 } from './experience-sites.mjs';
 
+// HH.ru's text export collapses runs of horizontal whitespace inside paragraphs.
+const exportText = (text) => normalizeText(text).replace(/[^\S\n]+/g, ' ');
+
 /** Runs in the page. Only workplace fields, never cookies or account/contact fields. */
 export function readHhWorkplace({ includeAbout = false } = {}) {
   const field = (selector) => document.querySelector(selector);
@@ -14,7 +17,7 @@ export function readHhWorkplace({ includeAbout = false } = {}) {
     const about = field('textarea[data-qa="resume-editor-about"]');
     if (includeAbout && about) {
       const url = new URL(window.location.href);
-      const resumeHash = url.pathname.match(/\/resume\/([a-z0-9]+)/i)?.[1] ?? url.searchParams.get('resumeFrom') ?? url.searchParams.get('resume');
+      const resumeHash = url.pathname.match(/\/resume\/(?:edit\/)?([a-z0-9]+)(?:\/|$)/i)?.[1] ?? url.searchParams.get('resumeFrom') ?? url.searchParams.get('resume');
       return { kind: 'about', url: url.href, resumeHash, about: about.value };
     }
     return null;
@@ -59,6 +62,16 @@ export async function readHhCvForm(page) {
     end: form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`) };
 }
 
+/** Cancel an unchanged app-opened About editor after a failed preparation, never an edited draft. */
+export async function discardUnchangedHhAbout(page, { resumeHash, expectedAbout }) {
+  const form = await readHhCvForm(page);
+  if (form?.kind !== 'about' || form.resumeHash !== resumeHash || form.about !== expectedAbout) {
+    throw new Error('hh.ru: About draft changed; it was not discarded');
+  }
+  await page.locator('[data-qa="resume-partial-edit-cancel"]').click();
+  await page.locator('textarea[data-qa="resume-editor-about"]').waitFor({ state: 'detached', timeout: 15000 });
+}
+
 /** Open only this CV's About field, check its current value, and leave Save to the owner. */
 export async function prepareHhAboutChange(page, change, { resumeHash }) {
   if (await hhCvFormOpen(page)) throw new Error('hh.ru: finish the existing CV draft before editing About');
@@ -67,11 +80,22 @@ export async function prepareHhAboutChange(page, change, { resumeHash }) {
     throw new Error('hh.ru: the CV slot needs manual sign-in or CAPTCHA completion');
   }
   await page.locator('[data-qa="resume-edit-button-about"]').click();
+  return prefillHhAboutDraft(page, change, { resumeHash });
+}
+
+/** Also supports recovering an unchanged app-opened editor after a preparation error. */
+export async function prefillHhAboutDraft(page, change, { resumeHash }) {
   const editor = page.locator('textarea[data-qa="resume-editor-about"]');
   await editor.waitFor({ state: 'visible', timeout: 15000 });
+  // SSR makes the textarea visible before React attaches onChange. Filling too early can
+  // look successful, then be reset to the old value during hydration.
+  await page.waitForFunction(() => {
+    const field = document.querySelector('textarea[data-qa="resume-editor-about"]');
+    return field && Object.keys(field).some((name) => name.startsWith('__reactProps$') && typeof field[name]?.onChange === 'function');
+  }, null, { timeout: 20000 });
   const before = await readHhCvForm(page);
   if (before?.kind !== 'about' || before.resumeHash !== resumeHash) throw new Error('hh.ru: About editor belongs to a different CV');
-  if (change.target?.about !== undefined && normalizeText(before.about) !== normalizeText(change.target.about)) {
+  if (change.target?.about !== undefined && exportText(before.about) !== exportText(change.target.about)) {
     throw new Error('hh.ru: saved About text changed since the audit; current draft left untouched');
   }
   const wanted = String(change.fields.about);
@@ -79,6 +103,20 @@ export async function prepareHhAboutChange(page, change, { resumeHash }) {
   if (max > 0 && wanted.length > max) throw new Error(`hh.ru: About draft exceeds its ${max}-character limit`);
   if (await editor.inputValue() !== before.about) throw new Error('hh.ru: About was edited during comparison; left untouched');
   await editor.fill(wanted);
+  const controlledValue = await editor.evaluate((field) => field[Object.keys(field).find((name) => name.startsWith('__reactProps$'))]?.value);
+  if (controlledValue !== wanted) {
+    // Some HH.ru builds update the DOM on bulk input without updating controlled state.
+    // A native keystroke and its undo go through the same onChange path as owner typing.
+    await editor.press('Space');
+    await editor.press('Backspace');
+  }
+  await page.waitForFunction((wanted) => {
+    const field = document.querySelector('textarea[data-qa="resume-editor-about"]');
+    const props = field?.[Object.keys(field).find((name) => name.startsWith('__reactProps$'))];
+    return field?.value === wanted && props?.value === wanted;
+  }, wanted, { timeout: 5000 });
+  await editor.blur();
+  await page.evaluate(() => new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
   const draft = await readHhCvForm(page);
   if (draft.about !== wanted) throw new Error('hh.ru: About prefill did not match the requested text');
   return { kind: 'about', before, draft, followup: null, notes: [] };
@@ -181,7 +219,13 @@ export async function fillHhExperienceMetadata(page, fields) {
  * in a separate reviewed step. Existing open forms are never navigated away from.
  */
 export async function prepareHhCvChange(page, change, { resumeHash, port = 9351 } = {}) {
-  if (change.kind === 'about') return prepareHhAboutChange(page, change, { resumeHash });
+  if (change.kind === 'about') {
+    const existing = await readHhCvForm(page);
+    if (existing?.kind === 'about' && existing.resumeHash === resumeHash && existing.about === change.fields.about) {
+      return { kind: 'about', before: existing, draft: existing, followup: null, notes: ['Reattached to the exact prepared About draft; no fields changed.'] };
+    }
+    return prepareHhAboutChange(page, change, { resumeHash });
+  }
   if (await hhCvFormOpen(page)) {
     throw new Error('hh.ru: finish the existing form before preparing another position');
   }
@@ -266,7 +310,7 @@ export function installHhCvObserver({ readSource, binding }) {
 export function verifyHhSavedForm(form, resumes) {
   if (form.kind === 'about') {
     const cv = resumes.find((resume) => resume.hash === form.resumeHash)?.cv;
-    return Boolean(cv && normalizeText(cv.about) === normalizeText(form.about));
+    return Boolean(cv && exportText(cv.about) === exportText(form.about));
   }
   const start = parseMonthYear(`${form.startMonth} ${form.startYear}`);
   const end = form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`);

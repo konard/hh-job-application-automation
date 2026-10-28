@@ -1,6 +1,6 @@
 /** Evidence-based, bilingual technology inventories and About drafts. No browser writes. */
 import { collectStack, findMentionedTerms, JOB_STACK_HEADINGS, rawJobStack, splitList } from './resume-stack.mjs';
-import { containsTechnologySpelling } from './vacancy-analysis.mjs';
+import { containsTechnologySpelling, technologyMentions } from './vacancy-analysis.mjs';
 import { companyKey, companySimilarity } from './experience.mjs';
 
 const key = (value) => String(value).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -33,10 +33,11 @@ const EXTRA_ALIASES = new Map([
   ['Tinkoff Invest API', ['Tinkoff Invest API']],
 ]);
 const DISPLAY = { 'Claude Code': 'Anthropic Claude Code CLI', Codex: 'OpenAI Codex CLI',
-  'GitHub Copilot': 'GitHub Copilot', React: 'React.js', npm: 'npm', NPM: 'npm',
+  'GitHub Copilot': 'GitHub Copilot', npm: 'npm', NPM: 'npm',
   '1С:Документооборот': { ru: '1С:Документооборот', en: '1C:Document Management' } };
 const BLOCK = new RegExp(`\\n*^${JOB_STACK_HEADINGS}\\s*:[^\\n]*(?:\\n(?!\\s*\\n)[^\\n]*)*`, 'imu');
 const CORRECTED_TYPOS = new Set(['cuter', 'teleric']);
+const INVALID_ALIASES = new Set([...CORRECTED_TYPOS, 'с#']);
 
 /** Dates must also match at the call site. Keep translated business descriptions out of brand matching. */
 function sameEmployer(a, b) {
@@ -85,7 +86,10 @@ export function createTechnologyNormalizer(catalog = new Map()) {
   }
   return (term) => {
     const linux = String(term).match(/^Linux\s*(\([^)]*\))?$/i);
-    const canonical = linux ? 'Linux' : reverse.get(key(term)) ?? String(term).trim();
+    const decorated = String(term).match(/^(.*?)\s+\(([^()]*)\)$/);
+    const base = decorated && reverse.get(key(decorated[1]));
+    const onlyAliases = base && splitList(decorated[2]).every((name) => reverse.get(key(name)) === base);
+    const canonical = linux ? 'Linux' : onlyAliases ? base : reverse.get(key(term)) ?? String(term).trim();
     return { canonical, id: key(canonical), detail: linux?.[1] ?? '' };
   };
 }
@@ -103,7 +107,7 @@ const categoryFor = (term) => {
   return 'tools';
 };
 
-export function auditCvTechnologies(cvs, catalog = new Map()) {
+export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [] } = {}) {
   const normalize = createTechnologyNormalizer(catalog);
   const inventories = cvs.map((cv) => parseAboutInventory(cv.about));
   const registry = new Map();
@@ -133,6 +137,11 @@ export function auditCvTechnologies(cvs, catalog = new Map()) {
       }
     }
   }
+  for (const [index, cv] of cvs.entries()) {
+    // Structured key skills and an unstructured About may contain known technologies too.
+    technologyMentions([...(cv.skills ?? []), inventories[index].intro].join('\n'), catalog)
+      .forEach((item) => register(item.canonical));
+  }
   const vocabulary = new Set([...registry.values()].flatMap((item) => [...item.spellings, item.canonical]));
   for (const [canonical, names] of [...catalog, ...EXTRA_ALIASES]) {
     vocabulary.add(canonical);
@@ -161,18 +170,6 @@ export function auditCvTechnologies(cvs, catalog = new Map()) {
   }
   // Silverlight occurs as both a tool and a technology in the source inventories.
   if (registry.has(key('Silverlight'))) registry.get(key('Silverlight')).category = 'technologies';
-  const aliases = new Map();
-  const addAlias = (canonical, spelling, display) => {
-    if (CORRECTED_TYPOS.has(key(spelling))) return;
-    if (containsTechnologySpelling(display, spelling) || key(canonical) === key(spelling)) return;
-    const list = aliases.get(canonical) ?? [];
-    if (!list.some((item) => key(item) === key(spelling))) list.push(spelling);
-    aliases.set(canonical, list);
-  };
-  for (const inventory of inventories) for (const row of inventory.aliases) {
-    const match = row.match(/^(.*?):\s+(.+)$/);
-    if (match) splitList(match[2]).forEach((spelling) => addAlias(normalize(match[1]).canonical, spelling, normalize(match[1]).canonical));
-  }
   const proposals = cvs.map((cv, index) => {
     const categories = {};
     for (const item of registry.values()) {
@@ -180,11 +177,36 @@ export function auditCvTechnologies(cvs, catalog = new Map()) {
       const display = typeof preferred === 'string' ? preferred : preferred[cv.language];
       const label = `${display}${item.detail ? ` ${item.detail}` : ''}`;
       (categories[item.category] ??= []).push(label);
-      item.spellings.forEach((spelling) => addAlias(item.canonical, spelling, label));
     }
     const original = inventories[index];
     const aboutIds = new Set(Object.values(original.categories).flat().flatMap(components).map((term) => normalize(term).id));
-    return { language: cv.language, categories, original, missing: [...registry.values()].filter((item) => !aboutIds.has(item.id)).map((item) => item.canonical) };
+    const body = [cv.title, ...(cv.skills ?? []), original.intro, ...Object.values(categories).flat(),
+      ...cv.jobs.flatMap((job) => [job.position, job.description])].filter(Boolean).join('\n');
+    const originalBody = [cv.title, ...(cv.skills ?? []), original.intro, ...Object.values(original.categories).flat(),
+      ...cv.jobs.flatMap((job) => [job.position, job.description])].filter(Boolean).join('\n');
+    const aliases = new Map();
+    const addedAliases = [];
+    for (const item of observed) {
+      const canonical = normalize(item.canonical);
+      const equivalent = normalize(item.spelling);
+      if (!registry.has(canonical.id) || equivalent.id !== canonical.id || INVALID_ALIASES.has(key(item.spelling)) ||
+        containsTechnologySpelling(body, item.spelling)) continue;
+      const names = aliases.get(canonical.id) ?? [];
+      if (!names.some((name) => key(name) === key(item.spelling))) {
+        names.push(item.spelling);
+        addedAliases.push(item);
+      }
+      aliases.set(canonical.id, names);
+    }
+    for (const terms of Object.values(categories)) {
+      for (let i = 0; i < terms.length; i++) {
+        const names = aliases.get(normalize(terms[i]).id);
+        if (names?.length) terms[i] += ` (${names.join(', ')})`;
+      }
+    }
+    return { language: cv.language, categories, original, addedAliases,
+      missingAliases: addedAliases.filter((item) => !containsTechnologySpelling(originalBody, item.spelling)),
+      missing: [...registry.values()].filter((item) => !aboutIds.has(item.id)).map((item) => item.canonical) };
   });
   for (const proposal of proposals) {
     const parts = [proposal.original.intro, proposal.language === 'ru' ? 'Технические навыки' : 'Technical Skills'];
@@ -192,7 +214,6 @@ export function auditCvTechnologies(cvs, catalog = new Map()) {
       if (proposal.categories[category]?.length) parts.push(`${names[proposal.language]}:\n${proposal.categories[category].join(', ')}`);
     }
     if (proposal.original.personal) parts.push(`${proposal.language === 'ru' ? 'Личные' : 'Personal'}:\n${proposal.original.personal}`);
-    if (aliases.size > 0) parts.push(`${proposal.language === 'ru' ? 'Технологии — варианты названий:' : 'Technology name variants:'}\n${[...aliases].map(([canonical, names]) => `${canonical}: ${names.join('; ')}`).join('\n')}`);
     proposal.about = [parts[0], parts.slice(1).join('\n')].filter(Boolean).join('\n\n');
     delete proposal.original;
   }
@@ -214,10 +235,10 @@ export function replaceJobTechnologyLists(description, terms, language) {
 }
 
 /** Two consolidated About updates, then the minimal reviewed position cleanups. */
-export function planCvTechnologySync(resumes, catalog = new Map()) {
+export function planCvTechnologySync(resumes, catalog = new Map(), options = {}) {
   const normalize = createTechnologyNormalizer(catalog);
   const cvs = resumes.map((resume) => resume.cv);
-  const audit = auditCvTechnologies(cvs, catalog);
+  const audit = auditCvTechnologies(cvs, catalog, options);
   const changes = [];
   const unmatched = [];
   for (const { hash, cv } of resumes) {
@@ -254,9 +275,9 @@ export function planCvTechnologySync(resumes, catalog = new Map()) {
 }
 
 /** Verify completeness after manual saves, independently of the desired text formatting. */
-export function verifyCvTechnologyCoverage(resumes, catalog = new Map()) {
+export function verifyCvTechnologyCoverage(resumes, catalog = new Map(), options = {}) {
   const normalize = createTechnologyNormalizer(catalog);
-  const audit = auditCvTechnologies(resumes.map((resume) => resume.cv), catalog);
+  const audit = auditCvTechnologies(resumes.map((resume) => resume.cv), catalog, options);
   const inventories = resumes.map(({ hash, cv }) => {
     const terms = Object.values(parseAboutInventory(cv.about).categories).flat().flatMap(components);
     const ids = terms.map((term) => normalize(term).id);
@@ -264,10 +285,14 @@ export function verifyCvTechnologyCoverage(resumes, catalog = new Map()) {
       duplicates: ids.filter((id, index) => ids.indexOf(id) !== index),
       missing: audit.technologies.filter((item) => !ids.includes(item.id)).map((item) => item.canonical) };
   });
-  const plan = planCvTechnologySync(resumes, catalog);
+  const plan = planCvTechnologySync(resumes, catalog, options);
   const positionDifferences = plan.changes.filter((change) => change.kind === 'update');
-  return { complete: inventories.every((item) => !item.duplicates.length && !item.missing.length) && !positionDifferences.length && !plan.unmatched.length,
+  const aliasGaps = audit.proposals.map((proposal) => ({ language: proposal.language, missing: proposal.missingAliases }));
+  const legacyAliasSections = resumes.filter(({ cv }) => parseAboutInventory(cv.about).aliases.length).map(({ cv }) => cv.language);
+  const complete = inventories.every((item) => !item.duplicates.length && !item.missing.length) && !positionDifferences.length && !plan.unmatched.length &&
+    aliasGaps.every((item) => !item.missing.length) && !legacyAliasSections.length;
+  return { complete,
     technologies: audit.technologies.length, inventories, positionDuplicates: audit.positionDuplicates,
-    unmatched: plan.unmatched,
+    unmatched: plan.unmatched, aliasGaps, legacyAliasSections,
     positionDifferences: positionDifferences.map((change) => ({ resumeHash: change.resumeHash, company: change.target.company, ...change.audit })) };
 }

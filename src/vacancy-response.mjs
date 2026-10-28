@@ -140,7 +140,7 @@ export async function savedAnswersInContext({ commander, readQADatabase, context
  * @param {Object} options
  * @param {string|string[]} [options.context] - The vacancy's card and description, most telling first, for the answers' contexts (answer-contexts.mjs)
  */
-export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context = '' }) {
+export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context = '', contacts = {} }) {
   try {
     const { qaMap, pageQuestions, answerFor, byPattern } = await answersInContext({ commander, readQADatabase, context });
     const questionToAnswer = new Map();
@@ -196,7 +196,7 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
           });
           console.log(`[QA] "${question}": «${typed}» was typed before in another context, typed again`);
         }
-        await fillers[data.type]?.({ commander, questionData: data, verbose });
+        await fillers[data.type]?.({ commander, questionData: data, verbose, contacts });
         if (data.type === 'textarea') {
           await commander.wait({ ms: 2000, reason: 'stability delay between textarea fills' });
         }
@@ -377,6 +377,7 @@ export async function handleVacancyResponsePage({
   MESSAGE,
   readQADatabase,
   addOrUpdateQA,
+  contacts = {},
   autoSubmitEnabled = false,
   ignoreVacanciesWithQuestionnaire,
   returnUrl = DEFAULT_RETURN_URL,
@@ -487,7 +488,7 @@ export async function handleVacancyResponsePage({
     if (submitWithoutTestSelector && !retrySubmission) {
       console.log('Using special "Откликнуться без теста" flow');
       // Questions outside the test (e.g. the salary) still take their saved answers
-      await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext });
+      await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext, contacts });
       await commander.clickButton({ selector: submitWithoutTestSelector, scrollIntoView: true, smoothScroll: true });
       console.log('Clicked "Откликнуться без теста" button');
       await commander.wait({ ms: 2000, reason: 'submit without test to complete' });
@@ -502,7 +503,7 @@ export async function handleVacancyResponsePage({
     // not make them count as exact
     const savedBefore = await savedAnswersInContext({ commander, readQADatabase, context: salaryContext });
     // Auto-fill answers from database, then give user time to review them
-    await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext });
+    await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext, contacts });
     // Sent without asking only when autofill alone answered everything with saved answers of the
     // very same questions; checked again before sending, in case an answer was changed meanwhile
     const answersExact = async () => allAnswersExact(

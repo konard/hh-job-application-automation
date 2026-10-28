@@ -3,8 +3,9 @@
  */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm, readHhCvForm, verifyHhSavedForm } from '../../src/hh-cv-editor.mjs';
+import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm, readHhCvForm, verifyHhSavedForm, discardUnchangedHhAbout } from '../../src/hh-cv-editor.mjs';
 import { chooseHhMonth, clickHhExperienceEdit, openHhExperienceForm } from '../../src/experience-sites.mjs';
+import { applyResumeAliases } from '../../src/resume-aliases.mjs';
 
 function fixture() {
   const source = { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.',
@@ -15,8 +16,21 @@ function fixture() {
   window.saveCount = 0;
   window.aboutText = 'Biography.\n\nTechnical Skills\nTools:\nGit';
   window.about = () => {
+    window.history.pushState({}, '', '/resume/edit/en/about');
     main.innerHTML = '<div role="dialog"><textarea data-qa="resume-editor-about" maxlength="10000"></textarea><button data-qa="resume-partial-edit-cancel">Cancel</button><button data-qa="resume-partial-edit-save">Save</button></div>';
     main.querySelector('textarea').value = window.aboutText;
+    const field = main.querySelector('textarea');
+    // SSR initially exposes an editable textarea; hydration later restores saved state.
+    setTimeout(() => {
+      if (!field.isConnected) return;
+      field.value = window.aboutText;
+      let controlled = field.value;
+      let nativeTyping = false;
+      field.onkeydown = () => { nativeTyping = true; };
+      field.oninput = () => { if (nativeTyping) controlled = field.value; };
+      field.onblur = () => { field.value = controlled; };
+      field.__reactProps$fixture = { onChange: () => {}, get value() { return controlled; } };
+    }, 250);
     main.querySelector('[data-qa=resume-partial-edit-save]').onclick = () => {
       window.aboutText = main.querySelector('textarea').value;
       window.saveCount++;
@@ -33,6 +47,7 @@ function fixture() {
     main.querySelector('.english').onclick = () => { window.form(true); main.querySelector('textarea').value = 'English copy.'; };
   };
   window.resume = () => {
+    if (window.location.pathname.startsWith('/resume/edit/')) window.history.pushState({}, '', '/resume/en');
     main.innerHTML = `<button data-qa="resume-edit-button-about">Edit About</button><button data-qa="profile-experience-viewAll">Edit experience</button><section>
       <div data-qa="profile-experience-company-card">${source.company} ${source.title} ${source.description}</div>
       <button data-qa="edit-experience-button-wrong">Edit</button><button data-qa="edit-experience-button-right">Edit</button></section>`;
@@ -228,6 +243,8 @@ try {
     target: { about: 'Biography.\n\nTechnical Skills\nTools:\nGit' } }, { resumeHash: 'en' });
   assert.equal(about.draft.kind, 'about');
   assert.equal(about.draft.resumeHash, 'en');
+  assert.equal((await prepareHhCvChange(page, { kind: 'about', fields: { about: about.draft.about } }, { resumeHash: 'en' })).draft.about, about.draft.about);
+  await assert.rejects(() => prepareHhCvChange(page, { kind: 'about', fields: { about: 'Different draft.' } }, { resumeHash: 'en' }), /existing CV draft/);
   assert.equal(await page.evaluate(() => window.saveCount), 0);
   await assert.rejects(() => prepareHhCvChange(page, { kind: 'add', fields: {} }, { resumeHash: 'en' }), /finish the existing form/);
   let aboutSaved;
@@ -246,6 +263,18 @@ try {
   assert.equal(aboutSaved.about, 'Owner changed About before Save.');
   assert.equal(aboutSaved.kind, 'about');
   stopAbout();
+  await page.locator('[data-qa=resume-edit-button-about]').click();
+  const originalAbout = await readHhCvForm(page);
+  await page.locator('[data-qa=resume-editor-about]').fill('An unsaved edit.');
+  await assert.rejects(() => discardUnchangedHhAbout(page, { resumeHash: 'en', expectedAbout: originalAbout.about }), /was not discarded/);
+  assert.equal((await readHhCvForm(page)).about, 'An unsaved edit.');
+  await discardUnchangedHhAbout(page, { resumeHash: 'en', expectedAbout: 'An unsaved edit.' });
+  assert.equal(await readHhCvForm(page), null);
+  const aliasDraft = await applyResumeAliases(page, { resume: { hash: 'en', title: 'Developer', keySkills: ['Go'], jobs: [] },
+    aliases: [{ canonical: 'Go', spelling: 'Golang' }], catalog: new Map([['Go', ['Go', 'Golang']]]) });
+  assert.equal(aliasDraft.pending, true);
+  assert.ok((await readHhCvForm(page)).about.includes('Go (Golang)'));
+  assert.equal(await page.evaluate(() => window.saveCount), 0); // fresh fixture document, no Save
   console.log('Browser checks passed: shared copy, metadata, language selection, draft protection, dates, exact user-save capture and deselection without deletion.');
 } finally {
   await browser.close();

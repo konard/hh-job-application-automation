@@ -196,6 +196,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     page: session.page,
     argv,
     qaDB: { readQADatabase, addOrUpdateQA },
+    contacts,
     deferredQuestions,
     vacancyFilters,
     skippedVacancies,

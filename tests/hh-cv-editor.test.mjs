@@ -18,6 +18,8 @@ describe('HH.ru CV save verification', () => {
     assert.equal(verifyHhSavedForm(about, [{ hash: 'en', cv: { about: about.about } }]), true);
     assert.equal(verifyHhSavedForm(about, [{ hash: 'ru', cv: { about: about.about } }]), false);
     assert.equal(verifyHhSavedForm(about, [{ hash: 'en', cv: { about: 'Original prefill.' } }]), false);
+    assert.equal(verifyHhSavedForm({ ...about, about: 'Owner-edited  About\ttext.' }, [{ hash: 'en', cv: { about: about.about } }]), true);
+    assert.equal(verifyHhSavedForm({ ...about, about: 'Owner-edited About text!' }, [{ hash: 'en', cv: { about: about.about } }]), false);
   });
   const form = {
     company: 'Example', title: 'AI Tech Lead', description: 'Owner added this detail.',
