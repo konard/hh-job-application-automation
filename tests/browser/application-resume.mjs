@@ -20,6 +20,7 @@ try {
         if (document.getElementById('options')) return document.getElementById('options').remove();
         const list = document.createElement('div');
         list.id = 'options';
+        list.setAttribute('data-qa', 'magritte-select-option-list');
         list.innerHTML = window.available.map((hash) => `<label role="option" data-qa="magritte-select-option-${hash}">
           <input type="radio" name="resume" value="${hash}" ${hash === window.selected ? 'checked' : ''}>
           <div data-qa="resume-title">${title(hash)}</div></label>`).join('');
@@ -39,7 +40,7 @@ try {
   const commander = {
     evaluate: ({ fn, args }) => page.evaluate(fn, args),
     clickButton: ({ selector }) => page.locator(selector).click(),
-    waitForSelector: ({ selector, timeout }) => page.locator(selector).first().waitFor({ timeout }),
+    waitForSelector: ({ selector, timeout }) => page.locator(selector).waitFor({ timeout }),
   };
   const select = createApplicationResumeSelector({ log: () => {}, readResumes: async () => [
     { hash: 'ru1', language: 'ru' }, { hash: 'en1', language: 'en' },

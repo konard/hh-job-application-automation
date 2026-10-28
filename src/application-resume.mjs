@@ -3,7 +3,7 @@ import { isClearlyEnglish } from './cover-letter.mjs';
 import { pickResume, loadApplicationResumes } from './resumes.mjs';
 
 const TITLE = '[data-qa="resume-title"][data-hh-application-resume="true"]';
-const OPTIONS = '[role="option"][data-qa^="magritte-select-option-"]';
+const OPTION_LIST = '[data-qa="magritte-select-option-list"]';
 
 /** Only employer questions and vacancy text belong here, never the applicant's CV salary. */
 export function applicationResumeLanguage({ questions = [], context = [] } = {}) {
@@ -48,7 +48,7 @@ export function createApplicationResumeSelector({ readResumes = loadApplicationR
       return { ready: false, language };
     }
     await click(TITLE);
-    await commander.waitForSelector({ selector: OPTIONS, timeout: 10000 });
+    await commander.waitForSelector({ selector: OPTION_LIST, timeout: 10000 });
     choices = await read();
     const desired = chooseApplicationResume(choices.options, await readResumes(), language);
     if (!desired) {
@@ -60,7 +60,7 @@ export function createApplicationResumeSelector({ readResumes = loadApplicationR
       await click(`[data-qa="magritte-select-option-${desired.hash}"]`);
       await read();
       await click(TITLE);
-      await commander.waitForSelector({ selector: OPTIONS, timeout: 10000 });
+      await commander.waitForSelector({ selector: OPTION_LIST, timeout: 10000 });
     }
     const selected = (await read()).options.find((option) => option.checked);
     await click(TITLE);
