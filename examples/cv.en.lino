@@ -101,15 +101,15 @@ resume
       start 2022-09
       end 2024-06
       description
-        'Managing a team of programmers from various countries, formulating tasks, coordinating task execution, ensuring code quality and adherence to code style conventions, guaranteeing that code is covered with documentation, code examples, tests, and benchmarks, verifying the operability of the developed software solutions, developing continuous integration and delivery.'
+        'Managing teams of programmers from various countries, formulating tasks, coordinating task execution, ensuring code quality and adherence to code style conventions, guaranteeing that code is covered with documentation, code examples, tests, and benchmarks, verifying the operability of the developed software solutions, developing continuous integration and delivery.'
         'Managing social media and interacting with the audience.'
         'Developing a data-oriented associative operating system and application (super-app), a development environment for cross-platform multilingual multi-paradigm cloud and local associative applications.'
         'Developing the architecture of the Deep ecosystem.'
         'Developing schemas, migrations, and GraphQL API for PostgreSQL with Hasura making flexible permissions possible.'
         'Developing an ecosystem of isolated code executors (event handlers for links events in JS, PHP, Python, Rust, C/C++, Kotlin, etc.).'
-        'Developing an adapter for the NPM package manager for the ecosystem of associative packages (currently over 330+ packages).'
+        'Developing an adapter for the npm package manager for the ecosystem of associative packages (currently over 330+ packages).'
         'Developing associative packages for the Deep ecosystem (types of links, sets/datasets of prepared links, and behavior as code in various languages stored as links).'
-        'Developing integration with Amazon AWS S3 compatible file storage (HasuraStorage/minio).'
+        'Developing integration with S3-compatible file storage (Hasura Storage / MinIO).'
         'Developing additional libraries for developers.'
         'Developing an associative theory.'
         'Writing documentation and articles for Habr community, creating educational videos.'
@@ -125,9 +125,10 @@ resume
         '6. Discord code executor bot for JavaScript;'
         '7. Telegram bot for smart/intelligent search and questions and answers using a combination of full-text and vector search and GPT-4o for current legislation of the Russian Federation (can be applied to laws of other countries);'
         '8. Deep.GPT - Telegram bot gateway to GPT-4o;'
-        '9. Smart store as web application with products showcase accessible through voice and text chat using GPT-4o as assistant fundation.'
+        '9. Smart store as web application with products showcase accessible through voice and text chat using GPT-4o as assistant foundation.'
         ' '
-        'Skills, technologies, and tools: Rust, C/C++, Python, PHP, Kotlin, TypeScript, JavaScript, HTML, CSS, React.JS, Next.JS, Express.JS, Visual Studio Code, XCode, Android Studio, NPM, PyPi, OBS-Studio, Unix shell, LaTeX, TeX, jsdoc, GitHub Actions, Selectel, Docker, Kubernetes, PostgreSQL, Git, GitHub, GitHub Actions, SQL, PostgreSQL, Hasura, GraphQL, minio, HasuraStorage, Elasticsearch, iOS, Android, Linux, Windows, macOS, Electron, Capacitor, Apache Cordova.'
+        'Skills, technologies, and tools:'
+        'Rust, C/C++, Python, PHP, Kotlin, TypeScript, JavaScript, HTML, CSS, React.JS, Next.JS, Express.JS, Visual Studio Code, XCode, Android Studio, npm (JS/TS), PyPi, OBS-Studio, Unix shell, LaTeX, TeX, jsdoc, GitHub Actions, Selectel, Docker, Kubernetes, PostgreSQL, Git, GitHub, SQL, Hasura, GraphQL, minio, HasuraStorage, Elasticsearch, iOS, Android, Linux, Windows, macOS, Electron, Capacitor, Apache Cordova'
     job
       company 'Abracar LLC'
       position 'Programmer'
