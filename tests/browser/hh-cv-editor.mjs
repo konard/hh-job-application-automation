@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm } from '../../src/hh-cv-editor.mjs';
-import { chooseHhMonth, clickHhExperienceEdit } from '../../src/experience-sites.mjs';
+import { chooseHhMonth, clickHhExperienceEdit, openHhExperienceForm } from '../../src/experience-sites.mjs';
 
 function fixture() {
   const source = { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.',
@@ -117,8 +117,18 @@ function fixture() {
   };
   if (window.location.pathname === '/profile/edit/experience/123') {
     window.form(true);
+  } else if (window.location.pathname === '/profile/edit/experience') {
+    window.list();
   } else {
     window.resume();
+    if (window.location.pathname === '/resume/direct-add') {
+      main.querySelector('[data-qa=profile-experience-viewAll]').remove();
+      const wrong = document.createElement('button');
+      wrong.setAttribute('data-qa', 'list-add');
+      wrong.textContent = 'Add education';
+      wrong.onclick = () => { window.wrongAddClicked = true; };
+      main.append(wrong);
+    }
   }
 }
 
@@ -128,6 +138,13 @@ try {
   await context.route('**/*', (route) => route.fulfill({ contentType: 'text/html',
     body: `<!doctype html><html lang="en"><main></main><script>(${fixture.toString()})()</script></html>` }));
   const page = await context.newPage();
+  // Inline-edit resumes can have Add buttons for unrelated sections and no View all link.
+  await page.goto('https://hh.ru/resume/direct-add');
+  const addNotes = await openHhExperienceForm(page, { resumeHash: 'direct-add', job: null });
+  assert.deepEqual(addNotes, []);
+  assert.equal(new URL(page.url()).pathname, '/profile/edit/experience');
+  assert.equal((await readHhExperienceForm(page)).company, '');
+  assert.equal(await page.evaluate(() => window.saveCount), 0);
   await page.goto('https://hh.ru/resume/en');
   await page.setContent(`<main><div data-qa="profile-experience-company-card"><h2>Example</h2>
     <section>AI Tech Lead<p>English copy.</p><button data-qa="edit-experience-button-en" onclick="window.clicked='en'">Edit</button></section>

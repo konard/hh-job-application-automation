@@ -8,18 +8,17 @@ HH.ru changes are prepared one position at a time. The owner reviews and saves e
 
 ## Synchronization status
 
-Snapshot on 2026-10-28, after the owner saved English Evirma:
+Snapshot on 2026-10-28, after the owner saved Evirma's language separation and Russian wording:
 
 - The Russian CV contains the saved AI-first Evirma, Capico and Kaiten descriptions, including the owner's edits to the proposed text.
-- The final target is the same 12 jobs in both CVs, with matching order and dates. During the reviewed language-copy process, Russian has 12 jobs and English temporarily has 13: its new English Evirma entry and the old shared Russian entry coexist until the latter is deselected from English in the next reviewed save.
+- Both saved CVs currently contain the same 12 jobs, with matching order and dates. Creating Capico's English copy will temporarily add one entry until its separate reviewed deselection step is saved.
 - English Kaiten has the Development Team Lead title and July 2024–November 2025 dates, restoring the Evirma → Capico → Kaiten order. Its saved description includes the owner's addition about automatic conflict resolution for frequent merges from team members and AI agents. The owner also saved the equivalent Russian sentence; both snapshots include it.
-- English Evirma is saved, including the owner's wording “self-developed Hive Mind.” The old shared Evirma record must be deselected from English while remaining selected in Russian. English Capico still displays the shared Russian description; its separate English copy and subsequent deselection await review.
+- Evirma is complete in both languages: English contains “self-developed Hive Mind,” Russian contains “Hive Mind собственной разработки,” and each language-specific entry is selected only in its own CV. English Capico still displays the shared Russian description; its separate English copy and subsequent deselection await review.
 
 ## English details to retain and consider adding to Russian later
 
 These details already exist in the English CV. Keep them while editing English; adding them to Russian is a later, separately reviewed change.
 
-- **Evirma:** the owner explicitly describes Hive Mind as self-developed; retain this detail in the next reviewed Russian update.
 - **Deep.Foundation:** RSS ingestion and frequency-based word-cloud visualization in the news analytics demo; developer-community bookkeeping in Deep.Chain; Discord as the platform for the JavaScript executor bot; GPT-4o question answering and potential applicability to other countries' laws in the legal-search bot; GPT-4o as the assistant in the smart-store web application; code behavior stored as links; HasuraStorage/minio named in the S3 integration description.
 - **LinksPlatform:** task decomposition is explicit; Links Notation is described as a data exchange format/protocol.
 - **Pegas:** form validation includes guided help.

@@ -719,7 +719,8 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
   }
   const url = job?.entryId
     ? `https://hh.ru/profile/edit/experience/${job.entryId}?resumeFrom=${encodeURIComponent(resumeHash)}&hhtmFrom=resume`
-    : `https://hh.ru/resume/${resumeHash}`;
+    : !job ? `https://hh.ru/profile/edit/experience?resumeFrom=${encodeURIComponent(resumeHash)}&hhtmFrom=resume`
+      : `https://hh.ru/resume/${resumeHash}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // While hh.ru shows a captcha nothing is touched: the user solves it in the slot
   if (!await waitForCaptcha(page, console.log, 'slot', port)) {
@@ -727,6 +728,16 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
   }
   if (job?.entryId) {
     return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => [], () => ['hh.ru: the requested workplace form did not open']);
+  }
+  if (!job) {
+    // The resume page also has Add controls for other sections. Only use the workplace
+    // list's Add new button, even when the resume has inline workplace Edit controls.
+    const add = page.locator('main [data-qa="list-add"]:visible').filter({ hasText: /^(add|добавить)/i });
+    if (!await add.first().waitFor({ timeout: 15000 }).then(() => true, () => false) || await add.count() !== 1) {
+      return ['hh.ru: the workplace list has no unique Add new button'];
+    }
+    await add.click();
+    return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => [], () => ['hh.ru: the new workplace form did not open']);
   }
   await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
   // The list shows the latest jobs until it is expanded
@@ -740,21 +751,11 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
     await page.waitForSelector(`${HH.experienceCard}, [data-qa="position-title"]`, { timeout: 30000 }).catch(() => {});
     await sleep(1000);
   }
-  if (job) {
-    const found = await page.evaluate(clickHhExperienceEdit, {
-      company: job.company, title: job.title ?? '', description: job.description ?? '', editButton: HH.editButton, card: HH.experienceCard,
-    });
-    if (!found) {
-      return [`hh.ru: no experience card of ${job.company} found on the resume page`];
-    }
-  } else {
-    const add = page.locator('[data-qa="list-add"]:visible').first();
-    const fallback = page.locator('main').getByRole('button', { name: /^(добавить|add)( new| новый)?$/i }).first();
-    const button = await add.count() > 0 ? add : fallback;
-    if (await button.count() === 0) {
-      return ['hh.ru: the «Добавить» button of the experience list was not found'];
-    }
-    await button.click();
+  const found = await page.evaluate(clickHhExperienceEdit, {
+    company: job.company, title: job.title ?? '', description: job.description ?? '', editButton: HH.editButton, card: HH.experienceCard,
+  });
+  if (!found) {
+    return [`hh.ru: no experience card of ${job.company} found on the resume page`];
   }
   return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => sleep(1000).then(() => []), () => ['hh.ru: the experience form did not open']);
 }
