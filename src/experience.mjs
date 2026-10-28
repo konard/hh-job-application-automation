@@ -10,7 +10,7 @@
  * @module experience
  */
 
-import { splitList } from './resume-stack.mjs';
+import { JOB_STACK_HEADINGS, splitList } from './resume-stack.mjs';
 
 const MONTHS = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
@@ -683,7 +683,7 @@ export function formatChange(change, to) {
 
 /** The heading of a job's technology list on hh.ru, as the other jobs of the resume have it */
 export const STACK_HEADING = 'Используемые технологии:';
-const STACK_BLOCK = /\n*^(?:используемые технологии|использовавшиеся навыки|технологии|стек(?: технологий)?)\s*:[^\n]*(?:\n(?!\s*\n)[^\n]*)*/imu;
+const STACK_BLOCK = new RegExp(`\\n*^${JOB_STACK_HEADINGS}\\s*:[^\\n]*(?:\\n(?!\\s*\\n)[^\\n]*)*`, 'imu');
 
 /**
  * The technologies listed under a job description's heading
@@ -704,12 +704,14 @@ export function stackOf(description) {
  * @returns {string}
  */
 export function withStack(description, stack, { add = false } = {}) {
+  const existingHeading = STACK_BLOCK.exec(String(description ?? ''))?.[0].trim().split(':')[0];
+  const heading = existingHeading && /[a-z]/i.test(existingHeading) ? `${existingHeading}:` : STACK_HEADING;
   const text = String(description ?? '').replace(STACK_BLOCK, '').trimEnd();
   const items = splitList(stack).map((item) => item.trim()).filter(Boolean);
   const listed = add ? stackOf(description) : [];
   const known = new Set(listed.map((item) => item.toLowerCase()));
   const all = [...listed, ...items.filter((item) => !known.has(item.toLowerCase()))];
-  return `${text}${text ? '\n\n' : ''}${STACK_HEADING}\n${all.join(', ')}`;
+  return `${text}${text ? '\n\n' : ''}${heading}\n${all.join(', ')}`;
 }
 
 /**

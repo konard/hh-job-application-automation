@@ -371,6 +371,11 @@ describe('LinkedIn media title', () => {
 });
 
 describe('A job\'s technology list', () => {
+  test('an English list is recognized and updated without changing its heading or duplicating it', () => {
+    const description = 'AI-first development.\n\nTechnologies and tools:\nRust, Claude Code';
+    assert.deepEqual(stackOf(description), ['Rust', 'Claude Code']);
+    assert.equal(withStack(description, 'Codex', { add: true }), 'AI-first development.\n\nTechnologies and tools:\nRust, Claude Code, Codex');
+  });
   test('added under its heading after the text', () => {
     assert.equal(withStack('Разработка сервисов.', 'PHP 8, Go'), 'Разработка сервисов.\n\nИспользуемые технологии:\nPHP 8, Go');
   });

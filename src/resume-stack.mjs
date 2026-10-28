@@ -6,7 +6,8 @@
  */
 
 /** Labels that introduce a per-job technology list, such as "Использовавшиеся навыки: C#, WPF" */
-const JOB_STACK_LABEL = /^(?:используемые технологии|использовавшиеся навыки|навыки, технологии и инструменты|технологии|стек(?: технологий)?)\s*:\s*(.*)$/i;
+export const JOB_STACK_HEADINGS = '(?:используемые технологии|использовавшиеся навыки|навыки, технологии и инструменты|технологии|стек(?: технологий)?|technologies(?: and tools)?|skills(?: used|, technologies(?:,? and tools)?)?|tools|tech(?:nology)? stack)';
+const JOB_STACK_LABEL = new RegExp(`^${JOB_STACK_HEADINGS}\\s*:\\s*(.*)$`, 'i');
 
 /**
  * Technologies recognised in free text even when the resume never lists them,

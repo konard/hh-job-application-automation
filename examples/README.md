@@ -8,12 +8,14 @@ HH.ru changes are prepared one position at a time. The owner reviews and saves e
 
 ## Synchronization status
 
-Snapshot on 2026-10-28, after the owner saved Evirma's language separation and Russian wording:
+Snapshot on 2026-10-28, after the owner saved both Capico steps:
 
 - The Russian CV contains the saved AI-first Evirma, Capico and Kaiten descriptions, including the owner's edits to the proposed text.
-- Both saved CVs currently contain the same 12 jobs, with matching order and dates. Creating Capico's English copy will temporarily add one entry until its separate reviewed deselection step is saved.
+- Both saved CVs contain the same 12 jobs, with matching order and dates. The latest three roles' technology lists match across languages, including Claude Code and Codex in all three and Hive Mind in Evirma.
 - English Kaiten has the Development Team Lead title and July 2024–November 2025 dates, restoring the Evirma → Capico → Kaiten order. Its saved description includes the owner's addition about automatic conflict resolution for frequent merges from team members and AI agents. The owner also saved the equivalent Russian sentence; both snapshots include it.
-- Evirma is complete in both languages: English contains “self-developed Hive Mind,” Russian contains “Hive Mind собственной разработки,” and each language-specific entry is selected only in its own CV. English Capico still displays the shared Russian description; its separate English copy and subsequent deselection await review.
+- Evirma is complete in both languages: English contains “self-developed Hive Mind,” Russian contains “Hive Mind собственной разработки,” and each language-specific entry is selected only in its own CV.
+- Capico is complete in both languages as AI Senior Engineer, November 2025–May 2026. The English copy is saved, the original Russian entry is deselected from English, and the Russian CV retains its original description.
+- Older English job descriptions are unchanged from the initial export; the additional details listed below are retained for later Russian review.
 
 ## English details to retain and consider adding to Russian later
 

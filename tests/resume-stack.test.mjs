@@ -17,6 +17,11 @@ describe('splitList', () => {
 });
 
 describe('parseJobStack', () => {
+  test('reads the English CV headings, including tools absent from the common-term dictionary', () => {
+    assert.deepEqual(parseJobStack('AI-first development.\n\nTechnologies and tools:\nGitHub Actions Runner, Okmeter, Hive Mind'),
+      ['GitHub Actions Runner', 'Okmeter', 'Hive Mind']);
+    assert.deepEqual(parseJobStack('Skills, technologies, and tools: Rust, C# (.NET Core, .NET Framework)'), ['Rust', 'C# (.NET Core, .NET Framework)']);
+  });
   test('reads a list on the line after the label', () => {
     assert.deepEqual(parseJobStack('Разработка торговой системы.\n\nИспользуемые технологии:\nGitLab, Rust, Vue.js'), ['GitLab', 'Rust', 'Vue.js']);
   });
