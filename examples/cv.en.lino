@@ -165,7 +165,7 @@ resume
       start 2014-05
       end 2014-12
       description
-        "Developing and maintaining an adapter between the database management system of Gazprombank and ELAR JSC's Saperion system."
+        "Developing and maintaining an adapter between Gazprombank's integration platform (СУВ, Interaction Management System) and ELAR JSC's Saperion system."
         'Developing a component for importing automatically recognized documents (invoices, etc.) using OCR.'
         'Developing and maintaining the AIS Archive system used by state archives.'
         'Developing a component for compressing PDF documents.'
