@@ -663,8 +663,14 @@ const HH = {
  * @param {{company: string, title: string, editButton: string, card: string}} target
  * @returns {boolean}
  */
-export function clickHhExperienceEdit({ company, title, description = '', editButton, card }) {
+export function clickHhExperienceEdit({ company, title, description = '', editButton, card, markOnly = false }) {
   const norm = (text) => String(text).toLowerCase().replace(/\s+/g, ' ').trim();
+  const pick = (element) => {
+    if (markOnly) {
+      document.querySelectorAll('[data-hh-experience-edit-target]').forEach((previous) => previous.removeAttribute('data-hh-experience-edit-target'));
+      element.setAttribute('data-hh-experience-edit-target', 'true');
+    } else element.click();
+  };
   const controls = [...new Set([...document.querySelectorAll(`${editButton}, main button, main a`)])]
     .filter((element) => element.matches(editButton) || /^(edit|редактировать)$/i.test(element.innerText.trim()));
   const matches = controls.filter((button) => {
@@ -685,7 +691,7 @@ export function clickHhExperienceEdit({ company, title, description = '', editBu
     return false;
   });
   if (matches.length === 1) {
-    matches[0].click();
+    pick(matches[0]);
     return true;
   }
   if (controls.length > 0) {
@@ -694,7 +700,7 @@ export function clickHhExperienceEdit({ company, title, description = '', editBu
   const cards = [...document.querySelectorAll(card)].filter((element) => element.matches('a[href]') &&
     norm(element.innerText).includes(norm(company)) && (!description || norm(element.innerText).includes(norm(description))));
   if (cards.length === 1) {
-    cards[0].click();
+    pick(cards[0]);
     return true;
   }
   return false;
@@ -719,8 +725,7 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
   }
   const url = job?.entryId
     ? `https://hh.ru/profile/edit/experience/${job.entryId}?resumeFrom=${encodeURIComponent(resumeHash)}&hhtmFrom=resume`
-    : !job ? `https://hh.ru/profile/edit/experience?resumeFrom=${encodeURIComponent(resumeHash)}&hhtmFrom=resume`
-      : `https://hh.ru/resume/${resumeHash}`;
+    : `https://hh.ru/profile/edit/experience?resumeFrom=${encodeURIComponent(resumeHash)}&hhtmFrom=resume`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // While hh.ru shows a captcha nothing is touched: the user solves it in the slot
   if (!await waitForCaptcha(page, console.log, 'slot', port)) {
@@ -739,24 +744,22 @@ export async function openHhExperienceForm(page, { resumeHash, job, port = 9351 
     await add.click();
     return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => [], () => ['hh.ru: the new workplace form did not open']);
   }
-  await page.waitForSelector(HH.experienceCard, { timeout: 30000 }).catch(() => {});
-  // The list shows the latest jobs until it is expanded
-  await page.evaluate(() => [...document.querySelectorAll('[data-qa="resume-list-card-experience"] button')]
-    .filter((button) => /развернуть|показать (все|ещё)|show (all|more)|expand/i.test(button.innerText)).forEach((button) => button.click()));
-  await sleep(1000);
-  const viewAll = page.locator(HH.viewAll).first();
-  if (await viewAll.count() > 0) {
-    await viewAll.click();
-    await page.waitForURL(/\/experience(\?|$)/, { timeout: 30000 }).catch(() => {});
-    await page.waitForSelector(`${HH.experienceCard}, [data-qa="position-title"]`, { timeout: 30000 }).catch(() => {});
-    await sleep(1000);
-  }
+  // Resume summaries can hide older jobs and omit the View all control entirely.
+  // The full workplace list exposes each language copy; identity is verified again in the form.
+  await page.waitForSelector(`${HH.experienceCard}, [data-qa="position-title"]`, { timeout: 30000 }).catch(() => {});
   const found = await page.evaluate(clickHhExperienceEdit, {
-    company: job.company, title: job.title ?? '', description: job.description ?? '', editButton: HH.editButton, card: HH.experienceCard,
+    company: job.company, title: job.title ?? '', description: job.description ?? '', editButton: HH.editButton, card: HH.experienceCard, markOnly: true,
   });
   if (!found) {
-    return [`hh.ru: no experience card of ${job.company} found on the resume page`];
+    return [`hh.ru: no unique workplace record of ${job.company} found in the experience list`];
   }
+  await page.waitForFunction(() => {
+    const edit = document.querySelector('[data-hh-experience-edit-target="true"]');
+    if (!edit) return false;
+    return edit.matches('a[href]') || typeof edit.onclick === 'function' || Object.keys(edit).some((key) =>
+      key.startsWith('__reactProps$') && typeof edit[key]?.onClick === 'function');
+  }, null, { timeout: 20000 });
+  await page.locator('[data-hh-experience-edit-target="true"]').click();
   return page.waitForSelector(HH.position, { timeout: 30000 }).then(() => sleep(1000).then(() => []), () => ['hh.ru: the experience form did not open']);
 }
 

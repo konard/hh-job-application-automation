@@ -156,6 +156,10 @@ function fixture() {
       wrong.onclick = () => { window.wrongAddClicked = true; };
       main.append(wrong);
     }
+    if (window.location.pathname === '/resume/older-hidden') {
+      main.querySelector('[data-qa=profile-experience-viewAll]').remove();
+      main.querySelector('section').remove();
+    }
   }
 }
 
@@ -172,6 +176,12 @@ try {
   assert.equal(new URL(page.url()).pathname, '/profile/edit/experience');
   assert.equal((await readHhExperienceForm(page)).company, '');
   assert.equal(await page.evaluate(() => window.saveCount), 0);
+  await page.goto('https://hh.ru/resume/older-hidden');
+  assert.deepEqual(await openHhExperienceForm(page, { resumeHash: 'older-hidden', job: {
+    company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.',
+  } }), []);
+  assert.equal((await readHhExperienceForm(page)).description, 'Исходное описание.');
+  assert.equal(new URL(page.url()).pathname, '/profile/edit/experience');
   await page.goto('https://hh.ru/resume/en');
   await page.setContent(`<main><div data-qa="profile-experience-company-card"><h2>Example</h2>
     <section>AI Tech Lead<p>English copy.</p><button data-qa="edit-experience-button-en" onclick="window.clicked='en'">Edit</button></section>

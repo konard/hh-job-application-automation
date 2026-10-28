@@ -824,6 +824,9 @@ deselection for extra entries absent from the desired file. Exact saved copies a
 The opened record is checked against its company, title and full description before fields or
 checkboxes change. Saved checkpoint follow-ups also use the exact HH.ru workplace record ID,
 so language copies with the same company and title cannot be confused.
+Existing jobs are opened through the full workplace list, including older jobs hidden on the
+résumé overview. The app locates one matching Edit control, waits for its handler, then uses
+a native click before verifying the opened record's identity.
 
 `edit` accepts JSON with `kind` (`add`, `update`, `copy`, `detach`, `about`), `target` (company, title and
 description to distinguish language copies), and `fields`. Fields can include `company`, `title`,
