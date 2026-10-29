@@ -11,6 +11,7 @@
 import {
   handleLimitError,
   findAndProcessVacancyButton,
+  previewNextVacancy,
   waitForButtonsAfterNavigation,
 } from './vacancies.mjs';
 import { handleVacancyResponsePage, saveQAPairs } from './vacancy-response.mjs';
@@ -110,6 +111,7 @@ export function createOrchestrator({
   let lastWorkStartedAt = null;
   // The chat of the application just sent, answered before anything else happens on the page
   let followUp = null;
+  let plannedVacancy = null;
 
   /**
    * Schedule the next vacancy (see pacing.mjs), so the load on hh.ru stays low
@@ -234,6 +236,11 @@ export function createOrchestrator({
    * Wait until the next application may be sent
    */
   async function waitForApplicationSlot() {
+    // Preview during the pause, before reading the vacancy or opening an application.
+    // A five-hour retry which will be due takes priority over a new search card.
+    if (!submissionRetries.ids().some((id) => submissionRetries.get(id).until <= nextApplicationAt)) {
+      plannedVacancy = await previewNextVacancy({ commander });
+    }
     const ms = nextApplicationAt - Date.now();
     if (ms > 0) {
       await commander.wait({ ms, reason: 'interval before next application' });
@@ -473,6 +480,7 @@ export function createOrchestrator({
           result = { status: 'vacancy_response_detected', vacancyId: retry.vacancyId };
         } else result = await findAndProcessVacancyButton({
           commander,
+          targetVacancyId: plannedVacancy?.url === commander.getUrl() ? plannedVacancy.vacancyId : null,
           MESSAGE,
           selectApplicationResume,
           ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
@@ -490,6 +498,7 @@ export function createOrchestrator({
           START_URL,
           pageClosedByUser: getPageClosedByUser,
         });
+        plannedVacancy = null;
 
         if (result.status === 'vacancy_response_detected') {
           // The page trigger fills the form; a form it did not start on is filled here, never left as it is

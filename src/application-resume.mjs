@@ -52,8 +52,9 @@ export function createApplicationResumeSelector({ readResumes = loadApplicationR
     if (pending.has(key)) return pending.get(key);
     const run = async () => {
       const resumes = await readResumes();
-      // The chooser can be below the questionnaire. DOM activation avoids moving the viewport.
-      const click = (selector) => commander.clickButton({ selector, activation: 'dom', scroll: 'none',
+      // Show actual changes, including a chooser below the questionnaire. Passive checks above
+      // and the saved selection below still leave the user's viewport and later choice alone.
+      const click = (selector) => commander.clickButton({ selector, scrollIntoView: true, smoothScroll: true,
         waitForNavigation: false, waitAfterClick: 0 });
       const save = async (result) => {
         await commander.evaluate(({ documentId, applicationId, result }) => {

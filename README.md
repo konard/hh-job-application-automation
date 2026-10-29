@@ -85,12 +85,17 @@ Each application selects its own CV: dollar-denominated pay (USD, USDT or USDC) 
 questions select the English version; Russian questions select the Russian version. Vacancy
 text decides when there are no questions. The app opens the full application form, checks the
 selected CV against local exports before sending. An already correct CV needs no chooser access;
-otherwise the app selects it once at the start and verifies the resulting title or checked option
-without reopening the menu. Repeated form checks and worker restarts keep that choice and any
+otherwise the app scrolls the chooser into view, selects it once at the start and verifies the
+resulting title or checked option without reopening the menu. Repeated form checks and worker restarts keep that choice and any
 manual CV changes. A restart also preserves answers on an unfinished full application form.
 The cover letter follows that language. This prevents a one-click application
 from sending HH.ru's default CV before the language check. Export both versions with
 `bun run cv -- export` first. `--no-auto-select-resume-language` disables this behavior.
+
+During the pause between applications, the app scrolls to the next unprocessed vacancy and logs
+its title. It stays on that card before opening the vacancy or application; previewing does not
+click Apply or shorten the pause. Processed vacancies and those waiting for a submission retry
+are excluded. If search cards reorder, the previewed vacancy is found again by ID.
 
 - **Alerts** - on macOS, whenever the run waits for you (a question to answer or confirm, a
   login, a captcha that still needs manual input after background work has finished, a form to fill by hand), it plays a sound and

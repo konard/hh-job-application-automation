@@ -55,56 +55,80 @@ try {
     assert.equal(await page.locator('#options').count(), 0);
     assert.equal(await page.locator('#answer').inputValue(), 'My answer stays.');
     assert.equal(await page.evaluate(() => window.sent), 0);
-    assert.equal(await page.evaluate(() => window.scrollY), 0, 'Even an offscreen chooser must not move the viewport');
   };
+  const visibleChooser = async () => {
+    assert.equal(await page.locator('#chooser button').evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return window.scrollY > 0 && rect.top >= 0 && rect.bottom <= window.innerHeight;
+    }), true, 'Scroll the offscreen chooser into view before changing the CV');
+  };
+  const scrollAway = () => page.evaluate(() => window.scrollTo(0, 0));
+  const stationary = async () => assert.equal(await page.evaluate(() => window.scrollY), 0, 'Passive checks must not move the viewport');
 
   await mount();
   assert.deepEqual(await select(russian), { ready: true, language: 'ru', hash: 'ru1' });
   await select(russian);
   assert.deepEqual(await counts(), { opened: 0, chosen: 0 }, 'Correct current CV needs no menu access');
+  await stationary();
   await preserved();
 
   await mount();
   const expected = { ready: true, language: 'en', hash: 'en1' };
   assert.deepEqual(await Promise.all([select(english), select(english), select(english)]), [expected, expected, expected]);
+  await visibleChooser();
+  await scrollAway();
   await select(english);
   await createSelector()(english); // The browser keeps the choice when the worker restarts.
+  await stationary();
   assert.deepEqual(await counts(), { opened: 1, chosen: 1 }, 'Switch exactly once; never reopen for verification');
   await page.evaluate(() => { window.selected = 'ru1'; window.render(); });
   await select(english);
   assert.equal(await page.evaluate(() => window.selected), 'ru1', 'Preserve a later manual CV change');
   assert.deepEqual(await counts(), { opened: 1, chosen: 1 });
+  await stationary();
   await preserved();
 
   await mount({ selected: 'en1' });
   await select(english);
   assert.deepEqual(await counts(), { opened: 0, chosen: 0 }, 'Correct CV on a later page needs no menu access');
+  await stationary();
   await preserved();
 
   await mount({ selected: 'en1' });
   assert.equal((await select(russian)).hash, 'ru1');
   assert.deepEqual(await counts(), { opened: 1, chosen: 1 }, 'A new Russian application can switch once');
+  await visibleChooser();
   await preserved();
 
   await mount({ ignoreChoice: true });
   assert.equal((await select(english)).ready, false, 'Rejected CV changes block automatic submission');
+  await visibleChooser();
+  await scrollAway();
   await select(english);
+  await stationary();
   assert.deepEqual(await counts(), { opened: 1, chosen: 1 }, 'Do not repeatedly try a rejected change');
   await page.evaluate(() => { window.selected = 'en1'; window.render(); });
   assert.equal((await select(english)).ready, true, 'A manual correction recovers without opening the menu');
   assert.deepEqual(await counts(), { opened: 1, chosen: 1 });
+  await stationary();
   await preserved();
 
   await mount({ available: ['ru1'] });
   assert.equal((await select(english)).ready, false, 'Missing English CV must not fall back to Russian');
+  await visibleChooser();
+  await scrollAway();
   await select(english);
+  await stationary();
   assert.deepEqual(await counts(), { opened: 1, chosen: 0 });
   await preserved();
 
   await mount({ duplicateTitles: true });
   const ambiguous = createSelector(resumes.map((resume) => ({ ...resume, title: 'Developer' })));
   assert.equal((await ambiguous(english)).ready, false, 'An ambiguous collapsed title cannot verify a changed CV');
+  await visibleChooser();
+  await scrollAway();
   await ambiguous(english);
+  await stationary();
   assert.deepEqual(await counts(), { opened: 1, chosen: 1 });
   await preserved();
 
@@ -112,6 +136,7 @@ try {
   await page.locator('#chooser button').evaluate((element) => element.click());
   assert.equal((await select(russian)).hash, 'ru1');
   assert.deepEqual(await counts(), { opened: 1, chosen: 0 }, 'An existing open menu is closed without reopening');
+  await visibleChooser();
   await preserved();
 
   await mount();
@@ -119,8 +144,9 @@ try {
   await select({ ...russian, vacancyId: '1002' });
   await select({ ...russian, vacancyId: '1002' });
   assert.deepEqual(await counts(), { opened: 2, chosen: 2 }, 'Different modal applications on one document each select once');
+  await visibleChooser();
   await preserved();
-  console.log('CV chooser checks passed: zero access for correct CVs, one switch per form, concurrent retries, restarts, manual changes and failures; no submission or draft loss.');
+  console.log('CV chooser checks passed: visible scrolling for changes, zero access for correct CVs, one switch per form, stationary retries, restarts, manual changes and failures; no submission or draft loss.');
 } finally {
   await browser.close();
 }

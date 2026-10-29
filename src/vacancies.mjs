@@ -191,7 +191,7 @@ export async function processModalApplication({
   // The English letter when the vacancy's questions are in English
   const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question), selectedResume?.language ?? null);
   if (letter) {
-    const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter });
+    const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter, scrollIntoView: true });
     if (isFullFormOpened(commander)) return FULL_FORM_OPENED;
     const actualValue = await commander.evaluate({
       fn: (selector) => document.querySelector(selector)?.value ?? null, args: [textareaSelector],
@@ -340,7 +340,7 @@ export async function processModalApplication({
   // The answers go with the application, so they are saved, like the full form's
   await saveAll();
   try {
-    const clicked = await clickButtonWhenReady(commander, { selector: submitButtonSelector, scrollIntoView: false, timeout: 10000, autoSend });
+    const clicked = await clickButtonWhenReady(commander, { selector: submitButtonSelector, scrollIntoView: true, smoothScroll: true, timeout: 10000, autoSend });
     if (clickWasNotDispatched(clicked)) {
       if (isFullFormOpened(commander)) return FULL_FORM_OPENED;
       console.log('⚠️  Submit was not clicked after retries; application has not been sent');
@@ -488,8 +488,15 @@ function scanApplyButtons({ commander, selector, targetVacancyId = null }) {
  * Find the first unprocessed vacancy button on the page (retries once after a short wait)
  * @returns {Promise<{selector: string|null, buttonIndex?: number, vacancyId?: string, status?: string}>}
  */
-async function findVacancyButton({ commander }) {
+async function findVacancyButton({ commander, targetVacancyId = null }) {
   const selector = SELECTORS.vacancyListApply;
+  // Keep the previewed vacancy even if the cards reorder during the pause. A removed,
+  // processed or deferred card must fall back to the next eligible one.
+  if (targetVacancyId && !processedVacancyIds.has(targetVacancyId) && !submissionRetries.get(targetVacancyId)) {
+    const scan = await scanApplyButtons({ commander, selector, targetVacancyId });
+    if (scan.navigationError) return { selector: null, status: 'navigation_detected' };
+    if (scan.value.buttonIndex >= 0) return { selector, buttonIndex: scan.value.buttonIndex, vacancyId: targetVacancyId };
+  }
   let scan = await scanApplyButtons({ commander, selector });
   if (!scan.navigationError && scan.value.unprocessedCount === 0) {
     log.debug(() => `🔍 Found ${scan.value.totalButtons} button(s), none unprocessed - waiting for page to fully load...`);
@@ -564,6 +571,46 @@ async function readVacancyCard({ commander, selector, buttonIndex }) {
     silent: true,
   });
   return value ?? { lines: [], title: '' };
+}
+
+/** Scroll only: never activate Apply, collect a description, or mark the vacancy processed. */
+async function showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title, duringPause = false }) {
+  const result = await commander.safeEvaluate({
+    fn: (baseSelector, index, id, onlyOnce) => {
+      const button = document.querySelectorAll(baseSelector)[index];
+      // Do not move a form or another overlay the user opened during the pause.
+      if (!button || [...document.querySelectorAll('[role="dialog"], [data-qa="vacancy-response-popup-form"]')]
+        .some((element) => element.getClientRects().length > 0)) return false;
+      const previous = window.__hhVacancyPreview;
+      let card = button;
+      while (card.parentElement && !card.querySelector('a[href*="/vacancy/"]')) card = card.parentElement;
+      const rect = card.getBoundingClientRect();
+      const visible = rect.top >= 0 && Math.min(rect.bottom, rect.top + window.innerHeight) <= window.innerHeight;
+      if (previous?.button === button && previous.vacancyId === id && (onlyOnce || visible)) return false;
+      card.scrollIntoView({ behavior: 'smooth', block: rect.height > window.innerHeight ? 'start' : 'center' });
+      window.__hhVacancyPreview = { button, vacancyId: id };
+      return true;
+    },
+    args: [selector, buttonIndex, vacancyId, duringPause], defaultValue: false,
+    operationName: 'preview next vacancy', silent: true,
+  });
+  if (result.value) {
+    console.log(`👀 Next vacancy to check: ${title || vacancyId} (${vacancyId})`);
+    await commander.wait({ ms: 1000, reason: 'show the next vacancy before opening it' });
+  }
+  return Boolean(result.value);
+}
+
+/** Show the next search card during pacing, without starting its application. */
+export async function previewNextVacancy({ commander }) {
+  if (!URL_PATTERNS.searchVacancy.test(commander.getUrl())) return null;
+  const selector = SELECTORS.vacancyListApply;
+  const scan = await scanApplyButtons({ commander, selector });
+  if (scan.navigationError || scan.value.buttonIndex < 0 || !scan.value.vacancyId) return null;
+  const { buttonIndex, vacancyId } = scan.value;
+  const { title } = await readVacancyCard({ commander, selector, buttonIndex });
+  await showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title, duringPause: true });
+  return { vacancyId, url: commander.getUrl() };
 }
 
 function describeVacancyCard(lines) {
@@ -744,6 +791,7 @@ const CLICK_SKIP_REASONS = { button_disabled: 'apply_button_disabled', click_err
  */
 export async function findAndProcessVacancyButton({
   commander,
+  targetVacancyId = null,
   MESSAGE,
   selectApplicationResume = null,
   ignoreVacanciesWithQuestionnaire = false,
@@ -768,7 +816,7 @@ export async function findAndProcessVacancyButton({
     return { status: 'not_on_target_page' };
   }
 
-  const { selector, vacancyId, status, buttonIndex: initialIndex } = await findVacancyButton({ commander });
+  const { selector, vacancyId, status, buttonIndex: initialIndex } = await findVacancyButton({ commander, targetVacancyId });
   let buttonIndex = initialIndex;
   if (!selector) {
     return { status };
@@ -783,6 +831,7 @@ export async function findAndProcessVacancyButton({
   }
 
   const { lines: cardLines, title } = await readVacancyCard({ commander, selector, buttonIndex });
+  await showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title });
   const card = cardLines.join('\n');
   let details = null;
   if (vacancyInsights?.enabled && vacancyId) {
@@ -814,6 +863,9 @@ export async function findAndProcessVacancyButton({
   // A card can submit immediately with HH.ru's default CV. Open the chooser first so
   // employer questions and the exact selected CV can be checked before anything is sent.
   if (selectApplicationResume && vacancyId) {
+    // Collecting the description reloads the search page. Show this card again before
+    // navigating to the full form; clicking Apply here could send HH.ru's default CV.
+    await showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title });
     await commander.goto({ url: `https://hh.ru/applicant/vacancy_response?vacancyId=${encodeURIComponent(vacancyId)}&startedWithQuestion=false`,
       waitForStableUrlBefore: false, waitForNetworkIdle: false });
     return { status: 'vacancy_response_detected', vacancyId, descriptionRead };
