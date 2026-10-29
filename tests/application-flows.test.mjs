@@ -84,6 +84,21 @@ const runList = (commander, { skippedVacancies, vacancyFilters }) => findAndProc
 });
 
 describe('vacancy list', () => {
+  test('a verified vacancy is still opened by ID when its card disappears after collection', async () => {
+    clearProcessedVacancies();
+    const list = fakeList({ vacancyId: '139000019', card: ['Backend Developer', 'Acme'] });
+    const original = list.safeEvaluate;
+    list.safeEvaluate = async options => options.operationName === 'find unprocessed vacancy button' && options.args[2]
+      ? { value: { totalButtons: 0, unprocessedCount: 0, buttonIndex: -1, vacancyId: null } } : original(options);
+    const navigations = [];
+    list.goto = async ({ url }) => navigations.push(url);
+    const result = await findAndProcessVacancyButton({ commander: list, selectApplicationResume: async () => {},
+      vacancyInsights: { enabled: true, visit: async () => ({ id: '139000019', description: 'Develop backend software.' }) } });
+    assert.equal(result.status, 'vacancy_response_detected');
+    assert.equal(new URL(navigations[0]).searchParams.get('vacancyId'), '139000019');
+    assert.equal(list.state.clicks.length, 0, 'Never click a replacement card or a one-click Apply shortcut');
+  });
+
   test('vacancy collection precedes applying and the returning search card is found again by ID', async () => {
     clearProcessedVacancies();
     const { skippedVacancies, vacancyFilters } = await stores();

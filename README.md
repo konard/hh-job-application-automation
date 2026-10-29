@@ -114,6 +114,9 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
   them off. To mute sound while keeping visual alerts, use `--no-notification-sound` or set
   `NOTIFY_SOUND: false` in `.lenv` (`NOTIFY_SOUND=false` in the environment). Sound is enabled
   by default; set it back to `true` or remove the setting to restore it.
+  Detached runs also alert for unanswered questions, drafts needing review, and held validation
+  errors. CV Save waits and external forms alert in their own browser slots. Repeated checks and
+  overlapping waits share one alert per browser; completion or navigation removes it.
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names
   are counted). The hh.ru session of any browser you use (Google Chrome, Safari, Firefox, Edge,
@@ -131,13 +134,16 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
   none), so choosing costs no extra request; the log names the resume and why it was chosen. A
   kept-open browser already on a search page keeps its filters and only switches the resume.
 - **Pace** - the pause between opened vacancies adapts: it starts at 2 minutes, each application
-  sent takes 10-20 s off it (down to 1 minute), and each hh.ru captcha adds twice that (up to 7
-  minutes). After a captcha the pace is held for 15 minutes before it is tried faster again; the
-  hold doubles while captchas keep coming, but never passes a day, so a faster pace is tried at
-  least once a day. A random extra of up to a quarter is added to each pause. The pace is worked
+  sent takes 10-20 s off it (down to 1 minute), and each hh.ru captcha adds 10-20 s (up to 4
+  minutes). A captcha holds speed-up for 5 minutes; repeated captchas cannot extend that hold
+  beyond 15 minutes from its first captcha. A successful application after that deadline can
+  speed up again. A random extra of up to a quarter is added, capped at 4 minutes for adaptive
+  pacing. Longer manual reviews can still extend a cycle. At its slowest, this schedule has
+  capacity for 360 cycles per 24 hours, leaving room for the goal of 200 sent applications; actual
+  throughput also depends on available vacancies, manual answers and CAPTCHAs. The pace is worked
   out from `logs/stats.jsonl`, so it carries over restarts; `bun run stats` shows it and the
   captchas per 100 applications at each pace. `--job-application-interval <seconds>` sets a fixed
-  pace instead.
+  pace instead. The revised policy starts once at 2 minutes, retaining older statistics.
 - **One tab** - the automation browser keeps a single tab: when a run attaches, every other
   tab is closed (the tab the automation used last is kept, else an hh.ru one), and tabs opened
   during the run are closed as they appear. Turn it off with `--no-single-tab`.

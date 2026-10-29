@@ -241,11 +241,25 @@ export async function focusBrowser(port) {
 /** Notifications and windows still up: taken away when the run exits, so none outlives it */
 const shown = new Set();
 process.on('exit', () => shown.forEach((stop) => stop()));
+const activeAlerts = new Map();
+function retainAlert(shared) {
+  shared.users++;
+  let ended = false;
+  return () => {
+    if (ended) return;
+    ended = true;
+    if (--shared.users === 0) {
+      shared.end();
+      activeAlerts.delete(shared.port);
+    }
+  };
+}
 
 /** The alert window; calls back with the answer. Returns what takes it away */
-function openWindow({ text, pid, onAnswer }) {
+function openWindow({ text, pid, onAnswer, log = () => {} }) {
   let stopped = false;
   const child = spawn('osascript', ['-l', 'JavaScript', '-e', WINDOW_SCRIPT, TITLE, text, String(pid ?? 0)], { stdio: ['ignore', 'pipe', 'ignore'] });
+  child.on('spawn', () => log('🔔 Visual alert window started (Show browser / Later).'));
   let output = '';
   child.stdout.on('data', (chunk) => {
     output += chunk;
@@ -274,8 +288,12 @@ function postNotification({ text, pid, onAnswer, log }) {
   { stdio: 'ignore' }).on('error', () => {});
   const started = Date.now();
   let state = readNotifierOutput('');
+  let reported = false;
+  let finished = false;
   let stopWindow = null;
   const finish = () => {
+    if (finished) return;
+    finished = true;
     clearInterval(poll);
     if (state.pid) {
       try {
@@ -291,6 +309,10 @@ function postNotification({ text, pid, onAnswer, log }) {
       state = readNotifierOutput(fs.readFileSync(out, 'utf8'));
     } catch {
       // Read again next time
+    }
+    if (state.posted && !reported) {
+      reported = true;
+      log('🔔 Visual notification posted (Show browser / Later).');
     }
     if (state.answer) {
       finish();
@@ -317,19 +339,23 @@ function postNotification({ text, pid, onAnswer, log }) {
  * @param {(message: string) => void} [options.log]
  * @returns {() => void} Ends the alert: no more sound, the notification or window taken away
  */
-export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS, log = console.log } = {}) {
-  if (!alertsEnabled()) {
+export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS, message = ALERT_TEXT, log = console.log } = {}, runtime = {}) {
+  const enabled = runtime.enabled ?? alertsEnabled;
+  if (!enabled()) {
     return () => {};
   }
-  prepareAlerts(log);
-  const text = ALERT_TEXT;
+  if (activeAlerts.has(port)) return retainAlert(activeAlerts.get(port));
+  (runtime.prepare ?? prepareAlerts)(log);
+  const text = message;
+  const later = runtime.setTimeout ?? setTimeout;
+  const cancel = runtime.clearTimeout ?? clearTimeout;
   let ended = false;
   let stopShown = () => {};
   let timer = null;
   const schedule = (ms) => {
-    clearTimeout(timer);
-    timer = setTimeout(show, ms);
-    timer.unref();
+    cancel(timer);
+    timer = later(show, ms);
+    timer.unref?.();
   };
   const onAnswer = (answer) => {
     if (ended) {
@@ -337,7 +363,7 @@ export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS,
     }
     if (answer === 'show') {
       log(`🔔 Show browser: the window on port ${port} is brought forward`);
-      focusBrowser(port).catch((error) => log(`⚠️  Could not bring the browser forward: ${error.message.split('\n')[0]}`));
+      (runtime.focus ?? focusBrowser)(port).catch((error) => log(`⚠️  Could not bring the browser forward: ${error.message.split('\n')[0]}`));
     } else if (answer === 'later' || answer === 'dismissed') {
       log('🔔 Later: shown again in 15 min if the run still waits');
     }
@@ -350,25 +376,64 @@ export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS,
     }
     stopShown();
     shown.delete(stopShown);
-    const pid = browserPid(port);
+    const pid = (runtime.browserPid ?? browserPid)(port);
     // You are at the browser already: checked again at the next reminder
-    if (!alertNeeded(pid, frontmostPid())) {
+    if (!alertNeeded(pid, (runtime.frontmostPid ?? frontmostPid)())) {
       schedule(remindMs);
       return;
     }
-    if (notificationSoundEnabled()) {
-      spawn('afplay', [SOUND], { stdio: 'ignore' }).on('error', () => {}).unref();
+    if ((runtime.soundEnabled ?? notificationSoundEnabled)()) {
+      if (runtime.playSound) runtime.playSound();
+      else spawn('afplay', [SOUND], { stdio: 'ignore' }).on('error', () => {}).unref();
     }
     const options = { text, pid, onAnswer, log };
-    stopShown = notifierReady && !focusOn() ? postNotification(options) : openWindow(options);
+    stopShown = (runtime.canPost ?? (() => notifierReady && !focusOn()))()
+      ? (runtime.post ?? postNotification)(options) : (runtime.window ?? openWindow)(options);
     shown.add(stopShown);
     schedule(remindMs);
   }
   schedule(delayMs);
-  return () => {
+  const shared = { port, users: 0, end: () => {
+    if (ended) return;
     ended = true;
-    clearTimeout(timer);
+    cancel(timer);
     stopShown();
     shown.delete(stopShown);
+  } };
+  activeAlerts.set(port, shared);
+  return retainAlert(shared);
+}
+
+const attention = new WeakMap();
+
+/** A detached worker must still notify while a form waits. Deduplicate repeated page handlers. */
+export function alertUntilDone(owner, { port = MAIN_PORT, getUrl = () => owner.getUrl?.() ?? owner.url(),
+  isDone = async () => false, alert = alertUser, pollMs = 1000, message,
+  every = setInterval, cancel = clearInterval } = {}) {
+  if (alert === alertUser && !alertsEnabled()) return () => {};
+  const url = getUrl();
+  const previous = attention.get(owner);
+  if (previous?.url === url) return previous.stop;
+  previous?.stop();
+  const end = alert({ port, ...(message ? { message } : {}) });
+  let ended = false;
+  let checking = false;
+  let timer;
+  const stop = () => {
+    if (ended) return;
+    ended = true;
+    cancel(timer);
+    end();
+    attention.delete(owner);
   };
+  timer = every(async () => {
+    if (checking || ended) return;
+    checking = true;
+    try { if (getUrl() !== url || await isDone()) stop(); }
+    catch { stop(); }
+    finally { checking = false; }
+  }, pollMs);
+  timer.unref?.();
+  attention.set(owner, { url, stop });
+  return stop;
 }

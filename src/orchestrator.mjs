@@ -24,7 +24,7 @@ import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { isInteractive, waitForUser } from './confirmations.mjs';
-import { ADAPTIVE_PACE, adaptivePace, limitHeldUntil, nextVacancyAt } from './pacing.mjs';
+import { ADAPTIVE_PACE, PACING_POLICY_VERSION, adaptivePace, limitHeldUntil, nextVacancyAt, pacingResetNeeded } from './pacing.mjs';
 import { paceLine, readEvents, recordEvent } from './stats.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
 import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-attach.mjs';
@@ -62,8 +62,8 @@ export function createOrchestrator({
   const FIXED_INTERVAL_MS = argv.jobApplicationInterval > 0 ? argv.jobApplicationInterval * 1000 : null;
   const intervalNow = () => FIXED_INTERVAL_MS ?? adaptivePace(readEvents()).intervalMs;
   if (FIXED_INTERVAL_MS === null) {
-    if (!readEvents().some((event) => event.type === 'pacing_reset')) {
-      recordEvent('pacing_reset', { intervalMs: ADAPTIVE_PACE.startMs });
+    if (pacingResetNeeded(readEvents())) {
+      recordEvent('pacing_reset', { intervalMs: ADAPTIVE_PACE.startMs, policyVersion: PACING_POLICY_VERSION });
     }
     console.log(paceLine(readEvents()));
   }
@@ -129,7 +129,8 @@ export function createOrchestrator({
     lastWorkStartedAt = workStartedAt ?? lastWorkStartedAt ?? Date.now();
     workStartedAt = null;
     const intervalMs = intervalNow();
-    nextApplicationAt = Math.max(nextApplicationAt, nextVacancyAt({ startedAt: lastWorkStartedAt, intervalMs }));
+    nextApplicationAt = Math.max(nextApplicationAt, nextVacancyAt({ startedAt: lastWorkStartedAt, intervalMs,
+      maxIntervalMs: FIXED_INTERVAL_MS === null ? ADAPTIVE_PACE.maxMs : Infinity }));
     const took = Math.round((Date.now() - lastWorkStartedAt) / 1000);
     console.log(`⏳ ${reason} (${took} s of work); next vacancy in ${Math.round((nextApplicationAt - Date.now()) / 1000)} seconds (pace ${Math.round(intervalMs / 1000)} s${FIXED_INTERVAL_MS ? ', fixed' : ''})`);
     return intervalMs;

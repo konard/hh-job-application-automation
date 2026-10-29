@@ -1,6 +1,6 @@
 /**
  * Pauses between vacancies. By default the pace adapts (ADAPTIVE_PACE below): as fast as hh.ru
- * allows without captchas, between 1 and 7 min. A fixed --job-application-interval is used as is.
+ * allows without captchas, between 1 and 4 min. A fixed --job-application-interval is used as is.
  * Either way a pause is the interval plus a random extra of up to a quarter of it, counted from the
  * start of work on a vacancy.
  *
@@ -35,8 +35,8 @@ const RANDOM_SHARE = 0.25;
  * @param {Function} [options.random=Math.random]
  * @returns {number} Milliseconds, rounded to whole seconds
  */
-export function pauseMs({ intervalMs, random = Math.random }) {
-  return Math.round(intervalMs * (1 + random() * RANDOM_SHARE) / 1000) * 1000;
+export function pauseMs({ intervalMs, random = Math.random, maxIntervalMs = Infinity }) {
+  return Math.min(maxIntervalMs, Math.round(intervalMs * (1 + random() * RANDOM_SHARE) / 1000) * 1000);
 }
 
 /** The least time between an application sent and the next vacancy opened: 30-60 s */
@@ -45,8 +45,7 @@ const LEAST_GAP_MS = 30000;
 /**
  * When the next vacancy may be opened: the pause counts from the start of work on the last one
  * (so a long form or a captcha does not add a whole pause on top), and never sooner than 30-60 s
- * after the send. An application then takes the pause, 240-300 s by default (under 7 min), unless
- * its own work is longer
+ * after the send. Adaptive jitter is capped at four minutes; manual work may take longer.
  * @param {Object} options
  * @param {number} options.startedAt - When work on the last vacancy began
  * @param {number} options.intervalMs
@@ -54,8 +53,8 @@ const LEAST_GAP_MS = 30000;
  * @param {Function} [options.random=Math.random]
  * @returns {number} A time in ms
  */
-export function nextVacancyAt({ startedAt, intervalMs, now = Date.now(), random = Math.random }) {
-  return Math.max(startedAt + pauseMs({ intervalMs, random }), now + LEAST_GAP_MS * (1 + random()));
+export function nextVacancyAt({ startedAt, intervalMs, maxIntervalMs = Infinity, now = Date.now(), random = Math.random }) {
+  return Math.max(startedAt + pauseMs({ intervalMs, maxIntervalMs, random }), now + LEAST_GAP_MS * (1 + random()));
 }
 
 /**
@@ -63,28 +62,33 @@ export function nextVacancyAt({ startedAt, intervalMs, now = Date.now(), random 
  * @param {number} intervalMs
  * @returns {number}
  */
-export function worstCaseApplicationsPerDay(intervalMs) {
-  const longestCycleMs = intervalMs * (1 + RANDOM_SHARE);
+export function worstCaseApplicationsPerDay(intervalMs, { maxIntervalMs = Infinity } = {}) {
+  const longestCycleMs = Math.min(maxIntervalMs, intervalMs * (1 + RANDOM_SHARE));
   return Math.floor((24 * 60 * 60 * 1000) / longestCycleMs);
 }
 
 /**
  * The adaptive pace (the default): the interval between vacancies looks for the fastest pace hh.ru
  * accepts without captchas. It starts at 2 min; each application sent takes 10-20 s off it (down to
- * 1 min), each captcha on hh.ru adds twice that (20-40 s, up to 7 min). After a captcha the pace is
- * held for a while before it is tried faster again: 15 min, doubled while captchas keep coming within
- * one more hold after the last one, and never longer than a day, so a faster pace is tried at least
- * once a day.
+ * 1 min), each captcha on hh.ru adds one step (10-20 s, up to 4 min). A captcha holds speed-up
+ * for five minutes. Repeated captchas can extend that hold only until 15 minutes after its first
+ * captcha; the next successful application can then speed up, even if captchas kept arriving.
  */
+export const PACING_POLICY_VERSION = 2;
 export const ADAPTIVE_PACE = {
   minMs: 60000,
-  maxMs: 7 * 60000,
+  maxMs: 4 * 60000,
   startMs: 2 * 60000,
   stepMs: [10000, 20000],
-  penalty: 2,
-  holdMs: 15 * 60000,
-  maxHoldMs: 24 * 60 * 60000,
+  penalty: 1,
+  holdMs: 5 * 60000,
+  maxHoldMs: 15 * 60000,
 };
+
+/** Start the revised policy once at two minutes without deleting historical statistics. */
+export function pacingResetNeeded(events) {
+  return events.findLast((event) => event.type === 'pacing_reset')?.policyVersion !== PACING_POLICY_VERSION;
+}
 
 /** A step of 10-20 s, drawn from the event itself, so the same history always gives the same pace */
 function stepOf(event, [least, most]) {
@@ -108,11 +112,11 @@ const onHh = (event) => !event.host || /(^|\.)hh\.ru$/.test(event.host);
 export function adaptivePace(events, pace = ADAPTIVE_PACE) {
   const resetAt = events.findLastIndex((event) => event.type === 'pacing_reset');
   const reset = events[resetAt];
-  const state = { intervalMs: reset?.intervalMs ?? pace.startMs, holdUntil: 0, holdMs: 0, applications: 0, captchas: 0, since: reset?.at ?? null };
+  const state = { intervalMs: Math.min(pace.maxMs, Math.max(pace.minMs, reset?.intervalMs ?? pace.startMs)), holdUntil: 0, holdMs: 0, applications: 0, captchas: 0, since: reset?.at ?? null };
   if (!reset) {
     return state;
   }
-  let lastCaptchaAt = null;
+  let holdStartedAt = null;
   const later = events.slice(resetAt + 1).map((event) => ({ event, at: Date.parse(event.at) - (event.type === 'captcha' ? event.ms ?? 0 : 0) }))
     .sort((a, b) => a.at - b.at);
   for (const { event, at } of later) {
@@ -120,15 +124,16 @@ export function adaptivePace(events, pace = ADAPTIVE_PACE) {
       state.applications += 1;
       if (at >= state.holdUntil) {
         state.intervalMs = Math.max(pace.minMs, state.intervalMs - stepOf(event, pace.stepMs));
+        state.holdUntil = 0;
+        state.holdMs = 0;
+        holdStartedAt = null;
       }
     } else if (isCaptchaEpisode(event) && onHh(event)) {
       state.captchas += 1;
       state.intervalMs = Math.min(pace.maxMs, state.intervalMs + pace.penalty * stepOf(event, pace.stepMs));
-      // Captchas again soon after the last hold: the faster pace is tried less often
-      const again = lastCaptchaAt !== null && at - lastCaptchaAt < 2 * state.holdMs;
-      state.holdMs = again ? Math.min(pace.maxHoldMs, state.holdMs * 2) : pace.holdMs;
-      state.holdUntil = at + state.holdMs;
-      lastCaptchaAt = at;
+      holdStartedAt ??= at;
+      state.holdUntil = Math.min(at + pace.holdMs, holdStartedAt + pace.maxHoldMs);
+      state.holdMs = Math.max(0, state.holdUntil - at);
     }
   }
   return state;

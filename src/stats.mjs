@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { adaptivePace, isCaptchaEpisode } from './pacing.mjs';
+import { ADAPTIVE_PACE, adaptivePace, isCaptchaEpisode } from './pacing.mjs';
 
 export const STATS_FILE = path.join(process.cwd(), 'logs', 'stats.jsonl');
 /** An application should take less than this, its pause before the next one included */
@@ -161,7 +161,7 @@ export function captchasByPace(events) {
 export function paceLine(events) {
   const pace = adaptivePace(events);
   const held = pace.holdUntil > Date.now() ? `, held until ${new Date(pace.holdUntil).toLocaleTimeString()} after a captcha` : '';
-  return `🐇 Pace: ${minutes(pace.intervalMs)} between vacancies (adaptive, 1-7 min${held}; since ${pace.since ? pace.since.slice(0, 16).replace('T', ' ') : 'now'}: ${pace.applications} application(s), ${pace.captchas} captcha(s))`;
+  return `🐇 Pace: ${minutes(pace.intervalMs)} between vacancies (adaptive, ${ADAPTIVE_PACE.minMs / 60000}-${ADAPTIVE_PACE.maxMs / 60000} min${held}; since ${pace.since ? pace.since.slice(0, 16).replace('T', ' ') : 'now'}: ${pace.applications} application(s), ${pace.captchas} captcha(s))`;
 }
 
 /** The line for today, printed when a run starts */

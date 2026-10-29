@@ -4,6 +4,7 @@ import path from 'path';
 import { chromium } from 'playwright';
 import { observeHhCvSaves, readHhCvForm, verifyHhSavedForm } from './hh-cv-editor.mjs';
 import { exportSavedCvs, publishCvSnapshots, writeCvSnapshots } from './cv-store.mjs';
+import { alertUntilDone } from './notify.mjs';
 
 export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = false, once = false, stateFile = 'logs/experience/cv-watch.json' } = {}) {
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${hhPort}`);
@@ -57,9 +58,12 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   let timer;
+  let endAlert = () => {};
   const poll = async () => {
     try {
       const form = await readHhCvForm(page);
+      if (form) endAlert = alertUntilDone(page, { port: hhPort, isDone: async () => !await readHhCvForm(page) });
+      else endAlert();
       const lastActivity = await page.evaluate(() => window.__hhCvObserver?.lastActivity ?? null);
       await fs.writeFile(stateFile, `${JSON.stringify({ pid: process.pid, at: new Date().toISOString(), url: page.url(), formOpen: Boolean(form),
         kind: form?.kind ?? (form ? 'workplace' : null), resumeHash: form?.resumeHash,
@@ -79,6 +83,7 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
     clearTimeout(timer);
     await queue;
   } finally {
+    endAlert();
     stopObserver();
     process.removeListener('SIGINT', onStop);
     process.removeListener('SIGTERM', onStop);

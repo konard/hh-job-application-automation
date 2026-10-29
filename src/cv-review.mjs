@@ -4,6 +4,7 @@ import path from 'path';
 import { exportSavedCvs, writeCvSnapshots, publishCvSnapshots } from './cv-store.mjs';
 import { prepareHhCvChange, observeHhCvSaves, verifyHhSavedForm, readHhCvForm } from './hh-cv-editor.mjs';
 import { normalizeText } from './cv.mjs';
+import { alertUser } from './notify.mjs';
 
 /** A closed form is insufficient: require HH.ru's Save return, changed export and matching saved page. */
 export function verifiedAboutSaveReturn({ url, resumeHash, change, cv, renderedAbout }) {
@@ -84,9 +85,11 @@ async function waitForBrowserSave(page, argv, checkpoint, pending) {
       return verified;
     },
   });
+  const endAlert = alertUser({ port: argv.hhPort });
   try {
     return await saved;
   } finally {
+    endAlert();
     stop();
   }
 }

@@ -31,7 +31,8 @@ try {
   const goto = commander.goto.bind(commander);
   commander.goto = async (options) => {
     if (options.url.includes('/applicant/vacancy_response')) {
-      assert.equal(await inView(new URL(options.url).searchParams.get('vacancyId')), true,
+      const id = new URL(options.url).searchParams.get('vacancyId');
+      if (await page.locator(`[id="${id}"]`).count()) assert.equal(await inView(id), true,
         'Show the intended card before navigating to its application, including after collection returns');
     }
     return goto(options);
@@ -98,6 +99,18 @@ try {
   });
   await previewNextVacancy({ commander });
   assert.equal(await page.evaluate(() => window.scrollY), 0, 'Do not scroll underneath an open form');
+  assert.equal(applyClicks, 0);
+  clearProcessedVacancies();
+  cards = ['105'];
+  await mount();
+  const disappeared = await process('105', { vacancyInsights: { enabled: true, visit: async () => {
+    assert.equal(await inView('105'), true);
+    cards = [];
+    await mount();
+    return { id: '105', description: 'Develop backend software.' };
+  } } });
+  assert.equal(disappeared.status, 'vacancy_response_detected');
+  assert.equal(new URL(commander.getUrl()).searchParams.get('vacancyId'), '105', 'A removed recommendation still opens the verified full form by ID');
   assert.equal(applyClicks, 0);
   console.log('Vacancy previews passed: visible next card before navigation, RAM/processed exclusions, no clicks, stationary repeat checks, reordered and removed cards, overlay and form protection.');
 } finally {

@@ -4,6 +4,7 @@ import { withdrawPrompt } from './confirmations.mjs';
 import { isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { saveApplicationDraft } from './application-drafts.mjs';
 import { closeModalIfPresent } from './helpers/modal-helpers.mjs';
+import { alertUntilDone } from './notify.mjs';
 
 export const SUBMISSION_RETRY_MS = 5 * 60 * 60 * 1000;
 
@@ -103,6 +104,8 @@ export function deferFailedSubmission({ commander, vacancyId, title = '', saveAn
       } else if (!await closeModalIfPresent({ commander })) {
         await commander.goto({ url: returnUrl || url, waitForStableUrlBefore: false });
       }
+    } else {
+      alertUntilDone(commander, { isDone: () => isResponseSubmitted(commander) });
     }
     return true;
   })().finally(() => handling.delete(commander));

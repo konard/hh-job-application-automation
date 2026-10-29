@@ -80,27 +80,30 @@ const isFullFormOpened = (commander) => URL_PATTERNS.vacancyResponse.test(comman
  */
 async function waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQA, skippedVacancies }) {
   console.log('⏸️  Waiting for you in the browser: answer and send the application popup, or close it');
-  for (;;) {
-    if (isFullFormOpened(commander)) {
-      return FULL_FORM_OPENED;
+  const endAlert = alertUser();
+  try {
+    for (;;) {
+      if (isFullFormOpened(commander)) {
+        return FULL_FORM_OPENED;
+      }
+      if (addOrUpdateQA) {
+        await saveMarkedQAPairs({ commander, addOrUpdateQA });
+      }
+      if (await commander.count({ selector: SELECTORS.applicationForm }) === 0) {
+        break;
+      }
+      const waited = await commander.wait({ ms: 5000, reason: 'the user to send or close the application popup' });
+      if (waited?.aborted) {
+        return { success: false, reason: 'navigation_detected' };
+      }
     }
-    if (addOrUpdateQA) {
-      await saveMarkedQAPairs({ commander, addOrUpdateQA });
+    if (vacancyId && await isVacancyCardResponded({ commander, vacancyId })) {
+      console.log(`✅ Application sent for vacancy ${vacancyId} in the browser`);
+      return { success: true };
     }
-    if (await commander.count({ selector: SELECTORS.applicationForm }) === 0) {
-      break;
-    }
-    const waited = await commander.wait({ ms: 5000, reason: 'the user to send or close the application popup' });
-    if (waited?.aborted) {
-      return { success: false, reason: 'navigation_detected' };
-    }
-  }
-  if (vacancyId && await isVacancyCardResponded({ commander, vacancyId })) {
-    console.log(`✅ Application sent for vacancy ${vacancyId} in the browser`);
-    return { success: true };
-  }
-  await noteSkip(skippedVacancies, vacancyId, { reason: 'skipped_by_user', title });
-  return { success: false, reason: 'closed_by_user' };
+    await noteSkip(skippedVacancies, vacancyId, { reason: 'skipped_by_user', title });
+    return { success: false, reason: 'closed_by_user' };
+  } finally { endAlert(); }
 }
 
 /**
@@ -842,7 +845,9 @@ export async function findAndProcessVacancyButton({
     const refreshed = await scanApplyButtons({ commander, selector, targetVacancyId: vacancyId });
     if (refreshed.navigationError) return { status: 'navigation_detected', vacancyId, descriptionRead: true };
     buttonIndex = refreshed.value.buttonIndex;
-    if (buttonIndex < 0) return { status: 'vacancy_not_listed', vacancyId, descriptionRead: true };
+    // The full form is opened by the verified vacancy ID, even when reading its description
+    // makes HH.ru remove its card from recommendations. Only a card click needs its new index.
+    if (buttonIndex < 0 && !selectApplicationResume) return { status: 'vacancy_not_listed', vacancyId, descriptionRead: true };
   }
   // The description only when the card does not settle the filters (one request, see readVacancyDescription)
   const descriptionRead = Boolean(details) || Boolean(vacancyFilters && vacancyId && await vacancyFilters.needsDescription?.(card));

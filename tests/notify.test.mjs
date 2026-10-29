@@ -2,7 +2,93 @@ import { describe, test, assert } from 'test-anywhere';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUser, browserWindowActive, focusActive, notificationSoundEnabled, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
+import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUntilDone, alertUser, browserWindowActive, focusActive, notificationSoundEnabled, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
+
+function alertRuntime() {
+  const pending = new Map(), displays = [], focused = [];
+  let sound = 0, removed = 0;
+  const runtime = {
+    enabled: () => true, prepare: () => {}, browserPid: () => 42, frontmostPid: () => 99,
+    soundEnabled: () => false, playSound: () => { sound++; }, canPost: () => true,
+    post: options => { displays.push({ kind: 'notification', ...options }); return () => { removed++; }; },
+    window: options => { displays.push({ kind: 'window', ...options }); return () => { removed++; }; },
+    focus: async port => { focused.push(port); },
+    setTimeout: (callback, ms) => { const timer = { unref() {} }; pending.set(timer, { callback, ms }); return timer; },
+    clearTimeout: timer => pending.delete(timer),
+  };
+  return { runtime, displays, focused, pending, sound: () => sound, removed: () => removed,
+    tick: () => { const [timer, task] = pending.entries().next().value; pending.delete(timer); task.callback(); },
+    nextDelay: () => pending.values().next().value?.ms };
+}
+
+describe('visual notification delivery and cleanup', () => {
+  test('overlapping waits on one browser share one alert until all waits finish', () => {
+    const f = alertRuntime();
+    const first = alertUser({ log: () => {} }, f.runtime);
+    const second = alertUser({ log: () => {} }, f.runtime);
+    f.tick();
+    assert.equal(f.displays.length, 1);
+    first(); assert.equal(f.removed(), 0);
+    second(); assert.equal(f.removed(), 1);
+    assert.equal(f.pending.size, 0);
+  });
+
+  test('mute preserves delivery, reminders, Later and Show browser without playing sound', async () => {
+    const f = alertRuntime();
+    const end = alertUser({ port: 9340, log: () => {} }, f.runtime);
+    f.tick();
+    assert.equal(f.displays[0].kind, 'notification');
+    assert.equal(f.sound(), 0);
+    assert.equal(f.nextDelay(), 5 * 60000);
+    f.displays[0].onAnswer('later');
+    assert.equal(f.nextDelay(), 15 * 60000);
+    f.tick();
+    f.displays[1].onAnswer('show');
+    await Promise.resolve();
+    assert.deepEqual(f.focused, [9340]);
+    assert.equal(f.sound(), 0);
+    end();
+    const removed = f.removed();
+    end();
+    assert.equal(f.removed(), removed, 'Stopping twice must not kill an old notifier PID again');
+    assert.equal(f.pending.size, 0);
+  });
+
+  test('Focus/notification denial fallback remains visual and silent', () => {
+    const f = alertRuntime(); f.runtime.canPost = () => false;
+    const end = alertUser({ message: 'A form needs review.', log: () => {} }, f.runtime);
+    f.tick();
+    assert.equal(f.displays[0].kind, 'window');
+    assert.equal(f.displays[0].text, 'A form needs review.');
+    assert.equal(f.sound(), 0);
+    end();
+  });
+
+  test('foreground suppression is checked again when the browser loses focus', () => {
+    const f = alertRuntime(); f.runtime.frontmostPid = () => 42;
+    const end = alertUser({ log: () => {} }, f.runtime);
+    f.tick(); assert.equal(f.displays.length, 0);
+    f.runtime.frontmostPid = () => 99;
+    f.tick(); assert.equal(f.displays.length, 1);
+    end();
+  });
+
+  test('unattended form alerts deduplicate handler retries and stop on completion or navigation', async () => {
+    const owner = { getUrl: () => url };
+    let url = 'https://hh.ru/applicant/vacancy_response?vacancyId=1', done = false, started = 0, stopped = 0, tick;
+    const options = { port: 9322, isDone: async () => done, alert: () => { started++; return () => { stopped++; }; },
+      every: callback => { tick = callback; return { unref() {} }; }, cancel: () => {} };
+    const end = alertUntilDone(owner, options);
+    assert.equal(alertUntilDone(owner, options), end);
+    assert.equal(started, 1);
+    await tick(); assert.equal(stopped, 0);
+    done = true; await tick(); assert.equal(stopped, 1);
+    end(); assert.equal(stopped, 1);
+    done = false; alertUntilDone(owner, options);
+    assert.equal(started, 2);
+    url = 'https://hh.ru/search/vacancy'; await tick(); assert.equal(stopped, 2);
+  });
+});
 
 describe('alerts when the run waits for you', () => {
   test('macOS window activity uses the actual browser process, including address-bar focus', async () => {

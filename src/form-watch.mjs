@@ -16,6 +16,7 @@ import path from 'path';
 import { loadContacts, withContacts } from './contacts.mjs';
 import { createQADatabase } from './qa-database.mjs';
 import { saveSentAnswers, watchSentAnswers } from './form-answers.mjs';
+import { alertUser } from './notify.mjs';
 
 const [stateFile] = process.argv.slice(2);
 const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
@@ -30,6 +31,7 @@ const isCurrent = () => {
 };
 
 log(`👀 Watching the form on port ${state.port}: answers you change are saved to qa.lino, and what you send`);
+const endAlert = alertUser({ port: state.port });
 try {
   const qaDatabase = withContacts(createQADatabase(path.join(DATA, 'qa.lino'), { resolveVariants: true }), await loadContacts(path.join(DATA, 'contacts.lino')));
   await qaDatabase.backfillQuestionAnswers();
@@ -56,6 +58,7 @@ try {
 } catch (error) {
   log(`❌ ${error.message.split('\n')[0]}`);
 }
+endAlert();
 // The state holds the prefill's contact answers: it goes with the watcher
 if (isCurrent()) {
   fs.rmSync(stateFile, { force: true });

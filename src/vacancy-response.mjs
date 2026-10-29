@@ -34,6 +34,7 @@ import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-s
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { deferFailedSubmission, isPassingError, submissionRetries } from './submission-retries.mjs';
 import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft, saveApplicationDraft } from './application-drafts.mjs';
+import { alertUntilDone } from './notify.mjs';
 import {
   dismissOverlays,
   findFirstSelector,
@@ -425,8 +426,10 @@ export async function handleVacancyResponsePage({
   const draftsAwaitReview = async () => {
     if (!(await extractPageQuestions({ evaluate: commander.evaluate })).some((item) => item.requiresReview)) return false;
     console.log('Draft answers require your review. Edit them as needed and submit the form manually when ready.');
+    notifyForReview();
     return true;
   };
+  const notifyForReview = () => alertUntilDone(commander, { isDone: () => isResponseSubmitted(commander) });
 
   try {
     console.log('Detected vacancy_response page, handling application form...');
@@ -455,6 +458,7 @@ export async function handleVacancyResponsePage({
     if (needsReview) {
       await saveQAPairs({ commander, addOrUpdateQA, strict: true });
       console.log(`🛑 Vacancy ${vacancyId} had a submission error; keeping its answers open for manual review.`);
+      notifyForReview();
       return;
     }
     if (await draftsAwaitReview()) return;
@@ -481,7 +485,10 @@ export async function handleVacancyResponsePage({
 
     const selectedResume = await selectApplicationResume?.({ commander, vacancyId, questions: form.questions,
       context: [form.vacancy, vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? ''] });
-    if (selectedResume?.ready === false) return;
+    if (selectedResume?.ready === false) {
+      notifyForReview();
+      return;
+    }
 
     if (await resumeVisibility(commander, { vacancyId }) === 'skip') {
       await skipVacancy('resume_not_visible');
@@ -582,6 +589,7 @@ export async function handleVacancyResponsePage({
       }
       if (!isInteractive()) {
         console.log('Please answer them and submit the form manually when ready');
+        notifyForReview();
         return;
       }
       do {
@@ -623,6 +631,7 @@ export async function handleVacancyResponsePage({
     });
     if (decision === 'wait') {
       console.log('Please review the answers and submit the form manually when ready');
+      notifyForReview();
       return;
     }
     if (decision === 'skip') {
@@ -641,12 +650,14 @@ export async function handleVacancyResponsePage({
     ]);
     if (!submitSelector) {
       console.log('Submit button not found (tried multiple selectors)');
+      notifyForReview();
       return;
     }
 
     if (!await isButtonEnabled(commander, submitSelector)) {
       console.log('Submit button is disabled, manual action required');
       console.log('The form may require additional validation. Please check manually.');
+      notifyForReview();
       return;
     }
 
