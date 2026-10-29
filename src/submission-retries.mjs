@@ -3,6 +3,7 @@ import { URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mj
 import { withdrawPrompt } from './confirmations.mjs';
 import { isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { saveApplicationDraft } from './application-drafts.mjs';
+import { closeModalIfPresent } from './helpers/modal-helpers.mjs';
 
 export const SUBMISSION_RETRY_MS = 5 * 60 * 60 * 1000;
 
@@ -71,8 +72,9 @@ export async function readSubmissionError(commander) {
 const handling = new WeakMap();
 const reported = new WeakMap();
 
-/** Save on errors and keep the failed form open; only the user may leave or retry it. */
-export function deferFailedSubmission({ commander, vacancyId, title = '', saveAnswers, retries = submissionRetries, saveDraft = saveApplicationDraft }) {
+/** Save first, then defer generic errors in RAM; other errors keep the form open. */
+export function deferFailedSubmission({ commander, vacancyId, title = '', saveAnswers, returnUrl,
+  retries = submissionRetries, saveDraft = saveApplicationDraft }) {
   if (handling.has(commander)) return handling.get(commander);
   const run = (async () => {
     const url = commander.getUrl();
@@ -82,14 +84,25 @@ export function deferFailedSubmission({ commander, vacancyId, title = '', saveAn
     if (!id || !error || (error.vacancyId && error.vacancyId !== String(id))) return false;
     await saveAnswers();
     // The user may have sent successfully or navigated while the snapshot was being saved.
-    if (commander.getUrl() !== url || !await readSubmissionError(commander)) return false;
-    const backup = await saveDraft({ commander, vacancyId: id, error });
-    if (isPassingError(error)) retries.defer(id, { title, ...(URL_PATTERNS.vacancyResponse.test(url) ? { url } : {}) });
+    const currentError = await readSubmissionError(commander);
+    if (commander.getUrl() !== url || !currentError || (currentError.vacancyId && currentError.vacancyId !== String(id))) return false;
+    const autoSkip = isPassingError(currentError);
+    const backup = await saveDraft({ commander, vacancyId: id, error: currentError, requiresReview: !autoSkip });
+    if (commander.getUrl() !== url || await isResponseSubmitted(commander) === true) return false;
+    const entry = autoSkip ? retries.defer(id, { title, ...(URL_PATTERNS.vacancyResponse.test(url) ? { url } : {}) }) : null;
     const signature = `${url}:${id}:${error.code}:${error.text}`;
     if (reported.get(commander) !== signature) {
-      console.log(`🛑 Vacancy ${id}: hh.ru submission error; answers saved${backup?.file ? `; recovery copy: ${backup.file}` : ''}. Keeping this form open for manual review.`);
-      withdrawPrompt(`vacancy ${id} has a submission error; its form stays open`);
+      const result = entry ? `skipped for 5 hours in RAM; retry after ${new Date(entry.until).toISOString()}` : 'keeping this form open for manual review';
+      console.log(`${entry ? '⏭️' : '🛑'} Vacancy ${id}: hh.ru submission error; answers saved${backup?.file ? `; recovery copy: ${backup.file}` : ''}; ${result}.`);
+      withdrawPrompt(entry ? `vacancy ${id} is waiting for its five-hour submission retry` : `vacancy ${id} has a submission error; its form stays open`);
       reported.set(commander, signature);
+    }
+    if (entry) {
+      if (URL_PATTERNS.vacancyResponse.test(url)) {
+        await commander.goto({ url: returnUrl || 'https://hh.ru/search/vacancy?from=resumelist', waitForStableUrlBefore: false });
+      } else if (!await closeModalIfPresent({ commander })) {
+        await commander.goto({ url: returnUrl || url, waitForStableUrlBefore: false });
+      }
     }
     return true;
   })().finally(() => handling.delete(commander));

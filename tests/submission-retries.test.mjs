@@ -57,7 +57,7 @@ describe('five-hour application retries in RAM', () => {
       { code: 'negotiations-limit-exceeded', text: 'Лимит откликов' }]) expect(isPassingError(error)).toBe(false);
   });
 
-  test('answers and a recovery copy are saved while a failed form stays open, including overlapping checks', async () => {
+  test('answers and a recovery copy are saved before a five-hour RAM skip, including overlapping checks', async () => {
     const calls = [];
     let url = formUrl;
     const retries = createSubmissionRetries({ now: () => 1000 });
@@ -66,11 +66,13 @@ describe('five-hour application retries in RAM', () => {
       safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred, please try again' } }),
       goto: async ({ url: next }) => { calls.push('leave'); url = next; },
     };
-    const options = { commander, retries, saveDraft: async () => { calls.push('snapshot'); }, saveAnswers: async () => { calls.push('saved'); } };
+    const options = { commander, retries, returnUrl: searchUrl,
+      saveDraft: async ({ requiresReview }) => { expect(requiresReview).toBe(false); calls.push('snapshot'); },
+      saveAnswers: async () => { calls.push('saved'); } };
     expect(await Promise.all([deferFailedSubmission(options), deferFailedSubmission(options)])).toEqual([true, true]);
-    expect(calls).toEqual(['saved', 'snapshot']);
+    expect(calls).toEqual(['saved', 'snapshot', 'leave']);
     expect(retries.get('138848764')).toMatchObject({ url: formUrl, until: 1000 + SUBMISSION_RETRY_MS });
-    expect(url).toBe(formUrl);
+    expect(url).toBe(searchUrl);
   });
 
   test('a failed save keeps the form and does not silently lose answers', async () => {
@@ -87,13 +89,13 @@ describe('five-hour application retries in RAM', () => {
     expect(retries.ids()).toEqual([]);
   });
 
-  test('an existing failed form stays open when the startup search URL is unknown', async () => {
+  test('an existing failed form uses a default search URL when the startup URL is unknown', async () => {
     let destination;
     const commander = { getUrl: () => formUrl,
       safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred' } }),
       goto: async ({ url }) => { expect(url).toMatch(/^https:\/\/hh\.ru\/search\/vacancy/); destination = url; } };
     expect(await deferFailedSubmission({ commander, retries: createSubmissionRetries(), saveDraft, saveAnswers: async () => {} })).toBe(true);
-    expect(destination).toBeUndefined();
+    expect(destination).toBe('https://hh.ru/search/vacancy?from=resumelist');
   });
 
   test('a resolved error during saving is not deferred', async () => {
@@ -138,5 +140,29 @@ describe('five-hour application retries in RAM', () => {
       safeEvaluate: async () => ({ success: false, value: null, navigationError: true }),
       goto: async () => { throw new Error('must stay'); } };
     await expect(deferFailedSubmission({ commander, saveDraft, saveAnswers: async () => {} })).rejects.toThrow('keeping the current page');
+  });
+
+  test('a generic popup error saves its custom answers before closing the popup and deferring in RAM', async () => {
+    const calls = [];
+    const retries = createSubmissionRetries({ now: () => 1000 });
+    const commander = { getUrl: () => searchUrl,
+      safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred', vacancyId: '123' } }),
+      count: async () => 1,
+      clickButton: async () => { expect(retries.get('123').until).toBe(1000 + SUBMISSION_RETRY_MS); calls.push('closed'); },
+      wait: async () => {}, goto: async () => { throw new Error('No navigation needed'); } };
+    expect(await deferFailedSubmission({ commander, retries,
+      saveAnswers: async () => { calls.push('answers'); }, saveDraft: async () => { calls.push('snapshot'); } })).toBe(true);
+    expect(calls).toEqual(['answers', 'snapshot', 'closed']);
+  });
+
+  test('manual navigation during the backup cancels automatic navigation and does not add a skip', async () => {
+    let url = formUrl;
+    const retries = createSubmissionRetries();
+    const commander = { getUrl: () => url,
+      safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred' } }),
+      goto: async () => { throw new Error('The user already left'); } };
+    expect(await deferFailedSubmission({ commander, retries, saveAnswers: async () => {},
+      saveDraft: async () => { url = 'https://hh.ru/chat/123'; } })).toBe(false);
+    expect(retries.ids()).toEqual([]);
   });
 });

@@ -279,7 +279,7 @@ export function createOrchestrator({
     verbose: argv.verbose,
   });
 
-  const deferVisibleSubmissionError = () => deferFailedSubmission({ commander,
+  const deferVisibleSubmissionError = () => deferFailedSubmission({ commander, returnUrl: lastSearchPageUrl,
     saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
 
   /**
@@ -349,12 +349,17 @@ export function createOrchestrator({
       watchHhSessions({ port: argv.browserPort });
 
       // Capture an existing failed form before resume selection navigates away from it.
+      // Resolving a full form's return search only fetches the CV list; it never leaves the form.
+      const initialUrl = commander.getUrl();
+      const preparedStart = URL_PATTERNS.vacancyResponse.test(initialUrl) ? await resolveApplicationStart(commander, START_URL) : null;
+      if (preparedStart) lastSearchPageUrl = preparedStart.startUrl;
       const failedApplicationOpen = await deferVisibleSubmissionError();
 
-      const start = failedApplicationOpen && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())
+      const start = preparedStart ?? (failedApplicationOpen && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())
         ? { startUrl: START_URL || (URL_PATTERNS.searchVacancy.test(commander.getUrl())
           ? commander.getUrl() : 'https://hh.ru/search/vacancy?from=resumelist'), preserveCurrentForm: true }
-        : await resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL);
+        : await resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL));
+      if (failedApplicationOpen) start.preserveCurrentForm = commander.getUrl() === initialUrl;
       START_URL = start.startUrl;
       if (!START_URL) {
         throw new Error('No resume found on hh.ru - create one or pass --url');
@@ -418,10 +423,9 @@ export function createOrchestrator({
           continue;
         }
 
-        // A failed popup can sit on a search page. Do not process its next Apply button,
-        // redirect, or take a queued retry while the user's failed form remains open.
+        // Generic errors are saved and skipped in RAM. Other errors keep their form open.
         if (await deferVisibleSubmissionError()) {
-          await commander.wait({ ms: 1000, reason: 'the failed application to be reviewed or sent manually' });
+          await commander.wait({ ms: 1000, reason: 'submission error handling' });
           continue;
         }
 

@@ -32,8 +32,8 @@ import { coverLetterFor } from './cover-letter.mjs';
 import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
-import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
-import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft } from './application-drafts.mjs';
+import { deferFailedSubmission, isPassingError, submissionRetries } from './submission-retries.mjs';
+import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft, saveApplicationDraft } from './application-drafts.mjs';
 import {
   dismissOverlays,
   findFirstSelector,
@@ -434,16 +434,24 @@ export async function handleVacancyResponsePage({
       await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
       return;
     }
+    // A current validation error takes priority over an older generic-error cooldown.
+    if (await deferFailedSubmission({ commander, vacancyId, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) return;
     const cooling = submissionRetries.get(vacancyId);
     const failedDraft = await readApplicationDraft(vacancyId);
-    if (!retrySubmission && (cooling || failedDraft?.requiresReview)) {
-      if (failedDraft?.requiresReview) await restoreApplicationDraft({ commander, draft: failedDraft });
+    const needsReview = failedDraft?.requiresReview && !isPassingError(failedDraft.error);
+    if (failedDraft) await restoreApplicationDraft({ commander, draft: { ...failedDraft, requiresReview: Boolean(needsReview) } });
+    if (!retrySubmission && cooling && cooling.until > Date.now()) {
+      await saveQAPairs({ commander, addOrUpdateQA, strict: true });
+      if (failedDraft) await saveApplicationDraft({ commander, vacancyId, error: failedDraft.error, requiresReview: false });
+      console.log(`⏭️  Vacancy ${vacancyId} is in its five-hour RAM cooldown; returning to other vacancies.`);
+      await returnToList();
+      return;
+    }
+    if (needsReview) {
       await saveQAPairs({ commander, addOrUpdateQA, strict: true });
       console.log(`🛑 Vacancy ${vacancyId} had a submission error; keeping its answers open for manual review.`);
       return;
     }
-    if (await deferFailedSubmission({ commander, vacancyId, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) return;
-
     const form = await readFormForFilters(commander);
     title = form.vacancy;
     // What the salary answers' currency is told by: the card, the description and the form's text
@@ -645,7 +653,7 @@ export async function handleVacancyResponsePage({
       return;
     }
     if (!await isResponseSubmitted(commander)) {
-      if (await deferFailedSubmission({ commander, vacancyId, title, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) return;
+      if (await deferFailedSubmission({ commander, vacancyId, title, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) return;
       console.log(`⚠️  hh.ru did not confirm the application to vacancy ${vacancyId}, manual check required`);
       // Never move on to the next vacancy: the run stops (unattended) or waits for the user
       await onApplicationNotConfirmed(vacancyId);

@@ -215,19 +215,21 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 Questions that the QA database cannot answer are never skipped by default: the form waits for
 you (`--on-missing-answers wait`). Use `--on-missing-answers skip` for fully unattended runs.
 
-When an application popup or full form shows an error, the app saves its answers and keeps that
-form open. It does not navigate, close the popup, process the next vacancy or resubmit automatically.
-A private recovery copy in `logs/application-drafts/<vacancyId>.json` includes the cover letter,
-custom answers and selected choices. Passwords, hidden credentials and CAPTCHA fields are excluded.
-Reading or saving failures cannot be reported as a successful save. Dismissing the error banner
-does not release the form for automatic sending; it stays available for manual review. After a
-restart, a failed full form restores empty fields from its recovery copy and still needs review.
-Confirmed submission releases the hold while retaining its local recovery copy.
+Generic hh.ru submission errors («Произошла ошибка, попробуйте ещё раз» / “An error occurred,
+please try again”, code `unknown`) automatically skip the vacancy for five hours using the existing
+RAM retry queue. Before leaving the full form or closing its popup, the app saves every answer to
+Q&A and writes a private recovery copy in `logs/application-drafts/<vacancyId>.json`, including the
+cover letter, custom answers and selected choices. If reading or either save fails, the form stays
+open. Passwords, hidden credentials and CAPTCHA fields are excluded from recovery copies.
 
-Generic hh.ru errors («Произошла ошибка, попробуйте ещё раз» / “An error occurred, please try again”)
-also set a five-hour retry cooldown in RAM. If you leave the failed form yourself, the vacancy can
-be retried later under the normal review rules. The queue is cleared on normal process restarts;
-errors are not written to `skipped-vacancies.lino`.
+Other applications continue while the failed vacancy is excluded from search. After five hours,
+its answers can be restored for a retry under the usual review rules. The skip is held only in RAM:
+normal process restarts clear the queue, and a recovery file never acts as a persistent generic-error
+skip. Nothing is written to `skipped-vacancies.lino` for these errors.
+
+Validation errors, limits and blocks still keep their form open for manual action; CAPTCHA handling
+stays manual. Dismissing such an error banner does not release its form for automatic sending.
+Confirmed submission releases the hold while retaining the local recovery copy.
 
 ### Vacancy collection, résumé matching and technology statistics
 

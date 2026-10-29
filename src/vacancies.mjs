@@ -135,7 +135,7 @@ export async function processModalApplication({
   }
   if (await deferFailedSubmission({ commander, vacancyId, title,
     saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) {
-    return { success: false, reason: 'submission_error_held' };
+    return { success: false, reason: 'submission_error_handled' };
   }
   const skip = async (reason) => {
     await noteSkip(skippedVacancies, vacancyId, { reason, title });
@@ -360,7 +360,7 @@ export async function processModalApplication({
   await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
   const confirmed = !vacancyId || await isVacancyCardResponded({ commander, vacancyId });
   if (!confirmed && await deferFailedSubmission({ commander, vacancyId, title, saveAnswers: saveAll })) {
-    return { success: false, reason: 'submission_error_held' };
+    return { success: false, reason: 'submission_error_handled' };
   }
   // hh.ru answers the click with its daily limit (shown in the popup): nothing was sent
   if (!confirmed && await hasLimitError({ commander })) {

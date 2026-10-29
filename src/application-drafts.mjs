@@ -29,8 +29,8 @@ export async function writeApplicationDraft(draft, directory = APPLICATION_DRAFT
 }
 
 /** Include the letter and custom-choice text as well as the checked option values. */
-export async function saveApplicationDraft({ commander, vacancyId, error, directory = APPLICATION_DRAFTS_DIR }) {
-  const draft = await commander.evaluate(({ vacancyId, error }) => {
+export async function saveApplicationDraft({ commander, vacancyId, error, requiresReview = true, directory = APPLICATION_DRAFTS_DIR }) {
+  const draft = await commander.evaluate(({ vacancyId, error, requiresReview }) => {
     const form = document.querySelector('form#RESPONSE_MODAL_FORM_ID[name="vacancy_response"]') ??
       [...document.querySelectorAll('[data-qa-popup-error-code]')].find((e) => e.getClientRects().length)?.closest('form');
     if (!form) throw new Error('Cannot back up the failed application: its form is missing');
@@ -44,11 +44,11 @@ export async function saveApplicationDraft({ commander, vacancyId, error, direct
       question: e.closest('[data-qa="task-body"]')?.querySelector('[data-qa="task-question"]')?.textContent.trim() ?? '',
     }));
     if (!fields.length) throw new Error('Cannot back up an empty failed application');
-    // A dismissed error banner must not permit the next automatic send on this document.
-    form.setAttribute('data-hh-application-error', JSON.stringify({ ...error, vacancyId: String(vacancyId) }));
-    return { vacancyId: String(vacancyId), url: window.location.href, fields, error, requiresReview: true,
+    if (requiresReview) form.setAttribute('data-hh-application-error', JSON.stringify({ ...error, vacancyId: String(vacancyId) }));
+    else form.removeAttribute('data-hh-application-error');
+    return { vacancyId: String(vacancyId), url: window.location.href, fields, error, requiresReview,
       capturedAt: new Date().toISOString() };
-  }, { vacancyId, error: { code: error.code, text: error.text } });
+  }, { vacancyId, error: { code: error.code, text: error.text }, requiresReview });
   return writeApplicationDraft(draft, directory);
 }
 
@@ -87,8 +87,10 @@ export async function restoreApplicationDraft({ commander, draft, overwrite = fa
         restored++;
       }
     }
-    form.setAttribute('data-hh-application-error', JSON.stringify({ vacancyId: String(draft.vacancyId),
-      code: draft.error?.code ?? 'unknown', text: draft.error?.text ?? 'Restored failed application; manual review required' }));
+    if (draft.requiresReview !== false) {
+      form.setAttribute('data-hh-application-error', JSON.stringify({ vacancyId: String(draft.vacancyId),
+        code: draft.error?.code ?? 'unknown', text: draft.error?.text ?? 'Restored failed application; manual review required' }));
+    } else form.removeAttribute('data-hh-application-error');
     return { restored };
   }, { draft, overwrite });
 }
