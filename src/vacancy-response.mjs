@@ -422,6 +422,11 @@ export async function handleVacancyResponsePage({
     await skipVacancy(deferredQuestions ? 'questions_deferred' : 'unanswered_questions');
     await returnToList();
   };
+  const draftsAwaitReview = async () => {
+    if (!(await extractPageQuestions({ evaluate: commander.evaluate })).some((item) => item.requiresReview)) return false;
+    console.log('Draft answers require your review. Edit them as needed and submit the form manually when ready.');
+    return true;
+  };
 
   try {
     console.log('Detected vacancy_response page, handling application form...');
@@ -452,6 +457,7 @@ export async function handleVacancyResponsePage({
       console.log(`🛑 Vacancy ${vacancyId} had a submission error; keeping its answers open for manual review.`);
       return;
     }
+    if (await draftsAwaitReview()) return;
     const form = await readFormForFilters(commander);
     title = form.vacancy;
     // What the salary answers' currency is told by: the card, the description and the form's text
@@ -512,6 +518,7 @@ export async function handleVacancyResponsePage({
       console.log('Using special "Откликнуться без теста" flow');
       // Questions outside the test (e.g. the salary) still take their saved answers
       await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext, contacts });
+      if (await draftsAwaitReview()) return;
       await commander.clickButton({ selector: submitWithoutTestSelector, scrollIntoView: true, smoothScroll: true });
       console.log('Clicked "Откликнуться без теста" button');
       await commander.wait({ ms: 2000, reason: 'submit without test to complete' });
@@ -596,6 +603,7 @@ export async function handleVacancyResponsePage({
       } while (!await isFormComplete());
     }
 
+    if (await draftsAwaitReview()) return;
     const autoSend = hasTestQuestions && exactAfterAutofill && await answersExact();
     if (!hasTestQuestions) {
       console.log('No test questions found, only cover letter - will auto-submit');

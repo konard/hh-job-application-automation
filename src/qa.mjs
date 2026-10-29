@@ -55,6 +55,7 @@ export async function extractPageQuestions(options = {}) {
           selector,
           index: taskIndex,
           currentValue: textarea.value.trim(),
+          ...(textarea.hasAttribute('data-hh-answer-draft') ? { requiresReview: true } : {}),
         });
       });
 
@@ -136,6 +137,7 @@ const sameList = (first, second) => {
 };
 
 function itemAnswerExact(item, qaMap, choices) {
+  if (item.requiresReview) return false;
   if (!qaMap.has(item.question)) {
     return false;
   }
@@ -170,8 +172,9 @@ export function exactAnswerIssues(items, qaMap) {
   const choices = new Map(items.filter(({ type }) => type !== 'textarea').map((item) => [item.question, item]));
   return [...new Map(items.filter((item) => !itemAnswerExact(item, qaMap, choices)).map((item) => [item.question, {
     question: item.question,
-    reason: !qaMap.has(item.question) ? 'question is not saved word for word'
-      : hasAnswerVariants(qaMap.get(item.question)) ? 'several saved answers need selection' : 'the current answer differs from its saved answer',
+    reason: item.requiresReview ? 'draft answer requires manual review'
+      : !qaMap.has(item.question) ? 'question is not saved word for word'
+        : hasAnswerVariants(qaMap.get(item.question)) ? 'several saved answers need selection' : 'the current answer differs from its saved answer',
   }])).values()];
 }
 
@@ -332,6 +335,7 @@ export async function countUnansweredQuestions(options = {}) {
  * @param {Object} options - Configuration options
  * @param {Object} options.commander - Browser commander instance
  * @param {Object} options.questionData - Question data with selector and answer
+ * @param {boolean} [options.reviewOnly=false] - Require manual submission of this draft
  * @returns {Promise<boolean>} - True if filled
  */
 /**
@@ -358,7 +362,17 @@ export function answerFits(question, answer) {
     fitsAvailabilityQuestion(question, answerText(answer));
 }
 
-export async function fillTextareaQuestion({ commander, questionData }) {
+export async function fillTextareaQuestion({ commander, questionData, reviewOnly = false }) {
+  if (reviewOnly) {
+    await commander.evaluate({
+      fn: (selector) => {
+        const textarea = document.querySelector(selector);
+        if (!textarea || textarea.value.trim()) return;
+        textarea.setAttribute('data-hh-answer-draft', 'true');
+      },
+      args: [questionData.selector],
+    });
+  }
   // checkEmpty makes fillTextArea skip textareas that already have content
   const result = await commander.fillTextArea({
     selector: questionData.selector,

@@ -22,6 +22,14 @@ const checkbox = (question, options, checked) => ({
 const textarea = (question, currentValue) => ({ type: 'textarea', question, currentValue });
 
 describe('allAnswersExact', () => {
+  test('a review-only draft cannot become an exact answer through auto-save', () => {
+    const question = 'Опыт Linux?';
+    const field = { ...textarea(question, 'Ubuntu, Docker.'), requiresReview: true };
+    const saved = new Map([[question, field.currentValue]]);
+    assert.equal(allAnswersExact([field], saved), false);
+    assert.deepEqual(exactAnswerIssues([field], saved), [{ question, reason: 'draft answer requires manual review' }]);
+  });
+
   const qaMap = new Map([[ENGLISH, 'В2'], [B2C, 'Да, Kaiten'], [STACK, ['Go', 'PostgreSQL']]]);
 
   test('saved questions with exactly the saved answers', () => {

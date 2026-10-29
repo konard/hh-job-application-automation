@@ -256,10 +256,11 @@ const RESPONSE_URL = 'https://hh.ru/applicant/vacancy_response?vacancyId=1391000
  * @param {boolean} [options.direct=false] - The form is a direct application (employer's site)
  * @param {Function} [options.onWait] - Runs on every wait (e.g. the periodic auto-save)
  */
-function fakeForm({ questions = [], confirms = true, direct = false, withoutTest = false, onWait = () => {} } = {}) {
+function fakeForm({ questions = [], confirms = true, direct = false, withoutTest = false, reviewOnly = false, onWait = () => {} } = {}) {
   const state = { questions: questions.map((question) => ({ question, value: '' })), submitted: false, clicks: [], gotos: [] };
   const items = () => state.questions.map(({ question, value }, index) => ({
     type: 'textarea', question, selector: `textarea[name="task_${index}"]`, index, currentValue: value,
+    ...(reviewOnly ? { requiresReview: true } : {}),
   }));
   return {
     state,
@@ -328,6 +329,20 @@ function fakeForm({ questions = [], confirms = true, direct = false, withoutTest
 const sends = (form) => form.state.clicks.filter(({ selector }) => selector === SELECTORS.submitButtonLetter);
 
 describe('full response form', () => {
+  test('review-only drafts are never auto-submitted, even after learning and with auto-submit enabled', async () => {
+    disableConfirmations();
+    const qa = new Map([['Опыт Linux?', 'Работал с Ubuntu и Docker.']]);
+    for (const withoutTest of [false, true]) {
+      const form = fakeForm({ questions: [...qa.keys()], reviewOnly: true, withoutTest });
+      form.state.questions[0].value = qa.get('Опыт Linux?');
+      await handleVacancyResponsePage({ commander: form, MESSAGE: 'Здравствуйте', readQADatabase: async () => new Map(qa),
+        addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL, autoSendExact: true, autoSubmitEnabled: true });
+      assert.equal(form.state.questions[0].value, qa.get('Опыт Linux?'));
+      assert.equal(form.state.clicks.length, 0);
+      assert.deepEqual(form.state.gotos, []);
+    }
+  });
+
   test('reopening a cooling form cannot send it before its five-hour deadline', async () => {
     disableConfirmations();
     const form = fakeForm();
