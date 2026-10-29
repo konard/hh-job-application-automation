@@ -33,6 +33,7 @@ import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './conf
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
+import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft } from './application-drafts.mjs';
 import {
   dismissOverlays,
   findFirstSelector,
@@ -55,28 +56,35 @@ const fillers = {
 };
 
 // Answers already written in this run, so periodic saves only write what changed
-const savedAnswers = new Map();
+const savedAnswers = new WeakMap();
+const savingAnswers = new WeakMap();
 
 /**
  * Save new or changed Q&A pairs to the database and log them
  * @returns {Promise<number>} Number of saved pairs
  */
-export async function savePairs(pairs, addOrUpdateQA) {
-  let saved = 0;
-  // One answer per question: two (e.g. a choice and the text of its "Свой вариант" box) would
-  // overwrite each other on every save
-  const answers = new Map(pairs.map(({ question, answer }) => [question, answer]));
-  for (const [question, answer] of answers) {
-    const key = JSON.stringify(answer);
-    if (savedAnswers.get(question) === key) {
-      continue;
+export function savePairs(pairs, addOrUpdateQA) {
+  const run = (savingAnswers.get(addOrUpdateQA) ?? Promise.resolve()).catch(() => {}).then(async () => {
+    const alreadySaved = savedAnswers.get(addOrUpdateQA) ?? new Map();
+    savedAnswers.set(addOrUpdateQA, alreadySaved);
+    let saved = 0;
+    // One answer per question: two (e.g. a choice and the text of its "Свой вариант" box) would
+    // overwrite each other on every save
+    const answers = new Map(pairs.map(({ question, answer }) => [question, answer]));
+    for (const [question, answer] of answers) {
+      const key = JSON.stringify(answer);
+      if (alreadySaved.get(question) === key) {
+        continue;
+      }
+      await addOrUpdateQA(question, answer);
+      alreadySaved.set(question, key);
+      console.log('Saved Q&A:', question);
+      saved++;
     }
-    await addOrUpdateQA(question, answer);
-    savedAnswers.set(question, key);
-    console.log('Saved Q&A:', question);
-    saved++;
-  }
-  return saved;
+    return saved;
+  });
+  savingAnswers.set(addOrUpdateQA, run);
+  return run;
 }
 
 /**
@@ -225,8 +233,8 @@ export async function saveMarkedQAPairs({ commander, addOrUpdateQA }) {
 /**
  * Save Q&A pairs from textareas and radio buttons after user interaction
  */
-export async function saveQAPairs({ commander, addOrUpdateQA }) {
-  const pairs = await readQAPairs({ commander });
+export async function saveQAPairs({ commander, addOrUpdateQA, strict = false }) {
+  const pairs = await readQAPairs({ commander, strict });
   return pairs ? savePairs(pairs, addOrUpdateQA) : 0;
 }
 
@@ -234,10 +242,11 @@ export async function saveQAPairs({ commander, addOrUpdateQA }) {
  * The form's questions and answers as they are now, or null while the page navigates away
  * @returns {Promise<Array<{question: string, answer: string|string[]}>|null>}
  */
-export async function readQAPairs({ commander }) {
+export async function readQAPairs({ commander, strict = false }) {
   try {
     return await extractQAPairs({ evaluate: commander.evaluate });
   } catch (error) {
+    if (strict) throw error;
     // The page navigated away while reading it; the save before navigation covers it
     if (isNavigationError(error)) {
       log.debug(() => `Q&A save skipped during navigation: ${error.message}`);
@@ -418,21 +427,22 @@ export async function handleVacancyResponsePage({
     console.log('Detected vacancy_response page, handling application form...');
     await commander.waitForSelector({ selector: 'body' });
     await dismissOverlays(commander);
-    const cooling = submissionRetries.get(vacancyId);
-    if (cooling && cooling.until > Date.now()) {
-      await saveQAPairs({ commander, addOrUpdateQA });
-      console.log(`⏭️  Vacancy ${vacancyId} is waiting for its five-hour submission retry; left alone until ${new Date(cooling.until).toISOString()}`);
-      await returnToList();
-      return;
-    }
-    if (await deferFailedSubmission({ commander, vacancyId, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA }) })) return;
-
     // hh.ru stays on this page after a response and offers to respond again
     if (await isResponseSubmitted(commander)) {
+      await completeApplicationDraft(vacancyId);
       console.log('✅ Already applied to this vacancy, returning to the vacancy list');
       await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
       return;
     }
+    const cooling = submissionRetries.get(vacancyId);
+    const failedDraft = await readApplicationDraft(vacancyId);
+    if (!retrySubmission && (cooling || failedDraft?.requiresReview)) {
+      if (failedDraft?.requiresReview) await restoreApplicationDraft({ commander, draft: failedDraft });
+      await saveQAPairs({ commander, addOrUpdateQA, strict: true });
+      console.log(`🛑 Vacancy ${vacancyId} had a submission error; keeping its answers open for manual review.`);
+      return;
+    }
+    if (await deferFailedSubmission({ commander, vacancyId, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) return;
 
     const form = await readFormForFilters(commander);
     title = form.vacancy;
@@ -635,7 +645,7 @@ export async function handleVacancyResponsePage({
       return;
     }
     if (!await isResponseSubmitted(commander)) {
-      if (await deferFailedSubmission({ commander, vacancyId, title, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA }) })) return;
+      if (await deferFailedSubmission({ commander, vacancyId, title, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) return;
       console.log(`⚠️  hh.ru did not confirm the application to vacancy ${vacancyId}, manual check required`);
       // Never move on to the next vacancy: the run stops (unattended) or waits for the user
       await onApplicationNotConfirmed(vacancyId);

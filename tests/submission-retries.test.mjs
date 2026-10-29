@@ -4,6 +4,7 @@ import { waitForButtonsAfterNavigation } from '../src/vacancies.mjs';
 
 const formUrl = 'https://hh.ru/applicant/vacancy_response?vacancyId=138848764&startedWithQuestion=false';
 const searchUrl = 'https://hh.ru/search/vacancy?resume=1';
+const saveDraft = async () => ({ file: 'private-draft.json' });
 
 describe('five-hour application retries in RAM', () => {
   test('a controlled RAM handoff preserves the exact deadline without making it persistent', () => {
@@ -56,7 +57,7 @@ describe('five-hour application retries in RAM', () => {
       { code: 'negotiations-limit-exceeded', text: 'Лимит откликов' }]) expect(isPassingError(error)).toBe(false);
   });
 
-  test('answers are saved before leaving a failed full form, including overlapping checks', async () => {
+  test('answers and a recovery copy are saved while a failed form stays open, including overlapping checks', async () => {
     const calls = [];
     let url = formUrl;
     const retries = createSubmissionRetries({ now: () => 1000 });
@@ -65,11 +66,11 @@ describe('five-hour application retries in RAM', () => {
       safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred, please try again' } }),
       goto: async ({ url: next }) => { calls.push('leave'); url = next; },
     };
-    const options = { commander, retries, returnUrl: searchUrl, saveAnswers: async () => { calls.push('saved'); } };
+    const options = { commander, retries, saveDraft: async () => { calls.push('snapshot'); }, saveAnswers: async () => { calls.push('saved'); } };
     expect(await Promise.all([deferFailedSubmission(options), deferFailedSubmission(options)])).toEqual([true, true]);
-    expect(calls).toEqual(['saved', 'leave']);
+    expect(calls).toEqual(['saved', 'snapshot']);
     expect(retries.get('138848764')).toMatchObject({ url: formUrl, until: 1000 + SUBMISSION_RETRY_MS });
-    expect(url).toBe(searchUrl);
+    expect(url).toBe(formUrl);
   });
 
   test('a failed save keeps the form and does not silently lose answers', async () => {
@@ -80,26 +81,26 @@ describe('five-hour application retries in RAM', () => {
       safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred' } }),
       goto: async () => { left = true; },
     };
-    await expect(deferFailedSubmission({ commander, retries, returnUrl: searchUrl,
+    await expect(deferFailedSubmission({ commander, retries, saveDraft,
       saveAnswers: async () => { throw new Error('disk full'); } })).rejects.toThrow('disk full');
     expect(left).toBe(false);
     expect(retries.ids()).toEqual([]);
   });
 
-  test('an existing failed form can be deferred before the startup search URL is known', async () => {
+  test('an existing failed form stays open when the startup search URL is unknown', async () => {
     let destination;
     const commander = { getUrl: () => formUrl,
       safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred' } }),
       goto: async ({ url }) => { expect(url).toMatch(/^https:\/\/hh\.ru\/search\/vacancy/); destination = url; } };
-    expect(await deferFailedSubmission({ commander, retries: createSubmissionRetries(), returnUrl: '', saveAnswers: async () => {} })).toBe(true);
-    expect(destination).toBe('https://hh.ru/search/vacancy?from=resumelist');
+    expect(await deferFailedSubmission({ commander, retries: createSubmissionRetries(), saveDraft, saveAnswers: async () => {} })).toBe(true);
+    expect(destination).toBeUndefined();
   });
 
   test('a resolved error during saving is not deferred', async () => {
     let error = { code: 'unknown', text: 'An error occurred' };
     const retries = createSubmissionRetries();
     const commander = { getUrl: () => formUrl, safeEvaluate: async () => ({ value: error }), goto: async () => { throw new Error('must stay'); } };
-    expect(await deferFailedSubmission({ commander, retries, returnUrl: searchUrl,
+    expect(await deferFailedSubmission({ commander, retries, saveDraft,
       saveAnswers: async () => { error = null; } })).toBe(false);
     expect(retries.ids()).toEqual([]);
   });
@@ -109,5 +110,33 @@ describe('five-hour application retries in RAM', () => {
       count: async () => 0, evaluate: async () => null };
     expect(await waitForButtonsAfterNavigation({ commander, pageClosedByUser: () => false, retryDue: () => true }))
       .toEqual({ status: 'retry_due' });
+  });
+
+  test('a popup error identifies its vacancy and stays open for validation errors too', async () => {
+    const retries = createSubmissionRetries();
+    const commander = { getUrl: () => searchUrl,
+      safeEvaluate: async () => ({ value: { code: 'letter-required', text: 'Enter a letter', vacancyId: '123' } }),
+      goto: async () => { throw new Error('must stay'); } };
+    let saved = 0;
+    expect(await deferFailedSubmission({ commander, retries, saveDraft, saveAnswers: async () => { saved++; } })).toBe(true);
+    expect(saved).toBe(1);
+    expect(retries.ids()).toEqual([]);
+  });
+
+  test('failure to write the recovery copy keeps the form and does not queue a retry', async () => {
+    const retries = createSubmissionRetries();
+    const commander = { getUrl: () => formUrl,
+      safeEvaluate: async () => ({ value: { code: 'unknown', text: 'An error occurred' } }),
+      goto: async () => { throw new Error('must stay'); } };
+    await expect(deferFailedSubmission({ commander, retries, saveAnswers: async () => {},
+      saveDraft: async () => { throw new Error('backup disk full'); } })).rejects.toThrow('backup disk full');
+    expect(retries.ids()).toEqual([]);
+  });
+
+  test('an unreadable error state cannot be mistaken for a successful submission or an empty form', async () => {
+    const commander = { getUrl: () => formUrl,
+      safeEvaluate: async () => ({ success: false, value: null, navigationError: true }),
+      goto: async () => { throw new Error('must stay'); } };
+    await expect(deferFailedSubmission({ commander, saveDraft, saveAnswers: async () => {} })).rejects.toThrow('keeping the current page');
   });
 });

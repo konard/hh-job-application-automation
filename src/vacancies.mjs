@@ -133,6 +133,10 @@ export async function processModalApplication({
   if (isFullFormOpened(commander)) {
     return FULL_FORM_OPENED;
   }
+  if (await deferFailedSubmission({ commander, vacancyId, title,
+    saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) {
+    return { success: false, reason: 'submission_error_held' };
+  }
   const skip = async (reason) => {
     await noteSkip(skippedVacancies, vacancyId, { reason, title });
     return skipModal({ commander, reason });
@@ -231,7 +235,7 @@ export async function processModalApplication({
   }
   // The answers the user typed; every answer of the popup only once it is sent
   const saveTyped = () => (addOrUpdateQA ? saveMarkedQAPairs({ commander, addOrUpdateQA }) : 0);
-  const saveAll = () => (addOrUpdateQA ? saveQAPairs({ commander, addOrUpdateQA }) : 0);
+  const saveAll = () => (addOrUpdateQA ? saveQAPairs({ commander, addOrUpdateQA, strict: true }) : 0);
 
   // Answered later: the vacancy is kept under its questions in deferred-questions.lino
   const deferModal = async (questions) => {
@@ -297,8 +301,8 @@ export async function processModalApplication({
   if (await commander.count({ selector: submitButtonSelector }) === 0) {
     console.error(`❌ Submit button not found in modal! Tried selector: ${submitButtonSelector}`);
     await logModalText({ commander, title: '📋 Modal content:' });
-    console.error('💡 Closing modal and skipping this vacancy...');
-    return skip('button_not_found');
+    await saveAll();
+    return { success: false, reason: 'button_not_found' };
   }
 
   while (isInteractive() && !await isButtonEnabled(commander, submitButtonSelector)) {
@@ -309,8 +313,8 @@ export async function processModalApplication({
   if (!await isButtonEnabled(commander, submitButtonSelector)) {
     console.error('❌ Application button is still disabled after entering the message!');
     await logModalText({ commander, title: '📋 Reason from modal:' });
-    console.error('💡 Closing modal and skipping this vacancy...');
-    return skip('button_disabled');
+    await saveAll();
+    return { success: false, reason: 'button_disabled' };
   }
 
   if (isFullFormOpened(commander)) {
@@ -356,7 +360,7 @@ export async function processModalApplication({
   await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
   const confirmed = !vacancyId || await isVacancyCardResponded({ commander, vacancyId });
   if (!confirmed && await deferFailedSubmission({ commander, vacancyId, title, saveAnswers: saveAll })) {
-    return { success: false, reason: 'submission_cooldown' };
+    return { success: false, reason: 'submission_error_held' };
   }
   // hh.ru answers the click with its daily limit (shown in the popup): nothing was sent
   if (!confirmed && await hasLimitError({ commander })) {

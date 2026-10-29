@@ -336,7 +336,7 @@ describe('full response form', () => {
       await handleVacancyResponsePage({ commander: form, MESSAGE: 'Здравствуйте', readQADatabase: async () => new Map(),
         addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL });
       assert.equal(sends(form).length, 0);
-      assert.deepEqual(form.state.gotos, [SEARCH_URL]);
+      assert.deepEqual(form.state.gotos, []);
     } finally { submissionRetries.forget('139100001'); }
   });
 

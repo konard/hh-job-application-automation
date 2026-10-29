@@ -30,6 +30,7 @@ import { LETTER_SELECTORS, attachLetter, sendLetterByOffer } from './letter-atta
 import { coverLetterFor } from './cover-letter.mjs';
 import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
 import { createApplicationResumeSelector } from './application-resume.mjs';
+import { completeApplicationDraft } from './application-drafts.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -138,6 +139,7 @@ export function createOrchestrator({
       }
       sentVacancyIds.add(vacancyId);
       submissionRetries.forget(vacancyId);
+      await completeApplicationDraft(vacancyId);
       await vacancyInsights?.applied(vacancyId).catch((error) => console.log(`⚠️  Could not update private vacancy cache: ${error.message}`));
       // It no longer waits for an answer, and is no longer a skipped vacancy
       await deferredQuestions?.forget(vacancyId)
@@ -277,10 +279,8 @@ export function createOrchestrator({
     verbose: argv.verbose,
   });
 
-  const deferVisibleSubmissionError = () => URL_PATTERNS.vacancyResponse.test(commander.getUrl())
-    ? deferFailedSubmission({ commander, returnUrl: lastSearchPageUrl || 'https://hh.ru/search/vacancy?from=resumelist',
-      saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA }) })
-    : Promise.resolve(false);
+  const deferVisibleSubmissionError = () => deferFailedSubmission({ commander,
+    saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
 
   /**
    * Handle one result of findAndProcessVacancyButton
@@ -316,7 +316,7 @@ export function createOrchestrator({
       await afterApplicationSent(result.vacancyId);
       return true;
     case 'modal_processing_failed':
-      if (['not_confirmed', 'cover_letter_unavailable', 'cover_letter_unverified', 'submit_not_clicked'].includes(result.reason)) {
+      if (['not_confirmed', 'cover_letter_unavailable', 'cover_letter_unverified', 'submit_not_clicked', 'button_not_found', 'button_disabled'].includes(result.reason)) {
         await applicationNotConfirmed(result.vacancyId, result.reason);
       }
       return true;
@@ -349,9 +349,12 @@ export function createOrchestrator({
       watchHhSessions({ port: argv.browserPort });
 
       // Capture an existing failed form before resume selection navigates away from it.
-      await deferVisibleSubmissionError();
+      const failedApplicationOpen = await deferVisibleSubmissionError();
 
-      const start = await resolveApplicationStart(commander, START_URL);
+      const start = failedApplicationOpen && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())
+        ? { startUrl: START_URL || (URL_PATTERNS.searchVacancy.test(commander.getUrl())
+          ? commander.getUrl() : 'https://hh.ru/search/vacancy?from=resumelist'), preserveCurrentForm: true }
+        : await resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL);
       START_URL = start.startUrl;
       if (!START_URL) {
         throw new Error('No resume found on hh.ru - create one or pass --url');
@@ -412,6 +415,13 @@ export function createOrchestrator({
           log.debug(() => 'Page is loading, waiting for it to be fully ready...');
           await waitForPageReady('ensuring page is ready before automation');
           log.debug(() => `Page ready: ${commander.getUrl()}`);
+          continue;
+        }
+
+        // A failed popup can sit on a search page. Do not process its next Apply button,
+        // redirect, or take a queued retry while the user's failed form remains open.
+        if (await deferVisibleSubmissionError()) {
+          await commander.wait({ ms: 1000, reason: 'the failed application to be reviewed or sent manually' });
           continue;
         }
 

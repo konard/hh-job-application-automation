@@ -1,7 +1,8 @@
 /** Failed applications wait five hours in RAM; restarting the process clears the queue. */
 import { URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
-import { closeModalIfPresent } from './helpers/modal-helpers.mjs';
 import { withdrawPrompt } from './confirmations.mjs';
+import { isResponseSubmitted } from './helpers/page-helpers.mjs';
+import { saveApplicationDraft } from './application-drafts.mjs';
 
 export const SUBMISSION_RETRY_MS = 5 * 60 * 60 * 1000;
 
@@ -48,41 +49,47 @@ export const isPassingError = (error) => Boolean(error) &&
     /произошла ошибка|an error occurred|something went wrong/iu.test(error.text));
 
 export async function readSubmissionError(commander) {
-  const { value } = await commander.safeEvaluate({
+  const result = await commander.safeEvaluate({
     fn: () => {
       const element = [...document.querySelectorAll('[data-qa-popup-error-code]')].find((item) => item.getClientRects().length > 0);
-      return element ? {
+      if (!element) {
+        const held = document.querySelector('form[data-hh-application-error]');
+        try { return held ? { ...JSON.parse(held.getAttribute('data-hh-application-error')), held: true } : null; }
+        catch { return null; }
+      }
+      return {
         code: element.getAttribute('data-qa-popup-error-code') ?? '', text: element.innerText.replace(/\s+/g, ' ').trim(),
         vacancyId: element.closest('form')?.querySelector('input[name="vacancy_id"]')?.value ?? '',
-      } : null;
+      };
     },
     defaultValue: null, operationName: 'popup error check', silent: true,
   });
-  return value;
+  if (result.success === false) throw new Error('Could not read application errors; keeping the current page');
+  return result.value;
 }
 
 const handling = new WeakMap();
+const reported = new WeakMap();
 
-/** Save before leaving, including while a send-confirmation prompt is still waiting. */
-export function deferFailedSubmission({ commander, vacancyId, title = '', saveAnswers, returnUrl, retries = submissionRetries }) {
+/** Save on errors and keep the failed form open; only the user may leave or retry it. */
+export function deferFailedSubmission({ commander, vacancyId, title = '', saveAnswers, retries = submissionRetries, saveDraft = saveApplicationDraft }) {
   if (handling.has(commander)) return handling.get(commander);
   const run = (async () => {
     const url = commander.getUrl();
-    const id = extractVacancyIdFromResponseUrl(url) ?? vacancyId;
+    if (await isResponseSubmitted(commander) === true) return false;
     const error = await readSubmissionError(commander);
-    if (!id || !isPassingError(error) || (error.vacancyId && error.vacancyId !== String(id))) return false;
+    const id = extractVacancyIdFromResponseUrl(url) ?? vacancyId ?? error?.vacancyId;
+    if (!id || !error || (error.vacancyId && error.vacancyId !== String(id))) return false;
     await saveAnswers();
     // The user may have sent successfully or navigated while the snapshot was being saved.
-    if (commander.getUrl() !== url || !isPassingError(await readSubmissionError(commander))) return false;
-    const entry = retries.defer(id, { title, ...(URL_PATTERNS.vacancyResponse.test(url) ? { url } : {}) });
-    console.log(`⏭️  Vacancy ${id}: hh.ru submission error; saved answers, skipped for 5 hours in RAM, retry after ${new Date(entry.until).toISOString()}`);
-    withdrawPrompt(`vacancy ${id} is waiting for its five-hour submission retry`);
-    if (URL_PATTERNS.vacancyResponse.test(url)) {
-      await commander.goto({ url: returnUrl || 'https://hh.ru/search/vacancy?from=resumelist', waitForStableUrlBefore: false });
-    } else {
-      if (!await closeModalIfPresent({ commander })) {
-        await commander.goto({ url: returnUrl ?? url, waitForStableUrlBefore: false });
-      }
+    if (commander.getUrl() !== url || !await readSubmissionError(commander)) return false;
+    const backup = await saveDraft({ commander, vacancyId: id, error });
+    if (isPassingError(error)) retries.defer(id, { title, ...(URL_PATTERNS.vacancyResponse.test(url) ? { url } : {}) });
+    const signature = `${url}:${id}:${error.code}:${error.text}`;
+    if (reported.get(commander) !== signature) {
+      console.log(`🛑 Vacancy ${id}: hh.ru submission error; answers saved${backup?.file ? `; recovery copy: ${backup.file}` : ''}. Keeping this form open for manual review.`);
+      withdrawPrompt(`vacancy ${id} has a submission error; its form stays open`);
+      reported.set(commander, signature);
     }
     return true;
   })().finally(() => handling.delete(commander));

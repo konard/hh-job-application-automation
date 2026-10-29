@@ -3,7 +3,8 @@
  * twice in one save (a choice and its "Свой вариант" text) does not flip between two answers
  */
 import { describe, test, assert } from 'test-anywhere';
-import { saveQAPairs } from '../src/vacancy-response.mjs';
+import { rejects } from 'node:assert/strict';
+import { saveQAPairs, savePairs } from '../src/vacancy-response.mjs';
 
 function fakeSave(pairs) {
   const writes = [];
@@ -31,5 +32,36 @@ describe('saveQAPairs', () => {
     await save();
     await save();
     assert.deepEqual(writes, [['autosave-2: Работали ли Вы с AI-продуктами?', 'Да']]);
+  });
+
+  test('a strict read failure is not reported as an empty successful save', async () => {
+    const commander = { evaluate: async () => { throw new Error('cannot read the form'); } };
+    let written = false;
+    await rejects(saveQAPairs({ commander, strict: true, addOrUpdateQA: async () => { written = true; } }), /cannot read/);
+    assert.equal(written, false);
+  });
+
+  test('concurrent saves finish in order, and the final complete answer wins', async () => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const writes = [];
+    const write = async (question, answer) => { writes.push(answer); if (answer === 'partial') await gate; };
+    const first = savePairs([{ question: 'same question', answer: 'partial' }], write);
+    const last = savePairs([{ question: 'same question', answer: 'full final answer' }], write);
+    release();
+    await Promise.all([first, last]);
+    assert.deepEqual(writes, ['partial', 'full final answer']);
+  });
+
+  test('independent destinations do not share a save cache; failed writes can be retried', async () => {
+    const pairs = [{ question: 'same question', answer: 'answer' }];
+    const first = []; const second = [];
+    await savePairs(pairs, async (q, a) => first.push(a));
+    await savePairs(pairs, async (q, a) => second.push(a));
+    assert.deepEqual(first, second);
+    let attempts = 0;
+    const write = async () => { if (++attempts === 1) throw new Error('disk full'); };
+    await rejects(savePairs(pairs, write), /disk full/);
+    assert.equal(await savePairs(pairs, write), 1);
   });
 });

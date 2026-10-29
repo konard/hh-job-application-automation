@@ -215,16 +215,19 @@ bun run apply -- --auto-submit-vacancy-response-form --verbose
 Questions that the QA database cannot answer are never skipped by default: the form waits for
 you (`--on-missing-answers wait`). Use `--on-missing-answers skip` for fully unattended runs.
 
-When a popup or full application form shows hh.ru's generic submission error («Произошла ошибка,
-попробуйте ещё раз» / “An error occurred, please try again”), its answers are saved before leaving
-and the vacancy waits five hours in an in-memory queue. Other applications continue. The vacancy
-is excluded from the search list during the cooldown and is reopened for retry after it expires,
-even if it is no longer on the current search page. Retries respect the normal pacing and answer
-review rules; another generic failure starts another five-hour wait. The queue stays in RAM only
-and is cleared when the application process restarts. These errors are not written to
-`skipped-vacancies.lino`. Daily limits, blocks, captchas and field validation keep their own
-handling. An unconfirmed application without a recognized generic error still stops an unattended
-run or waits for the user in a supervised run.
+When an application popup or full form shows an error, the app saves its answers and keeps that
+form open. It does not navigate, close the popup, process the next vacancy or resubmit automatically.
+A private recovery copy in `logs/application-drafts/<vacancyId>.json` includes the cover letter,
+custom answers and selected choices. Passwords, hidden credentials and CAPTCHA fields are excluded.
+Reading or saving failures cannot be reported as a successful save. Dismissing the error banner
+does not release the form for automatic sending; it stays available for manual review. After a
+restart, a failed full form restores empty fields from its recovery copy and still needs review.
+Confirmed submission releases the hold while retaining its local recovery copy.
+
+Generic hh.ru errors («Произошла ошибка, попробуйте ещё раз» / “An error occurred, please try again”)
+also set a five-hour retry cooldown in RAM. If you leave the failed form yourself, the vacancy can
+be retried later under the normal review rules. The queue is cleared on normal process restarts;
+errors are not written to `skipped-vacancies.lino`.
 
 ### Vacancy collection, résumé matching and technology statistics
 
