@@ -44,6 +44,7 @@
 "currency: rub (default)"
   ₽
   rub
+  руб
   руб.
   рубл
   "{{salary_net_usd}}: {{salary_net}}"

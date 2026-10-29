@@ -118,20 +118,33 @@ export function annualGrossFromNet(annualNet) {
 
 const roundUp = (value, step) => Math.ceil(value / step) * step;
 const grouped = (value) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+export const DEFAULT_MONTHLY_HOURS = 160;
+
+/** Round upward to cents so an hourly minimum never undercuts its monthly target. */
+const hourlySum = (monthly, hours, comma = false) => {
+  const text = grouped((Math.ceil(monthly / hours * 100 - 1e-8) / 100).toFixed(2));
+  return comma ? text.replace('.', ',') : text;
+};
 
 /**
  * The placeholders' values; a foreign gross only with its rate
  * @param {{netRub?: number, netUsd?: number, netEur?: number, usdRate?: number|null, eurRate?: number|null,
- *   company?: ReturnType<typeof parseCompanyTaxes>, rubPer?: Object<string, number>}} options
+ *   company?: ReturnType<typeof parseCompanyTaxes>, rubPer?: Object<string, number>, monthlyHours?: number}} options
  *   company: the user's company's taxes, what a foreign gross includes; rubPer: rubles per unit of other currencies
  * @returns {Object<string, string>}
  */
-export function salaryValues({ netRub = 0, netUsd = 0, netEur = 0, usdRate = null, eurRate = null, company = null, rubPer = {} }) {
+export function salaryValues({ netRub = 0, netUsd = 0, netEur = 0, usdRate = null, eurRate = null, company = null, rubPer = {}, monthlyHours = DEFAULT_MONTHLY_HOURS }) {
   const values = { salary_tax: 'НДФЛ' };
+  const hasHours = Number.isFinite(monthlyHours) && monthlyHours > 0;
   if (netRub > 0) {
     const { gross, rates } = annualGrossFromNet(netRub * 12);
+    const monthlyGross = roundUp(gross / 12, 10000);
     values.salary_net = `${grouped(netRub)} ₽`;
-    values.salary_gross = `${grouped(roundUp(gross / 12, 10000))} ₽`;
+    values.salary_gross = `${grouped(monthlyGross)} ₽`;
+    if (hasHours) {
+      values.salary_net_hourly = `${hourlySum(netRub, monthlyHours, true)} ₽`;
+      values.salary_gross_hourly = `${hourlySum(monthlyGross, monthlyHours, true)} ₽`;
+    }
     values.salary_ndfl = rates.map((rate) => `${Math.round(rate * 100)}%`).join(' / ');
   }
   const foreign = { usd: [netUsd, usdRate], usdt: [netUsd, usdRate], eur: [netEur, eurRate] };
@@ -139,9 +152,12 @@ export function salaryValues({ netRub = 0, netUsd = 0, netEur = 0, usdRate = nul
     const [net, rate] = foreign[suffix];
     if (net > 0) {
       values[`salary_net_${suffix}`] = write(grouped(net));
+      if (hasHours) values[`salary_net_hourly_${suffix}`] = write(hourlySum(net, monthlyHours, suffix === 'eur'));
       if (rate > 0) {
         const gross = (company && companyGross(net, company, rate, rubPer)) ?? annualGrossFromNet(net * rate * 12).gross / 12 / rate;
-        values[`salary_gross_${suffix}`] = write(grouped(roundUp(gross, 100)));
+        const monthlyGross = roundUp(gross, 100);
+        values[`salary_gross_${suffix}`] = write(grouped(monthlyGross));
+        if (hasHours) values[`salary_gross_hourly_${suffix}`] = write(hourlySum(monthlyGross, monthlyHours, suffix === 'eur'));
       }
     }
   }

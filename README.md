@@ -549,7 +549,13 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   salary questions only), it asks for the gross by «gross», «брутто», «до вычета», and the answer
   is one of your own saved wordings of that kind (net; gross with net), the one picked by the
   question, so different questions get a bit different wordings with the same sums. Questions about
-  a past job's pay, a given range («устраивает?»), a year or an hour are left to the saved answers.
+  a past job's pay, a given range («устраивает?»), or a year are left to the saved answers.
+  Hourly expectations («почасовая ставка», «руб/час», “hourly rate”) are calculated from the
+  monthly targets in the requested currency and tax basis. `salary_hours_per_month` in
+  `data/contacts.lino` sets the calculation basis (default 160). For example, ₽450,000 net/month
+  gives ₽2,812.50 net/hour. Rates round upward to cents; USD, USDT and EUR use their own targets.
+  Hourly placeholders (`{{salary_net_hourly}}`, `{{salary_gross_hourly}}` and their currency
+  suffixes) are kept separate from monthly amounts in forms, chat, choices and saved answers.
   When the currency is told (by the question, the vacancy's pay or its description), such an
   answer counts as saved, so a form whose other answers are saved too is sent without asking. The
   answer is saved under the new question once the form is sent.

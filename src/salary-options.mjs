@@ -1,5 +1,5 @@
 /** Numeric salary choices shared by chat, HH.ru questionnaires and external forms. */
-import { ambiguousSalaryTax, salaryQuestion } from './salary-questions.mjs';
+import { ambiguousSalaryTax, salaryPeriod, salaryQuestion } from './salary-questions.mjs';
 
 export const salaryCurrency = (text) => /₽|\brub\b|руб|russian rubles/iu.test(text) ? 'rub'
   : /\$|\busd\b|\busdt\b|dollars?|доллар/iu.test(text) ? 'usd'
@@ -44,13 +44,16 @@ export function selectSalaryOption({ question, options, contacts = {}, answer = 
   const shapes = ambiguousSalaryTax(question) ? ['net', 'gross'] : [asked.shape];
   const values = shapes.map((shape) => {
     const suffix = code === 'rub' ? '' : `_${code}`;
-    const configured = contacts[`salary_${shape}${suffix}`] ?? (shape === 'net' && code === 'rub' ? contacts.salary_net_rub : undefined);
+    const hourly = asked.period === 'hour';
+    const configured = contacts[`salary_${shape}${hourly ? '_hourly' : ''}${suffix}`] ??
+      (!hourly && shape === 'net' && code === 'rub' ? contacts.salary_net_rub : undefined);
     const numbers = salaryAmounts(configured ?? '');
     if (numbers.length === 1 && numbers[0] > 0) return numbers[0];
     // Expanded saved salary wording can supply a baseline when this caller has no contacts.
     const amounts = salaryAmounts(answer);
     const basis = /gross|до\s+(?:вычета|налог)|брутто/iu.test(answer) ? 'gross' : 'net';
-    return amounts.length === 1 && amounts[0] > 0 && salaryCurrency(answer) === code && basis === shape && !options.includes(answer)
+    return amounts.length === 1 && amounts[0] > 0 && salaryCurrency(answer) === code && basis === shape &&
+      salaryPeriod(answer) === (hourly ? 'hour' : 'month') && !options.includes(answer)
       ? amounts[0] : null;
   });
   if (values.some((value) => value === null)) return null;

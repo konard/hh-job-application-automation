@@ -10,11 +10,12 @@
  */
 
 import { createQADatabase } from './qa-database.mjs';
-import { COMPANY_TAXES_FILE, exchangeRates, parseCompanyTaxes, salaryValues } from './salary.mjs';
+import { COMPANY_TAXES_FILE, DEFAULT_MONTHLY_HOURS, exchangeRates, parseCompanyTaxes, salaryValues } from './salary.mjs';
 import { inferSalaryAnswer, learnSalaryPatterns, salaryAnswerForQuestion } from './salary-questions.mjs';
 
 /** Contacts written back as placeholders when they appear in a saved answer */
 const CONTRACTED = ['linkedin', 'telegram', 'phone', 'email', 'salary_gross', 'salary_net', 'salary_gross_usd', 'salary_net_usd', 'salary_gross_usdt', 'salary_net_usdt', 'salary_gross_eur', 'salary_net_eur'];
+CONTRACTED.push(...CONTRACTED.filter((key) => key.startsWith('salary_')).map((key) => key.replace(/^(salary_(?:net|gross))/, '$1_hourly')));
 
 /** A link cut at its colon by the .lino reader: only its scheme is left */
 export const cutLink = (value) => typeof value === 'string' && /^(?:https?|ftp|mailto|tg)$/i.test(value.trim());
@@ -44,7 +45,9 @@ export async function loadContacts(filePath, { rates = exchangeRates, companyTax
     if ((netUsd > 0 && !usd) || (netEur > 0 && !eur)) {
       console.log('⚠️  No dollar or euro rate (Central Bank unreachable, none cached): gross in that currency is left as an open question');
     }
-    Object.assign(contacts, salaryValues({ netRub, netUsd, netEur, usdRate: usd, eurRate: eur, company, rubPer }));
+    const monthlyHours = contacts.salary_hours_per_month === undefined ? DEFAULT_MONTHLY_HOURS
+      : Number(String(contacts.salary_hours_per_month).replace(/\s/g, '').replace(',', '.'));
+    Object.assign(contacts, salaryValues({ netRub, netUsd, netEur, usdRate: usd, eurRate: eur, company, rubPer, monthlyHours }));
   }
   return contacts;
 }
@@ -76,7 +79,12 @@ function contactPattern(key, value) {
   }
   // A salary as people write it: «$6000», «6 000 $», «6000 долларов», «450000 рублей», «450 000 ₽»
   if (key.startsWith('salary_') && digits) {
-    const amount = digits.replace(/\B(?=(\d{3})+$)/g, '[\\s\\u00a0]?');
+    const hourly = key.includes('_hourly');
+    const number = value.match(/\d[\d\s]*(?:[.,]\d+)?/)?.[0].trim().replace(/\s/g, '');
+    const [integer, fraction] = (hourly ? number : digits).split(/[.,]/);
+    const fractional = fraction?.replace(/0+$/, '');
+    const amount = integer.replace(/\B(?=(\d{3})+$)/g, '[\\s\\u00a0]?') +
+      (fraction ? (fractional ? `[.,]${fractional}0*` : '(?:[.,]0+)?') : '');
     if (key.endsWith('_usdt')) {
       return new RegExp(`(?<!\\d)${amount}\\s?USDT(?!\\p{L})`, 'gu');
     }
@@ -117,7 +125,17 @@ export function contractContacts(text, contacts) {
 export function contactsInContexts(contacts, chosen) {
   const result = { ...contacts };
   for (const { group, values } of chosen) {
-    for (const [key, template] of Object.entries(values)) {
+    const overrides = { ...values };
+    if (group === 'currency') {
+      // Reuse the configured currency mapping, while keeping monthly and hourly amounts separate.
+      for (const [key, template] of Object.entries(values)) {
+        if (/^salary_(?:net|gross)(?:_usd|_usdt|_eur)?$/.test(key) && /^\{\{salary_(?:net|gross)(?:_usd|_usdt|_eur)?\}\}$/.test(template)) {
+          const hourlyKey = key.replace(/^(salary_(?:net|gross))/, '$1_hourly');
+          overrides[hourlyKey] ??= template.replace(/(salary_(?:net|gross))/, '$1_hourly');
+        }
+      }
+    }
+    for (const [key, template] of Object.entries(overrides)) {
       const value = expandContacts(template, contacts);
       if (!/\{\{\w+\}\}/.test(value)) {
         result[key] = value;
