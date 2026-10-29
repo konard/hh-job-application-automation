@@ -455,7 +455,7 @@ export async function handleVacancyResponsePage({
       return;
     }
 
-    const selectedResume = await selectApplicationResume?.({ commander, questions: form.questions,
+    const selectedResume = await selectApplicationResume?.({ commander, vacancyId, questions: form.questions,
       context: [form.vacancy, vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? ''] });
     if (selectedResume?.ready === false) return;
 

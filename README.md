@@ -84,8 +84,11 @@ applies to the vacancies hh.ru suggests for it. If no Russian CV is available, i
 Each application selects its own CV: dollar-denominated pay (USD, USDT or USDC) or English
 questions select the English version; Russian questions select the Russian version. Vacancy
 text decides when there are no questions. The app opens the full application form, checks the
-available CV hashes against local exports, selects the version and verifies the checked option
-before sending. The cover letter follows that language. This prevents a one-click application
+selected CV against local exports before sending. An already correct CV needs no chooser access;
+otherwise the app selects it once at the start and verifies the resulting title or checked option
+without reopening the menu. Repeated form checks and worker restarts keep that choice and any
+manual CV changes. A restart also preserves answers on an unfinished full application form.
+The cover letter follows that language. This prevents a one-click application
 from sending HH.ru's default CV before the language check. Export both versions with
 `bun run cv -- export` first. `--no-auto-select-resume-language` disables this behavior.
 

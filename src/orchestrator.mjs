@@ -18,7 +18,7 @@ import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
 import { dismissOverlays, isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { registerPageTriggers, saveFormAnswers } from './page-triggers.mjs';
 import { ensureLoggedIn, watchHhSessions } from './login.mjs';
-import { findSuggestedVacanciesUrl, latestResumeSearchUrl } from './resumes.mjs';
+import { resolveApplicationStart } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
@@ -351,17 +351,15 @@ export function createOrchestrator({
       // Capture an existing failed form before resume selection navigates away from it.
       await deferVisibleSubmissionError();
 
+      const start = await resolveApplicationStart(commander, START_URL);
+      START_URL = start.startUrl;
       if (!START_URL) {
-        START_URL = URL_PATTERNS.searchVacancy.test(commander.getUrl()) && commander.getUrl().includes('resume=')
-          // The kept-open browser already shows suggested vacancies: keep its filters, check the resume
-          ? await latestResumeSearchUrl(commander, commander.getUrl())
-          : await findSuggestedVacanciesUrl(commander);
-        if (!START_URL) {
-          throw new Error('No resume found on hh.ru - create one or pass --url');
-        }
-        lastSearchPageUrl = START_URL;
+        throw new Error('No resume found on hh.ru - create one or pass --url');
       }
-      if (commander.getUrl() !== START_URL) {
+      lastSearchPageUrl = START_URL;
+      if (start.preserveCurrentForm) {
+        console.log('📄 Resuming the open application; entered answers are preserved.');
+      } else if (commander.getUrl() !== START_URL) {
         await commander.goto({ url: START_URL, waitForStableUrlBefore: false });
       }
       await dismissOverlays(commander);
@@ -393,7 +391,7 @@ export function createOrchestrator({
       submissionErrors.unref();
       process.once('exit', () => clearInterval(submissionErrors));
 
-      await attachPendingLetters();
+      if (!start.preserveCurrentForm) await attachPendingLetters();
       await this.runMainLoop();
     },
 

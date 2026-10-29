@@ -324,3 +324,17 @@ export async function latestResumeSearchUrl(commander, url, { knownResumes } = {
   console.log('📄 The open search page showed another resume; switching, filters kept');
   return switched.toString();
 }
+
+/** Restart on an unfinished application without navigating away from its answers. */
+export async function resolveApplicationStart(commander, explicitUrl, options = {}) {
+  if (explicitUrl) return { startUrl: explicitUrl, preserveCurrentForm: false };
+  const current = commander.getUrl();
+  if (/^https:\/\/hh\.ru\/applicant\/vacancy_response\?/.test(current)) {
+    const startUrl = await latestResumeSearchUrl(commander, 'https://hh.ru/search/vacancy?from=resumelist', options);
+    return { startUrl, preserveCurrentForm: true };
+  }
+  const startUrl = /^https:\/\/hh\.ru\/search\/vacancy\?/.test(current) && current.includes('resume=')
+    ? await latestResumeSearchUrl(commander, current, options)
+    : await findSuggestedVacanciesUrl(commander, options);
+  return { startUrl, preserveCurrentForm: false };
+}

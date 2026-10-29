@@ -156,7 +156,7 @@ export async function processModalApplication({
     await vacancyFilters.remember(vacancyId, filterMatch, { title });
     return skipModal({ commander, reason: 'filtered_out' });
   }
-  const selectedResume = selectApplicationResume ? await selectApplicationResume({ commander,
+  const selectedResume = selectApplicationResume ? await selectApplicationResume({ commander, vacancyId,
     questions: (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question),
     context: [vacancy, vacancyFilters?.description?.(vacancyId) ?? ''] }) : null;
   if (selectedResume?.ready === false) {

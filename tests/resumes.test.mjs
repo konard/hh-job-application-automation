@@ -13,6 +13,7 @@ import {
   mergeResumeState,
   readResumes,
   latestResumeSearchUrl,
+  resolveApplicationStart,
   describeChoice,
 } from '../src/resumes.mjs';
 
@@ -28,6 +29,32 @@ const state = {
   ],
 };
 const stateText = JSON.stringify(state);
+
+describe('restarting on an unfinished application', () => {
+  const knownResumes = [{ hash: 'aaa111', language: 'ru' }, { hash: 'bbb222', language: 'en' }];
+  test('keeps the active form and resolves a Russian return search without navigation', async () => {
+    const commander = {
+      getUrl: () => 'https://hh.ru/applicant/vacancy_response?vacancyId=138928100&startedWithQuestion=false',
+      evaluate: async () => `<template class="ResumeProfileFront-InitialState">${stateText}</template>`,
+      goto: () => { throw new Error('Must not navigate away from typed answers'); },
+    };
+    const result = await resolveApplicationStart(commander, undefined, { knownResumes });
+    assert.equal(result.preserveCurrentForm, true);
+    assert.equal(new URL(result.startUrl).searchParams.get('resume'), 'aaa111');
+    const explicit = 'https://hh.ru/search/vacancy?text=Python';
+    assert.deepEqual(await resolveApplicationStart(commander, explicit), { startUrl: explicit, preserveCurrentForm: false });
+  });
+  test('keeps search filters and normal startup behavior outside a form', async () => {
+    const commander = {
+      getUrl: () => 'https://hh.ru/search/vacancy?resume=bbb222&work_format=REMOTE&page=2',
+      evaluate: async () => `<template class="ResumeProfileFront-InitialState">${stateText}</template>`,
+    };
+    const result = await resolveApplicationStart(commander, undefined, { knownResumes });
+    assert.equal(result.preserveCurrentForm, false);
+    assert.equal(new URL(result.startUrl).searchParams.get('resume'), 'aaa111');
+    assert.equal(new URL(result.startUrl).searchParams.get('page'), '2');
+  });
+});
 
 describe('parseUpdatedAt()', () => {
   test('parses absolute dates with and without year', () => {
