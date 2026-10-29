@@ -5,6 +5,7 @@ import { normalizeQuestion } from './qa-database.mjs';
 import { contractContacts } from './contacts.mjs';
 import { ANSWER_SEPARATOR } from './qa.mjs';
 import { mergeAnswerFrequencies } from './answer-variants.mjs';
+import { fitsAvailabilityQuestion } from './answer-preferences.mjs';
 
 /** Access-controlled recruiter links belong in the private transcript, never the shared Q&A. */
 export const hasPrivateRecruiterLinks = (text) => /https?:\/\/\S*(?:\/private\/|[?&](?:token|access_token|auth|key|p)=)/iu.test(String(text));
@@ -41,8 +42,10 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
     }
     const ranked = new Map();
     for (const [question, counts] of frequencies) {
-      const answers = mergeAnswerFrequencies([...counts].map(([answer, count]) => ({ answer, count })), { finalPeriod });
-      raw.set(question, answers.map(({ answer }) => answer).join(ANSWER_SEPARATOR));
+      const answers = mergeAnswerFrequencies([...counts].filter(([answer]) => fitsAvailabilityQuestion(question, answer))
+        .map(([answer, count]) => ({ answer, count })), { finalPeriod, question });
+      if (answers.length) raw.set(question, answers.map(({ answer }) => answer).join(ANSWER_SEPARATOR));
+      else raw.delete(question);
       ranked.set(question, answers);
     }
     return { answers: raw, frequencies: ranked };

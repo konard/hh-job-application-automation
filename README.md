@@ -650,6 +650,12 @@ chosen independently: Russian messages can request USD gross, and a new explicit
 overrides an earlier one. Unrelated questions stop that inheritance. A missing amount in the
 requested currency is left for review, never replaced by an amount in rubles. Inferred follow-ups
 are prefilled for review under the same rules as other salary patterns.
+
+Explicitly approved availability-answer replacements live in `data/answer-preferences.lino`:
+the preferred answer is followed by its indented equivalent wordings. They apply to start-date
+questions on save/load and when reading chat history, combining the equivalents' usage counts.
+Original chat messages remain unchanged. Unrelated historical replies, such as a performance
+metric accidentally sent to a start-date question, are excluded from its suggestions.
 Answer alternatives differing only by a single final period are combined into the version with
 the period by default. Use `--answer-final-period without` or `ANSWER_FINAL_PERIOD: without` in
 `.lenv` to prefer the version without it. This preference applies on save, load and frequency

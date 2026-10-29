@@ -5,6 +5,7 @@
 import { ANSWER_SEPARATOR, normalizeAnswerVariants } from './answer-variants.mjs';
 import { selectSalaryOption } from './salary-options.mjs';
 import { salaryQuestion } from './salary-questions.mjs';
+import { fitsAvailabilityQuestion } from './answer-preferences.mjs';
 export { ANSWER_SEPARATOR } from './answer-variants.mjs';
 
 /**
@@ -353,7 +354,8 @@ const YES_NO = /^(?:да|нет|yes|no)[.!]?$/i;
  * @returns {boolean}
  */
 export function answerFits(question, answer) {
-  return !(OPEN_QUESTION.test(String(question).trim()) && YES_NO.test(answerText(answer).trim()));
+  return !(OPEN_QUESTION.test(String(question).trim()) && YES_NO.test(answerText(answer).trim())) &&
+    fitsAvailabilityQuestion(question, answerText(answer));
 }
 
 export async function fillTextareaQuestion({ commander, questionData }) {

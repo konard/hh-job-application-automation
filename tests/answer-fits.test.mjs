@@ -16,4 +16,8 @@ describe('answerFits', () => {
     assert.equal(answerFits('Где вы находитесь?', 'В Нячанге, во Вьетнаме.'), true);
     assert.equal(answerFits('Как вы относитесь к переработкам?', 'Нормально'), true);
   });
+  test('availability requires an answer about timing rather than performance metrics', () => {
+    assert.equal(answerFits('Когда вы готовы выйти на работу?', 'Метрики производительности обычно - скорость отклика.'), false);
+    assert.equal(answerFits('Когда вы готовы выйти на работу?', 'В течении недели-двух с момента получения офера.'), true);
+  });
 });

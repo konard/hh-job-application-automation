@@ -61,7 +61,7 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
 
   const QA_FILE_PATH = filePath;
   // The parser also serves configuration files; only answer databases opt into resolution.
-  const normalize = (answer) => resolveVariants ? normalizeAnswerVariants(answer, { finalPeriod }) : answer;
+  const normalize = (answer, question) => resolveVariants ? normalizeAnswerVariants(answer, { finalPeriod, question }) : answer;
 
   const exclusive = createMutex();
 
@@ -153,7 +153,7 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
   // A bad style setting must propagate to the writer, never masquerade as an empty database.
   async function readQADatabase() {
     const raw = await readRawQADatabase();
-    return new Map([...(decomposeQuestions ? expandQuestionAnswers(raw) : raw)].map(([question, answer]) => [question, normalize(answer)]));
+    return new Map([...(decomposeQuestions ? expandQuestionAnswers(raw) : raw)].map(([question, answer]) => [question, normalize(answer, question)]));
   }
 
   /**
@@ -240,7 +240,7 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
       // Format as indented Q&A pairs with proper multiline handling
       const lines = [];
       for (const [question, saved] of (decomposeQuestions ? expandQuestionAnswers(qaMap) : qaMap).entries()) {
-        const answer = normalize(saved);
+        const answer = normalize(saved, question);
         // Question handling: escapeReference handles all cases including multiline
         const escapedQuestion = escapeReference(question);
         lines.push(escapedQuestion);
@@ -308,7 +308,7 @@ export function createQADatabase(filePath, { resolveVariants = false, finalPerio
     // One write at a time in this process, and across processes (the run, form watchers, chats)
     return exclusive(() => withFileLock(QA_FILE_PATH, async () => {
       const qaMap = await readQADatabase();
-      qaMap.set(question, resolveVariants ? resolveAnswerConflict(qaMap.get(question), answer, { finalPeriod }) : answer);
+      qaMap.set(question, resolveVariants ? resolveAnswerConflict(qaMap.get(question), answer, { finalPeriod, question }) : answer);
       await writeQADatabase(qaMap);
     }));
   }

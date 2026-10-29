@@ -1,6 +1,7 @@
 /** Equivalent saved replies share a candidate; the original chat messages stay unchanged. */
 import fs from 'node:fs';
 import path from 'node:path';
+import { preferredAnswer } from './answer-preferences.mjs';
 
 export const ANSWER_SEPARATOR = ' | ';
 const localStyles = new Map();
@@ -20,8 +21,9 @@ export function getAnswerFinalPeriod({ env = process.env, file = '.lenv' } = {})
 }
 
 /** Merge identical replies and optional final periods, then rank by combined usage. */
-export function mergeAnswerFrequencies(entries, { finalPeriod = getAnswerFinalPeriod() } = {}) {
+export function mergeAnswerFrequencies(entries, { finalPeriod = getAnswerFinalPeriod(), question, preferredAnswers } = {}) {
   if (!['with', 'without'].includes(finalPeriod)) throw new Error('answer final period must be "with" or "without"');
+  entries = entries.map((entry) => ({ ...entry, answer: preferredAnswer(question, entry.answer, preferredAnswers) }));
   const texts = new Set(entries.map(({ answer }) => answer.trim()));
   const conflicting = new Set([...texts].filter((text) => /[^.!?…]\.$/u.test(text) && texts.has(text.slice(0, -1)))
     .map((text) => text.slice(0, -1)));
@@ -37,7 +39,8 @@ export function mergeAnswerFrequencies(entries, { finalPeriod = getAnswerFinalPe
 
 /** Only alternatives are normalized: an individual answer and checkbox arrays keep their text. */
 export function normalizeAnswerVariants(answer, options) {
-  if (typeof answer !== 'string' || !answer.includes(ANSWER_SEPARATOR)) return answer;
+  if (typeof answer !== 'string') return answer;
+  if (!answer.includes(ANSWER_SEPARATOR)) return preferredAnswer(options?.question, answer, options?.preferredAnswers);
   return mergeAnswerFrequencies(answer.split(ANSWER_SEPARATOR).map((text) => ({ answer: text, count: 0 })), options)
     .map(({ answer: text }) => text).join(ANSWER_SEPARATOR);
 }
