@@ -25,9 +25,12 @@ export function salaryRange(option) {
     return { min: values[0], max: values[1], currency: code };
   }
   if (values.length !== 1) return null;
-  if (/up\s+to|under|less\s+than|до(?!\p{L})|менее/iu.test(option)) return { min: 0, max: values[0], currency: code };
+  if (/up\s+to|under|less\s+than|до(?!\p{L})|менее/iu.test(option)) return { min: 0, max: values[0], currency: code,
+    maxExclusive: /under|less\s+than|менее/iu.test(option) };
   if (/or\s+(?:more|above)|and\s+(?:more|above)|at\s+least|from|over|more\s+than|от(?!\p{L})|более|выше|свыше/iu.test(option)) {
-    return { min: values[0], max: Infinity, currency: code };
+    return { min: values[0], max: Infinity, currency: code,
+      minExclusive: /(?<!\p{L})(?:over|more\s+than|более|выше|свыше)(?!\p{L})/iu.test(option) &&
+        !/(?:or|and)\s+(?:more|above)|(?:и|или)\s+(?:более|выше)/iu.test(option) };
   }
   return null;
 }
@@ -57,8 +60,10 @@ export function selectSalaryOption({ question, options, contacts = {}, answer = 
       ? amounts[0] : null;
   });
   if (values.some((value) => value === null)) return null;
+  const contains = (range, value) => (range.minExclusive ? value > range.min : value >= range.min) &&
+    (range.maxExclusive ? value < range.max : value <= range.max);
   const picks = values.map((value) => {
-    const inside = ranges.filter(({ range }) => value >= range.min && value <= range.max);
+    const inside = ranges.filter(({ range }) => contains(range, value));
     if (inside.length) return inside.length === 1 ? { ...inside[0], distance: 0 } : null;
     if (!closest) return null;
     const sorted = ranges.map((row) => ({ ...row, distance: value < row.range.min ? row.range.min - value : value - row.range.max }))
@@ -66,5 +71,5 @@ export function selectSalaryOption({ question, options, contacts = {}, answer = 
     return sorted.length > 1 && sorted[0].distance === sorted[1].distance ? null : sorted[0];
   });
   if (picks.some((pick) => !pick) || new Set(picks.map((pick) => pick.option)).size !== 1) return null;
-  return { option: picks[0].option, contained: picks.every((pick) => pick.distance === 0), values, currency: code, shapes };
+  return { option: picks[0].option, contained: picks.every((pick, i) => contains(pick.range, values[i])), values, currency: code, shapes };
 }

@@ -25,17 +25,17 @@ describe('Gross from net', () => {
     assert.deepEqual(salaryValues({ netRub: 450000, netUsd: 6000, usdRate: 84.9048 }), {
       salary_net: '450 000 ₽',
       salary_gross: '530 000 ₽',
-      salary_net_hourly: '2 812,50 ₽',
-      salary_gross_hourly: '3 312,50 ₽',
+      salary_net_hourly: '3 000 ₽',
+      salary_gross_hourly: '3 500 ₽',
       salary_ndfl: '13% / 15% / 18%',
       salary_net_usd: '$6 000',
       salary_gross_usd: '$7 100',
-      salary_net_hourly_usd: '$37.50',
-      salary_gross_hourly_usd: '$44.38',
+      salary_net_hourly_usd: '$40',
+      salary_gross_hourly_usd: '$45',
       salary_net_usdt: '6 000 USDT',
       salary_gross_usdt: '7 100 USDT',
-      salary_net_hourly_usdt: '37.50 USDT',
-      salary_gross_hourly_usdt: '44.38 USDT',
+      salary_net_hourly_usdt: '40 USDT',
+      salary_gross_hourly_usdt: '45 USDT',
       salary_tax: 'НДФЛ',
     });
   });

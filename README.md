@@ -553,7 +553,8 @@ bun run prefill-form -- https://forms.gle/... https://practicum.yandex.ru/job/va
   Hourly expectations («почасовая ставка», «руб/час», “hourly rate”) are calculated from the
   monthly targets in the requested currency and tax basis. `salary_hours_per_month` in
   `data/contacts.lino` sets the calculation basis (default 160). For example, ₽450,000 net/month
-  gives ₽2,812.50 net/hour. Rates round upward to cents; USD, USDT and EUR use their own targets.
+  gives ₽3,000 net/hour. Hourly minimums round upward to steps of ₽500 or $5/€5/5 USDT;
+  each currency uses its own target, and an exact step stays unchanged.
   Hourly placeholders (`{{salary_net_hourly}}`, `{{salary_gross_hourly}}` and their currency
   suffixes) are kept separate from monthly amounts in forms, chat, choices and saved answers.
   When the currency is told (by the question, the vacancy's pay or its description), such an
