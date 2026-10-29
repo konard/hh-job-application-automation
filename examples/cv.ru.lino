@@ -48,7 +48,7 @@ resume
     'Методологии:'
     'Agile, Extreme programming, Kanban, Scrum'
     'Технологии:'
-    '.NET, .NET Core, .NET Framework, AJAX, Angular, Apache Cordova, ASP.NET MVC, ASP.NET WebForms, Aspose, Bootstrap, Capacitor, CSS, DevExpress, Electron, Express, Firebase, Hasura, Hasura Storage, HTML, jQuery, Minio, MVC, Next.js, Node.js (NodeJS), OCR, RabbitMQ, React, Redux, RSS, S3-compatible storage, Silverlight, SQL SR, Stimulsoft, Symfony 7, Telerik, Vue.js (VueJS), WCF, WinForms, WPF'
+    '.NET, .NET Core, .NET Framework, AJAX, Angular, Apache Cordova, ASP.NET MVC, ASP.NET WebForms, Aspose, Bootstrap, Capacitor, CSS, DevExpress, Electron, Express, Firebase, Hasura, Hasura Storage, HTML, jQuery, Minio, MVC, Next.js, Node.js (NodeJS), OCR, RabbitMQ, React (ReactJS), Redux, RSS, S3-compatible storage, Silverlight, SQL SR, Stimulsoft, Symfony 7, Telerik, Vue.js (VueJS), WCF, WinForms, WPF'
     'Базы данных:'
     'ClickHouse, InfluxDB, Links Platform (Doublets, Triplets), MariaDB, Microsoft SQL Server, MongoDB, MS SQL CE, MySQL, PostgreSQL (Postgres), Redis, SQLite, VistaDB'
     'Личные:'
