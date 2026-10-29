@@ -19,6 +19,7 @@ import { createConfig, getUserDataDir } from './config.mjs';
 import { createOrchestrator } from './orchestrator.mjs';
 import { markVacancyAsProcessed } from './vacancies.mjs';
 import { connectOrLaunchBrowser } from './browser-session.mjs';
+import { recordBrowserLifecycle } from './browser-lifecycle.mjs';
 import { startTracing, stopTracing } from './tracing.mjs';
 import { enableConfirmations, withConfirmations } from './confirmations.mjs';
 import { withCaptchaGuard } from './captcha.mjs';
@@ -56,6 +57,7 @@ async function shutdown(reason, exitCode = 0) {
     return;
   }
   shuttingDown = true;
+  recordBrowserLifecycle('worker_shutdown', { reason, exitCode });
   console.log(`\n${reason}, shutting down...`);
   try {
     await chatRecording?.flush();

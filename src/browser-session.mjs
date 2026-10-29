@@ -45,6 +45,7 @@ import {
 } from 'browser-commander';
 import { withFileLock } from './helpers/mutex.mjs';
 import { log } from './logging.mjs';
+import { recordBrowserLifecycle, watchBrowserLifecycle } from './browser-lifecycle.mjs';
 
 /**
  * Launch switches and profile preferences: no "Continue where you left off" infobar or
@@ -95,11 +96,12 @@ export async function isBrowserRunning(port) {
  * Close the browser listening on the debugging port (CDP Browser.close)
  * @param {number} port
  */
-export async function closeBrowser(port) {
+export async function closeBrowser(port, { reason = 'unspecified' } = {}) {
   const version = await fetch(`${endpoint(port)}/json/version`).then((response) => response.json()).catch(() => null);
   if (!version?.webSocketDebuggerUrl) {
     return;
   }
+  recordBrowserLifecycle('browser_close_requested', { port: Number(port), reason });
   await new Promise((resolve) => {
     const socket = new WebSocket(version.webSocketDebuggerUrl);
     socket.onopen = () => socket.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
@@ -259,7 +261,7 @@ async function moveCookies({ port, userDataDir, cookies }) {
 async function startBrowser({ userDataDir, port }) {
   const moving = isGoogleChromeProfile(userDataDir);
   if (moving && await isBrowserRunning(port)) {
-    await closeBrowser(port);
+    await closeBrowser(port, { reason: 'profile_migration' });
     for (const deadline = Date.now() + STARTUP_TIMEOUT_MS; Date.now() < deadline && await isBrowserRunning(port);) {
       await sleep(250);
     }
@@ -281,7 +283,9 @@ async function startBrowser({ userDataDir, port }) {
   // as the default of every persistent profile (browser-commander #187)
   const args = [`--user-data-dir=${userDataDir}`, `--remote-debugging-port=${port}`, '--no-first-run', '--use-mock-keychain',
     '--test-type=gpu', '--restore-last-session', ...LAUNCH_SETTINGS.args];
-  spawn(executable, args, { detached: true, stdio: 'ignore' }).unref();
+  const child = spawn(executable, args, { detached: true, stdio: 'ignore' });
+  child.unref();
+  recordBrowserLifecycle('browser_started', { port, browserPid: child.pid });
   console.log(`🚀 Started Chrome for Testing on port ${port} (profile: ${userDataDir})`);
   if (!(await waitForBrowser(port))) {
     throw new Error(`Chrome for Testing did not start on port ${port}`);
@@ -351,6 +355,7 @@ export async function keepSingleTab({ port, userDataDir }) {
   }
   const kept = chooseTab(tabs, rememberedId);
   for (const tab of tabs.filter((item) => item !== kept)) {
+    recordBrowserLifecycle('target_close_requested', { port, targetId: tab.id, url: tab.url, reason: 'keep_single_tab' });
     await fetch(`${endpoint(port)}/json/close/${tab.id}`);
     console.log(`🗂️  Closed an extra tab, the automation uses one: ${tab.url}`);
   }
@@ -365,12 +370,13 @@ export async function keepSingleTab({ port, userDataDir }) {
  * @param {Object} session - { browser, page } of connectBrowser
  * @param {string} engine
  */
-function closeNewTabs({ browser, page }, engine) {
+function closeNewTabs({ browser, page }, engine, port) {
   const close = async (newPage) => {
     if (!newPage || newPage === page) {
       return;
     }
     const url = newPage.url();
+    recordBrowserLifecycle('target_close_requested', { port, url, reason: 'new_tab_policy' });
     await newPage.close().catch(() => {});
     console.log(`🗂️  Closed a new tab, the automation uses one: ${url}`);
   };
@@ -435,18 +441,20 @@ export async function connectOrLaunchBrowser({
     try {
       const kept = singleTab ? await keepSingleTab({ port, userDataDir }) : null;
       const session = await connectBrowser(attachOptions({ engine, port, kept, singleTab }));
+      const stopLifecycle = await watchBrowserLifecycle({ ...session, port, targetId: kept?.id, engine });
       if (singleTab) {
-        closeNewTabs(session, engine);
+        closeNewTabs(session, engine, port);
       }
       return {
         ...session,
         reused,
         release: async () => {
+          recordBrowserLifecycle('session_released', { port, keepOpen });
           clearInterval(usageTimer);
           markBrowserUsed(userDataDir);
-          if (!keepOpen) {
-            await closeBrowser(port);
-          }
+          try {
+            if (!keepOpen) await closeBrowser(port, { reason: 'session_release' });
+          } finally { await stopLifecycle(); }
         },
       };
     } catch (error) {

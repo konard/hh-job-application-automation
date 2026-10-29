@@ -10,6 +10,7 @@
 
 import fs from 'fs';
 import { browserIdleMs, closeBrowser, isBrowserRunning, watchdogPidFile } from './browser-session.mjs';
+import { recordBrowserLifecycle } from './browser-lifecycle.mjs';
 
 const [port, userDataDir, idleTimeoutMs] = process.argv.slice(2);
 const CHECK_INTERVAL_MS = 60000;
@@ -24,7 +25,8 @@ while (await isBrowserRunning(port)) {
     // No usage mark yet
   }
   if (idleMs > Number(idleTimeoutMs)) {
-    await closeBrowser(port);
+    recordBrowserLifecycle('idle_timeout', { port: Number(port), idleMs, idleTimeoutMs: Number(idleTimeoutMs) });
+    await closeBrowser(port, { reason: 'idle_timeout' });
     break;
   }
   await new Promise((resolve) => setTimeout(resolve, CHECK_INTERVAL_MS));

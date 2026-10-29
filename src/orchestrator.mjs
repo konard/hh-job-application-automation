@@ -46,7 +46,7 @@ const PAGE_READY_TIMEOUT = 120000;
  * @param {Object} [options.deferredQuestions] - Questions answered later (deferred-questions.mjs)
  * @param {Object} [options.vacancyFilters] - Vacancies filtered out automatically (vacancy-filters.mjs)
  * @param {Object} [options.skippedVacancies] - Every other skip, kept (skipped-vacancies.mjs)
- * @param {Function} options.onPageClosed - Called when the user closes the tab
+ * @param {Function} options.onPageClosed - Called when the monitored page closes, regardless of cause
  * @param {Function} [options.answerInstantChat] - Answers the chat hh.ru opens after an application (instant-chat.mjs)
  * @returns {Object} Orchestrator with start method
  */
@@ -101,9 +101,15 @@ export function createOrchestrator({
   const sentVacancyIds = new Set();
   // The next application waits until then, so the load on hh.ru stays low; after hh.ru's daily
   // limit (of this run or one before) until the cooldown is over
-  let nextApplicationAt = limitHeldUntil(readEvents());
-  if (nextApplicationAt > 0) {
-    console.log(`💤 hh.ru's daily limit was reached: no vacancy is opened until ${new Date(nextApplicationAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+  const dailyLimitUntil = limitHeldUntil(readEvents());
+  // A controlled diagnostic reload must not shorten a pause already scheduled by the worker.
+  const handedOffAt = Number(process.env.HH_NEXT_APPLICATION_AT_HANDOFF);
+  delete process.env.HH_NEXT_APPLICATION_AT_HANDOFF;
+  let nextApplicationAt = Math.max(dailyLimitUntil, Number.isFinite(handedOffAt) ? handedOffAt : 0);
+  if (dailyLimitUntil > 0) {
+    console.log(`💤 hh.ru's daily limit was reached: no vacancy is opened until ${new Date(dailyLimitUntil).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+  } else if (nextApplicationAt > Date.now()) {
+    console.log(`♻️  Preserved the application pause during code reload until ${new Date(nextApplicationAt).toISOString()}`);
   }
   // When work on the vacancy began (the first vacancy looked at once the pause was over): the
   // pause counts from then, so a long form does not add a whole pause on top

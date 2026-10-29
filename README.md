@@ -144,6 +144,10 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
 - **Browser lifecycle** - Chrome is closed when the script exits. With `--keep-browser-open` it keeps
   running, the next run reuses it and its open page, and it closes itself after
   `--browser-idle-timeout` minutes (default 30) without use.
+  Private `logs/browser-lifecycle.jsonl` records app-requested closes (with their reasons),
+  page/target crashes, target loss, connection loss, and worker shutdowns separately. A page-close
+  event alone does not establish a manual close. URL credentials, query strings and fragments
+  are omitted from these diagnostics.
 - **Debug traces** - every run records, in `logs/traces/<time>/`, a browser-commander trace (DOM
   snapshots, DOM mutations, interactions, console messages, page errors, failed requests) with its
   Links Notation export `trace.lino`, plus two Links Notation logs written alongside it:
