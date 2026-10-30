@@ -26,7 +26,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, chatsShown, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isConversationFinished, isPattern, isSupportChat, isApplication, isRejection, isRejectionCell, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, chatsShown, compareReusedAnswers, describeReuse, formLinks, isAcknowledgement, isChatAnswered, isConversationFinished, isPattern, isSupportChat, isApplication, isRejection, isRejectionCell, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, templateCore, withLearnedPatterns,
   userIsActive,
 } from './chat-answers.mjs';
 import { readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
@@ -43,8 +43,10 @@ import { readFullChat, setUnreadFilter, waitForChat, watchChats } from './chat-r
 import { createChatPrefillQueue } from './chat-prefill-queue.mjs';
 import { createBackgroundRejectionSweep } from './background-rejections.mjs';
 import { createRejectionResponder, DEFAULT_REJECTION_REPLY } from './rejection-replies.mjs';
+import { createAcknowledgementResponder } from './acknowledgement-replies.mjs';
 import { templateReplyFromPreview } from './chat-answers.mjs';
 import { browserWindowActive } from './notify.mjs';
+import { pageShowsCaptcha, CAPTCHA_SELECTORS, CAPTCHA_TEXTS } from './captcha.mjs';
 import { getAnswerFinalPeriod } from './answer-variants.mjs';
 
 const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
@@ -348,6 +350,7 @@ let backgroundRejections;
 let stuckChat = null;
 const prefilledMessages = new Set();
 const handledChoices = new Set();
+const answerOpenAcknowledgement = createAcknowledgementResponder({ enabled: argv.autoSend });
 const livePrefill = createChatPrefillQueue({
   busy: async (frame) => passRunning || backgroundRejections?.running || (!frame.isDetached() &&
     await frame.evaluate(() => Boolean(window.__chatAutomating)).catch(() => false)),
@@ -693,6 +696,30 @@ async function clearRejections({
   return stopped ? null : rejections;
 }
 
+/** Current and unread-list acknowledgement paths share the same per-message reservation. */
+async function answerCurrentAcknowledgement({ canContinue, chatId = null }) {
+  const outcome = await answerOpenAcknowledgement({
+    readChat: async () => {
+      const current = await readChatIn(page);
+      return !chatId || current.id === chatId ? current : null;
+    },
+    readTemplates: templatesDb.readQADatabase,
+    readDraft: () => page.locator(MESSAGE_INPUT).first().inputValue({ timeout: 1000 }).catch(() => '[unavailable]'),
+    maySend: async () => {
+      if (!await canContinue() || await browserWindowActive(page, { port: CHAT_SLOT_PORT }) !== false) return false;
+      return !await page.evaluate(pageShowsCaptcha, { selectors: CAPTCHA_SELECTORS, texts: CAPTCHA_TEXTS });
+    },
+    send: (messageId, reply) => sendChatAnswer(page.mainFrame(), messageId, reply),
+  });
+  if (outcome.status === 'sent') {
+    console.log(`✅ Chat ${outcome.chatId}: pending acknowledgement answered: ${outcome.answer}`);
+    recordEvent('template_answered', { chatId: outcome.chatId, messageId: outcome.messageId });
+  } else if (outcome.status === 'unconfirmed') {
+    console.log(`⚠️  Chat ${outcome.chatId}: acknowledgement reply was not confirmed; left for review without an automatic retry`);
+  }
+  return outcome;
+}
+
 /**
  * The open chat's template message answered with its reply (one of those the user gave to it), or
  * only read when it needs none. A chat with more waiting than the template is left for the user
@@ -719,6 +746,10 @@ async function answerTemplate(chat, { canContinue = async () => true } = {}) {
   }
   if (!reply?.perfect || !reply.source.startsWith('chat-templates') || pending.length > 1 || !read.canReply || !argv.autoSend) {
     console.log(`👉 Chat ${chat.id} (${chat.title}): more than a template waits in it, left for you`);
+    return;
+  }
+  if (isAcknowledgement(templateCore(last.text, { sender: last.title }))) {
+    await answerCurrentAcknowledgement({ canContinue, chatId: chat.id });
     return;
   }
   const maySend = async () => {
@@ -821,6 +852,10 @@ function makeBackgroundRejections() {
     isActive: () => browserWindowActive(page, { port: CHAT_SLOT_PORT }),
     blocked: () => passRunning || !/^https:\/\/hh\.ru\/(?:chat(?:\/|$|\?)|applicant\/profile\/me(?:$|\?))/.test(page.url()),
     scan: async ({ canContinue, onNavigate, includeTemplates = false }) => {
+      if (!await canContinue()) return null;
+      // Opening a chat clears its unread badge. Its pending acknowledgement still needs the
+      // saved thanks, even though the conversation is otherwise finished for navigation.
+      if (includeTemplates) await answerCurrentAcknowledgement({ canContinue });
       if (!await canContinue()) return null;
       if (!/^https:\/\/hh\.ru\/chat(?:\/|$|\?)/.test(page.url())) {
         onNavigate('https://hh.ru/chat');

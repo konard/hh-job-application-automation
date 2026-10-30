@@ -133,6 +133,12 @@ a promised return/feedback are recognized from the full chat-list preview and au
 the saved thanks in an inactive window. Changed questions, requests, invitations or rejections do
 not become acknowledgements. Existing drafts and user activity block automatic sends. See
 `tests/chat-answers.test.mjs` and `tests/browser/rejection-replies.mjs` (shared guarded sender).
+Opening a chat must not lose its pending acknowledgement when hh.ru removes the unread badge.
+The inactive-window pass checks the currently open conversation before scanning the unread list,
+using the existing saved thanks even without an exact example of that wording. A prior manual
+reply, a new question, multiple pending messages, a draft or user activity prevents a send;
+private per-message reservations prevent duplicate retries after uncertain sends and restarts.
+See `tests/acknowledgement-replies.test.mjs` and `tests/browser/acknowledgement-replies.mjs`.
 
 - Nothing is sent or submitted without the user, except A2 (exact answers), C4 (recognized acknowledgements) and C9 (the explicitly authorized rejection reason request).
 - No visible markers on pages; marks are data attributes only.
