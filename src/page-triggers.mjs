@@ -88,11 +88,11 @@ export function registerPageTriggers({
       return; // Already handled
     }
     lastVacancyResponseId = null;
-    // False: the form handler already counted it and returns to the list itself
-    if (await onApplicationSubmitted(vacancyId) === false) {
-      return;
-    }
-    console.log(`✅ Application sent for vacancy ${vacancyId}`);
+    const counted = await onApplicationSubmitted(vacancyId);
+    if (counted !== false) console.log(`✅ Application sent for vacancy ${vacancyId}`);
+    // Already counted does not mean already left. Only skip navigation when the page itself
+    // changed; never pull the user away from a newly opened form or chat.
+    if (!URL_PATTERNS.vacancyPage.test(commander.getUrl()) || extractVacancyId(commander.getUrl()) !== vacancyId) return;
     const returnUrl = getReturnUrl();
     console.log(`Returning to: ${returnUrl}`);
     // Not awaited: the navigation stops the running page action
