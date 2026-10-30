@@ -4,11 +4,16 @@ import { pickResume, loadApplicationResumes } from './resumes.mjs';
 
 const TITLE = '[data-qa="resume-title"][data-hh-application-resume="true"]';
 const OPTION_LIST = '[data-qa="magritte-select-option-list"]';
+const PAY_WORDS = /salary|compensation|remuneration|\bpay\b|\brate\b|зарплат|заработ|компенсаци|вознагражд|доход|оклад|ставк|оплат|сумм/iu;
+const BARE_DOLLAR = /(?<![\p{L}\p{N}_])\$(?![\p{L}\p{N}_({])/u;
 
 /** Only employer questions and vacancy text belong here, never the applicant's CV salary. */
 export function applicationResumeLanguage({ questions = [], context = [], vacancy = null } = {}) {
   const text = [...questions, vacancy?.salary ?? '', vacancy?.description ?? '', ...context].join('\n');
   if (/\bUSD[TC]?\b|\bdollars?\b|доллар|\$\s*\d|\d[\d\s.,]*\s*\$/iu.test(text)) return 'en';
+  // Salary questions often name only the unit: «компенсации в $ или рублях».
+  // A shell variable or command substitution is not a dollar-denominated salary.
+  if (PAY_WORDS.test(text) && BARE_DOLLAR.test(text)) return 'en';
   if (isClearlyEnglish(questions)) return 'en';
   if (/[а-яё]/iu.test(questions.join(' '))) return 'ru';
   // The actual description is stronger evidence than a localized form or a short job title.
@@ -50,7 +55,7 @@ export function createApplicationResumeSelector({ readResumes = loadApplicationR
     if (!language) return { ready: true, language: null };
     const read = () => commander.evaluate({ fn: readApplicationResumeChoices, args: [{ vacancyId }] });
     const initial = await read();
-    if (initial.selection?.ready) return initial.selection;
+    if (initial.selection?.ready && initial.selection.language === language) return initial.selection;
     const key = `${initial.documentId}:${initial.applicationId}`;
     if (pending.has(key)) return pending.get(key);
     const run = async () => {
@@ -74,13 +79,18 @@ export function createApplicationResumeSelector({ readResumes = loadApplicationR
       };
       let choices = initial;
       const current = selectedResume(choices);
+      // New currency evidence (or a corrected detector after restart) can invalidate an old
+      // automatic decision. A CV the user changed since that decision still belongs to them.
+      if (initial.selection?.ready && current && current.hash !== initial.selection.hash) {
+        return { ready: true, language: current.language, hash: current.hash };
+      }
       if (current?.language === language) {
         if (choices.options.length) await click(TITLE);
         log(`📄 Application CV already correct: ${language.toUpperCase()} · ${current.title} (${current.hash})`);
         return save({ ready: true, language, hash: current.hash });
       }
       // A manual correction can recover a failed check without reopening the chooser.
-      if (initial.selection) return initial.selection;
+      if (initial.selection?.language === language) return initial.selection;
       if (!choices.title) {
         log(`📄 Cannot verify the ${language.toUpperCase()} CV: the application has no résumé chooser. Please select it manually; nothing was sent.`);
         return { ready: false, language };

@@ -28,7 +28,7 @@ import { resumeVisibility } from './resume-visibility.mjs';
 import { askUnlessDeferred, DEFER_CHOICE, formatQuestions } from './deferred-questions.mjs';
 import { log } from './logging.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
-import { coverLetterFor } from './cover-letter.mjs';
+import { coverLetterFor, fillCoverLetter } from './cover-letter.mjs';
 import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './confirmations.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
@@ -42,7 +42,6 @@ import {
   findCoverLetterToggle,
   isButtonEnabled,
   isResponseSubmitted,
-  typeLongText,
 } from './helpers/page-helpers.mjs';
 
 const COVER_LETTER_SELECTORS = [SELECTORS.coverLetterTextareaPopup, SELECTORS.coverLetterTextareaForm];
@@ -541,10 +540,11 @@ export async function handleVacancyResponsePage({
     // The questions are handled even when there is no cover letter field
     const textareaSelector = await prepareCoverLetterTextarea({ commander });
 
-    // The English letter when the vacancy's questions are in English
+    // The letter follows the verified CV language; questionnaire answers keep their own wording.
     const letter = coverLetterFor(MESSAGE, form.questions, selectedResume?.language ?? null);
     if (letter && textareaSelector) {
-      const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter, scrollIntoView: true });
+      const { filled } = await fillCoverLetter({ commander, selector: textareaSelector, message: MESSAGE,
+        questions: form.questions, language: selectedResume?.language ?? null });
       console.log(filled
         ? `Prefilled cover letter message into: ${textareaSelector}`
         : 'Cover letter already contains text, skipping prefill');

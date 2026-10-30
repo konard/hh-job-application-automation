@@ -89,7 +89,12 @@ selected CV against local exports before sending. An already correct CV needs no
 otherwise the app scrolls the chooser into view, selects it once at the start and verifies the
 resulting title or checked option without reopening the menu. Repeated form checks and worker restarts keep that choice and any
 manual CV changes. A restart also preserves answers on an unfinished full application form.
-The cover letter follows that language. This prevents a one-click application
+The cover letter follows that language. A salary question naming only `$` (for example,
+compensation in `$` or rubles) also selects English; shell variables and command substitutions
+do not count as dollar pay. Questionnaire answers still follow their own questions: a Russian
+questionnaire can have Russian answers alongside an English CV and cover letter. When a corrected
+language decision replaces an earlier automatic choice, the app corrects an unchanged standard
+letter too, preserving custom letter edits and all entered questionnaire answers. This prevents a one-click application
 from sending HH.ru's default CV before the language check. Export both versions with
 `bun run cv -- export` first. `--no-auto-select-resume-language` disables this behavior.
 

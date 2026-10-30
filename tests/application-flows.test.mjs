@@ -386,6 +386,25 @@ function fakeForm({ questions = [], confirms = true, direct = false, withoutTest
 const sends = (form) => form.state.clicks.filter(({ selector }) => selector === SELECTORS.submitButtonLetter);
 
 describe('full response form', () => {
+  test('Russian questions naming dollars use an English CV and letter while answers stay Russian', async () => {
+    disableConfirmations();
+    const question = 'Ожидаемый уровень компенсации в $ или русских рублях, на руки';
+    const form = fakeForm({ questions: [question, 'Сколько лет у вас опыта?', 'Какой ваш опыт с новым продуктом?'] });
+    const answers = new Map([[question, 'От $6 000 в месяц на руки.'], ['Сколько лет у вас опыта?', 'Более 12 лет.']]);
+    let selected;
+    const result = await handleVacancyResponsePage({ commander: form, MESSAGE: { ru: 'Здравствуйте', en: 'Hello, my English letter.' },
+      readQADatabase: async () => new Map(answers), addOrUpdateQA: async () => {},
+      selectApplicationResume: async (options) => { selected = { ready: true, language: applicationResumeLanguage(options) }; return selected; },
+      returnUrl: SEARCH_URL });
+    assert.equal(result.status, 'awaiting_user');
+    assert.equal(selected.language, 'en');
+    assert.equal(form.state.letter, 'Hello, my English letter.');
+    assert.equal(form.state.questions[0].value, answers.get(question));
+    assert.equal(form.state.questions[1].value, 'Более 12 лет.');
+    assert.equal(form.state.questions[2].value, '');
+    assert.equal(sends(form).length, 0);
+  });
+
   test('a restarted form restores vacancy context for currency, CV and letter without the filters RAM maps', async () => {
     disableConfirmations();
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'restarted-form-context-'));

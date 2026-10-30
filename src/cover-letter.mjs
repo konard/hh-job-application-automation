@@ -1,9 +1,10 @@
 /**
- * The cover letter in the language of the vacancy: the English one (data/cover-letter.en.txt,
- * next to the chosen letter) when the vacancy's questions are clearly in English
+ * The cover letter follows the verified application CV language, including dollar pay.
+ * Without a verified language, clearly English employer questions choose the English template.
  *
  * @module cover-letter
  */
+import { typeLongText } from './helpers/page-helpers.mjs';
 
 /**
  * Whether texts are clearly in English: enough letters, nearly all of them Latin
@@ -28,6 +29,30 @@ export function coverLetterFor(message, questions = [], language = null) {
     return message ?? '';
   }
   return message.en && (language === 'en' || (language === null && isClearlyEnglish(questions))) ? message.en : message.ru;
+}
+
+/** Correct an unchanged language template, preserving custom letters and questionnaire answers. */
+export async function fillCoverLetter({ commander, selector, message, questions = [], language = null }) {
+  const text = coverLetterFor(message, questions, language);
+  if (!text) return { filled: false };
+  if (message && typeof message === 'object') {
+    const replaced = await commander.evaluate({
+      fn: (selector, desired, templates) => {
+        const textarea = document.querySelector(selector);
+        if (!textarea) return false;
+        const normalize = (value) => String(value).replace(/\r\n/g, '\n').trim();
+        const current = normalize(textarea.value);
+        if (!current || current === normalize(desired) || !templates.some((template) => normalize(template) === current)) return false;
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set.call(textarea, '');
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      },
+      args: [selector, text, Object.values(message).filter((value) => typeof value === 'string')],
+    });
+    if (replaced) console.log(`✉️  Correcting the unchanged cover-letter template to ${language?.toUpperCase() ?? 'the application language'}`);
+  }
+  return typeLongText(commander, { selector, text, scrollIntoView: true });
 }
 
 /**

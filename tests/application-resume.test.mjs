@@ -11,6 +11,19 @@ describe('per-application CV language', () => {
       assert.equal(applicationResumeLanguage({ context: [text], questions: ['Сколько лет вы работаете с Docker?'] }), 'en');
     }
   });
+  test('a salary question can name dollars without a numeric amount', () => {
+    for (const question of ['Ожидаемый уровень компенсации в $ или русских рублях, на руки',
+      'Какую зарплату в $ вы рассматриваете?', 'Your expected compensation ($)?', 'Hourly rate in $/hour?']) {
+      assert.equal(applicationResumeLanguage({ questions: ['Сколько лет у вас опыта?', question],
+        vacancy: { description: 'Приглашаем разработчика в международную команду.' } }), 'en');
+    }
+  });
+  test('salary wording must not turn shell variables or substitutions into dollar pay', () => {
+    for (const question of ['Как найти $HOME в shell? Какую зарплату в рублях вы ожидаете?',
+      'Расскажите про ${PATH} и $(pwd). Зарплата в рублях.', 'Как экранировать символ $?']) {
+      assert.equal(applicationResumeLanguage({ questions: [question] }), 'ru');
+    }
+  });
   test('Russian questions outweigh an English job title; shell variables do not mean dollar pay', () => {
     assert.equal(applicationResumeLanguage({ questions: ['Какой у вас опыт разработки?'], context: ['Senior Software Engineer'] }), 'ru');
     assert.equal(applicationResumeLanguage({ context: ['Команды shell: $HOME, ${PATH}'] }), 'ru');

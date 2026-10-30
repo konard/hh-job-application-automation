@@ -94,6 +94,27 @@ try {
   await stationary();
   await preserved();
 
+  await mount();
+  await select(russian);
+  const dollarQuestion = { commander, questions: ['Ожидаемый уровень компенсации в $ или русских рублях, на руки'] };
+  assert.equal((await createSelector()(dollarQuestion)).hash, 'en1', 'Correct a stale automatic Russian decision after a detector update');
+  await visibleChooser();
+  await scrollAway();
+  await select(dollarQuestion);
+  await createSelector()(dollarQuestion);
+  await stationary();
+  assert.deepEqual(await counts(), { opened: 1, chosen: 1 }, 'Correct the stale decision once, preserving stationary restarts');
+  await preserved();
+
+  await mount();
+  await select(english);
+  await page.evaluate(() => { window.selected = 'ru1'; window.render(); });
+  await select(russian);
+  await createSelector()(russian);
+  assert.equal(await page.evaluate(() => window.selected), 'ru1', 'Changed inference must still preserve a later manual CV choice');
+  assert.deepEqual(await counts(), { opened: 1, chosen: 1 });
+  await preserved();
+
   await mount({ selected: 'en1' });
   assert.equal((await select(russian)).hash, 'ru1');
   assert.deepEqual(await counts(), { opened: 1, chosen: 1 }, 'A new Russian application can switch once');

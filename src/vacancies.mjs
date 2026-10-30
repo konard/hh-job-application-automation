@@ -12,12 +12,12 @@ import { noteSkip } from './skipped-vacancies.mjs';
 import { saveMarkedQAPairs, saveQAPairs, savedAnswersInContext, setupQAHandling } from './vacancy-response.mjs';
 import { resumeVisibility } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
-import { clickButtonWhenReady, clickWasNotDispatched, ensureCoverLetterVisible, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
+import { clickButtonWhenReady, clickWasNotDispatched, ensureCoverLetterVisible, isButtonEnabled } from './helpers/page-helpers.mjs';
 import { SELECTORS, URL_PATTERNS, extractVacancyId } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { recordEvent } from './stats.mjs';
 import { LIMIT_COOLDOWN_MS } from './pacing.mjs';
-import { coverLetterFor } from './cover-letter.mjs';
+import { coverLetterFor, fillCoverLetter } from './cover-letter.mjs';
 import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
@@ -191,10 +191,13 @@ export async function processModalApplication({
   if (isFullFormOpened(commander)) {
     return FULL_FORM_OPENED;
   }
-  // The English letter when the vacancy's questions are in English
-  const letter = coverLetterFor(MESSAGE, (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question), selectedResume?.language ?? null);
+  // The letter follows the verified CV language; questionnaire answers keep their own wording.
+  const letterQuestions = (await extractPageQuestions({ evaluate: commander.evaluate })).map(({ question }) => question);
+  const letter = coverLetterFor(MESSAGE, letterQuestions, selectedResume?.language ?? null);
   if (letter) {
-    const { filled } = await typeLongText(commander, { selector: textareaSelector, text: letter, scrollIntoView: true });
+    const { filled } = await fillCoverLetter({ commander, selector: textareaSelector, message: MESSAGE,
+      questions: letterQuestions,
+      language: selectedResume?.language ?? null });
     if (isFullFormOpened(commander)) return FULL_FORM_OPENED;
     const actualValue = await commander.evaluate({
       fn: (selector) => document.querySelector(selector)?.value ?? null, args: [textareaSelector],
