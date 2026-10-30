@@ -233,8 +233,18 @@ export function createConfig() {
         })
         .option('clear-rejections', {
           type: 'boolean',
-          description: 'Open unread rejections («Отказ») in the chat browser slot (port 9340) alongside the application loop, so they leave the unread chats; nothing is typed in them (--no-clear-rejections to turn it off)',
+          description: 'Handle unread rejections in the inactive chat browser slot (port 9340); closed chats are read, open chats may get the configured reason request',
           default: getenv('CLEAR_REJECTIONS', true),
+        })
+        .option('ask-rejection-reason', {
+          type: 'boolean',
+          description: 'Ask once for the reason when a rejected application still allows replies, only in an inactive window without a draft',
+          default: getenv('ASK_REJECTION_REASON', true),
+        })
+        .option('rejection-reason-reply', {
+          type: 'string',
+          description: 'Message sent once to an open rejection chat',
+          default: getenv('REJECTION_REASON_REPLY', 'Здравствуйте, могу я узнать причину?'),
         })
         .option('process-chats', {
           type: 'boolean',

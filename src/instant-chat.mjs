@@ -88,13 +88,16 @@ async function waitForAnswer(frame, messageId, ms) {
  * @param {{answer: string, option?: string|null}} reply
  * @returns {Promise<boolean>} True once it shows in the chat
  */
-export async function sendChatAnswer(frame, messageId, { answer, option }) {
+export async function sendChatAnswer(frame, messageId, { answer, option, maySend = async () => true, preserveDraft = false }) {
+  if (!await maySend()) return false;
   if (option) {
     await frame.getByRole('button', { name: option, exact: true }).last().click({ timeout: 5000 });
   } else {
     const input = frame.locator(INPUT).first();
+    if (preserveDraft && (await input.inputValue()).trim()) return false;
     await input.fill(answer);
     await sleep(500);
+    if (!await maySend() || (preserveDraft && await input.inputValue() !== answer)) return false;
     const sendButton = frame.locator('button[data-qa*="send"]').first();
     if (await sendButton.isVisible().catch(() => false)) {
       await sendButton.click({ timeout: 5000 });

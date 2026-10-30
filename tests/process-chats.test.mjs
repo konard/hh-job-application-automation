@@ -22,6 +22,13 @@ describe('apply --clear-rejections', () => {
     assert.equal(configOf().chatsIntervalMinutes, 120);
     assert.equal(configOf('--no-clear-rejections').clearRejections, false);
   });
+
+  test('reason requests default on and have an independent disable switch and editable text', () => {
+    assert.equal(configOf().askRejectionReason, true);
+    assert.equal(configOf().rejectionReasonReply, 'Здравствуйте, могу я узнать причину?');
+    assert.equal(configOf('--no-ask-rejection-reason').askRejectionReason, false);
+    assert.equal(configOf('--rejection-reason-reply', 'Можно уточнить причину?').rejectionReasonReply, 'Можно уточнить причину?');
+  });
 });
 
 describe('default vacancy insights', () => {

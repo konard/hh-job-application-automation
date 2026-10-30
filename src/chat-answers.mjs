@@ -415,6 +415,7 @@ export const REJECTION_KEY = 'Отказ';
  */
 export function isRejection(message) {
   return (!message.mine && REJECTION_WORD.test(message.heading ?? '')) ||
+    /не готовы (?:двигаться дальше|продолжать (?:общение|рассмотрение|процесс))/iu.test(message.text) ||
     /не готовы пригласить|не можем пригласить|приняли решение (не продолжать|отказать)|выбрали другого кандидата|к сожалению,? (мы )?(не готовы|вынуждены отказать|не можем)/i.test(message.text) ||
     /\bwe (?:have )?(?:chosen|selected) (?:another|other)\b|\bwe (?:will not|cannot|can't|are unable to|won't) (?:proceed|move forward|invite)\b|\byour (?:application|candidacy) (?:was|has been) (?:rejected|declined)\b/i.test(message.text);
 }

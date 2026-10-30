@@ -49,6 +49,7 @@ const COVER_LETTER_DATA_QA = ['vacancy-response-popup-form-letter-input', 'vacan
 const COVER_LETTER_TOGGLE_ATTEMPTS = 3;
 const DEFAULT_RETURN_URL = 'https://hh.ru/search/vacancy?from=resumelist';
 const SUBMIT_CONFIRMATION_TIMEOUT_MS = 15000;
+const FORM_ACTION_SETTLE_MS = 500;
 
 const fillers = {
   textarea: fillTextareaQuestion,
@@ -205,9 +206,9 @@ export async function setupQAHandling({ commander, readQADatabase, addOrUpdateQA
           });
           console.log(`[QA] "${question}": «${typed}» was typed before in another context, typed again`);
         }
-        await fillers[data.type]?.({ commander, questionData: data, verbose, contacts });
-        if (data.type === 'textarea') {
-          await commander.wait({ ms: 2000, reason: 'stability delay between textarea fills' });
+        const filled = await fillers[data.type]?.({ commander, questionData: data, verbose, contacts });
+        if (filled && data.type === 'textarea') {
+          await commander.wait({ ms: FORM_ACTION_SETTLE_MS, reason: 'the answer to update the form' });
         }
       } catch (error) {
         console.error(`[QA] Error autofilling for "${question}":`, error.message);
@@ -282,15 +283,21 @@ export async function prepareCoverLetterTextarea({ commander }) {
         break;
       }
       console.log('Cover letter section is collapsed, clicking toggle to expand...');
-      await commander.clickButton({ selector: toggleSelector, scrollIntoView: true });
-      await commander.wait({ ms: 1700, reason: 'expand animation to complete' });
-      if (await findFirstSelector(commander, COVER_LETTER_SELECTORS, { visible: true })) {
+      await commander.clickButton({ selector: toggleSelector, scrollIntoView: true, waitForNavigation: false, waitAfterClick: 0 });
+      // The toggle expands inline. Proceed as soon as its field appears, allowing a slow render
+      // to finish before another click (which could otherwise collapse it again).
+      let expanded = null;
+      for (let waited = 0; waited <= 3000; waited += FORM_ACTION_SETTLE_MS) {
+        expanded = await findFirstSelector(commander, COVER_LETTER_SELECTORS, { visible: true });
+        if (expanded || waited === 3000) break;
+        if ((await commander.wait({ ms: FORM_ACTION_SETTLE_MS, reason: 'the cover letter field to appear' }))?.aborted) return null;
+      }
+      if (expanded) {
         console.log('Cover letter section expanded');
         break;
       }
       if (attempt < COVER_LETTER_TOGGLE_ATTEMPTS) {
         console.log(`Cover letter section did not open (attempt ${attempt} of ${COVER_LETTER_TOGGLE_ATTEMPTS}): clicking its toggle again`);
-        await commander.wait({ ms: 2000, reason: 'the page to finish loading' });
       }
     }
   }
@@ -370,12 +377,27 @@ export function isFormLeftDuringWait(error, url) {
     !URL_PATTERNS.vacancyResponse.test(url);
 }
 
+/** Observe a manual review without touching fields or running autofill again. */
+export async function waitForManualResponse({ commander, formUrl = commander.getUrl(), isPageClosed = () => false }) {
+  try {
+    while (!isPageClosed() && commander.getUrl() === formUrl) {
+      if (await isResponseSubmitted(commander)) return 'submitted';
+      if ((await commander.wait({ ms: 1000, reason: 'your review and manual submission (answers continue to be saved)' }))?.aborted) return 'interrupted';
+    }
+  } catch (error) {
+    if (isPageClosed()) return 'closed';
+    if (commander.getUrl() !== formUrl) return 'left';
+    if (isNavigationError(error) || commander.isActionStoppedError?.(error)) return 'interrupted';
+    throw error;
+  }
+  return isPageClosed() ? 'closed' : 'left';
+}
+
 /**
  * Handle the vacancy_response page
  *
- * Note: This function is called exclusively from the pageTrigger system
- * in page-triggers.mjs, which ensures it's only called once per page with
- * proper lifecycle management.
+ * The orchestrator shares one active handler between the page trigger and the main loop.
+ * An awaiting_user result keeps that handler in a passive wait, with answer saving active.
  *
  * Every skip is logged and kept in data/skipped-vacancies.lino (or deferred-questions.lino /
  * filtered-vacancies.lino). A form with questions is sent by the rules of decideSend, the same as
@@ -443,7 +465,9 @@ export async function handleVacancyResponsePage({
       return;
     }
     // A current validation error takes priority over an older generic-error cooldown.
-    if (await deferFailedSubmission({ commander, vacancyId, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) return;
+    if (await deferFailedSubmission({ commander, vacancyId, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) {
+      return extractVacancyIdFromResponseUrl(commander.getUrl()) === vacancyId ? { status: 'awaiting_user' } : undefined;
+    }
     const cooling = submissionRetries.get(vacancyId);
     const failedDraft = await readApplicationDraft(vacancyId);
     const needsReview = failedDraft?.requiresReview && !isPassingError(failedDraft.error);
@@ -459,9 +483,9 @@ export async function handleVacancyResponsePage({
       await saveQAPairs({ commander, addOrUpdateQA, strict: true });
       console.log(`🛑 Vacancy ${vacancyId} had a submission error; keeping its answers open for manual review.`);
       notifyForReview();
-      return;
+      return { status: 'awaiting_user' };
     }
-    if (await draftsAwaitReview()) return;
+    if (await draftsAwaitReview()) return { status: 'awaiting_user' };
     const form = await readFormForFilters(commander);
     title = form.vacancy;
     // What the salary answers' currency is told by: the card, the description and the form's text
@@ -487,7 +511,7 @@ export async function handleVacancyResponsePage({
       context: [form.vacancy, vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? ''] });
     if (selectedResume?.ready === false) {
       notifyForReview();
-      return;
+      return { status: 'awaiting_user' };
     }
 
     if (await resumeVisibility(commander, { vacancyId }) === 'skip') {
@@ -525,21 +549,18 @@ export async function handleVacancyResponsePage({
       console.log('Using special "Откликнуться без теста" flow');
       // Questions outside the test (e.g. the salary) still take their saved answers
       await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext, contacts });
-      if (await draftsAwaitReview()) return;
+      if (await draftsAwaitReview()) return { status: 'awaiting_user' };
       await commander.clickButton({ selector: submitWithoutTestSelector, scrollIntoView: true, smoothScroll: true });
       console.log('Clicked "Откликнуться без теста" button');
       await commander.wait({ ms: 2000, reason: 'submit without test to complete' });
       return;
     }
 
-    const textareaCount = await commander.count({ selector: 'textarea' });
-    console.log(`Found ${textareaCount} textarea(s) on the page`);
-
     // The saved answers as they were before this form: the periodic auto-save (page-triggers.mjs)
     // writes the autofilled answers of similar questions under this form's wording, which must
     // not make them count as exact
     const savedBefore = await savedAnswersInContext({ commander, readQADatabase, context: salaryContext });
-    // Auto-fill answers from database, then give user time to review them
+    // Auto-fill saved answers; forms needing review wait explicitly below.
     await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext, contacts });
     // Sent without asking only when autofill alone answered everything with saved answers of the
     // very same questions; checked again before sending, in case an answer was changed meanwhile
@@ -558,13 +579,16 @@ export async function handleVacancyResponsePage({
         return deferVacancy(questionsToSkip);
       }
     }
-    await commander.wait({ ms: 30000, reason: 'form validation and user review after auto-fill' });
+    await commander.wait({ ms: FORM_ACTION_SETTLE_MS, reason: 'form validation after auto-fill' });
 
     if (!URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
       console.log('Page navigated away from vacancy_response, skipping auto-submit');
       return;
     }
 
+    // Re-read after the inputs have updated: conditional questions may have appeared.
+    const textareaCount = await commander.count({ selector: 'textarea' });
+    console.log(`Found ${textareaCount} textarea(s) on the page`);
     const { totalCount, unansweredCount } = await countUnansweredQuestions({ evaluate: commander.evaluate });
     const hasTestQuestions = totalCount > 0 || textareaCount > 1;
     log.debug(() => `hasTestQuestions=${hasTestQuestions} (radioCheckbox=${totalCount}, textareas=${textareaCount})`);
@@ -590,7 +614,7 @@ export async function handleVacancyResponsePage({
       if (!isInteractive()) {
         console.log('Please answer them and submit the form manually when ready');
         notifyForReview();
-        return;
+        return { status: 'awaiting_user' };
       }
       do {
         const { choice, deferred } = await askUnlessDeferred(deferredQuestions,
@@ -611,7 +635,7 @@ export async function handleVacancyResponsePage({
       } while (!await isFormComplete());
     }
 
-    if (await draftsAwaitReview()) return;
+    if (await draftsAwaitReview()) return { status: 'awaiting_user' };
     const autoSend = hasTestQuestions && exactAfterAutofill && await answersExact();
     if (!hasTestQuestions) {
       console.log('No test questions found, only cover letter - will auto-submit');
@@ -623,6 +647,8 @@ export async function handleVacancyResponsePage({
       for (const issue of issues) console.log(`   • ${issue.question.split('\n')[0]}: ${issue.reason}`);
       if (!issues.length) console.log('   • Some answers were completed after the initial autofill; review is still required');
     }
+    const questionsBeforeDecision = await extractPageQuestions({ evaluate: commander.evaluate });
+    const questionKeys = (items) => JSON.stringify(items.map(({ selector, question, type }) => [selector, question, type]));
     const decision = await decideSend({
       hasQuestions: hasTestQuestions,
       autoSend,
@@ -632,7 +658,7 @@ export async function handleVacancyResponsePage({
     if (decision === 'wait') {
       console.log('Please review the answers and submit the form manually when ready');
       notifyForReview();
-      return;
+      return { status: 'awaiting_user' };
     }
     if (decision === 'skip') {
       await skipVacancy('skipped_by_user');
@@ -651,17 +677,36 @@ export async function handleVacancyResponsePage({
     if (!submitSelector) {
       console.log('Submit button not found (tried multiple selectors)');
       notifyForReview();
-      return;
+      return { status: 'awaiting_user' };
     }
 
+    for (let waited = 0; waited < 5000 && !await isButtonEnabled(commander, submitSelector); waited += FORM_ACTION_SETTLE_MS) {
+      if ((await commander.wait({ ms: FORM_ACTION_SETTLE_MS, reason: 'the submit button to become enabled' }))?.aborted) return;
+    }
+    if (!URL_PATTERNS.vacancyResponse.test(commander.getUrl()) || await isResponseSubmitted(commander)) return;
+    if (await deferFailedSubmission({ commander, vacancyId, title, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) {
+      return extractVacancyIdFromResponseUrl(commander.getUrl()) === vacancyId ? { status: 'awaiting_user' } : undefined;
+    }
     if (!await isButtonEnabled(commander, submitSelector)) {
       console.log('Submit button is disabled, manual action required');
       console.log('The form may require additional validation. Please check manually.');
       notifyForReview();
-      return;
+      return { status: 'awaiting_user' };
     }
 
-    await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true, autoSend });
+    const questionsNow = await extractPageQuestions({ evaluate: commander.evaluate });
+    if (!await isFormComplete() || questionsNow.some((item) => item.requiresReview) ||
+        questionKeys(questionsNow) !== questionKeys(questionsBeforeDecision) ||
+        (autoSend && !allAnswersExact(questionsNow, savedBefore))) {
+      console.log('The questions or answers changed before submission; please review and submit manually.');
+      notifyForReview();
+      return { status: 'awaiting_user' };
+    }
+
+    console.log('Form ready; scrolling to Send application and submitting.');
+    // Confirmation is checked below; a second library navigation/network-idle wait adds no proof.
+    await commander.clickButton({ selector: submitSelector, scrollIntoView: true, smoothScroll: true, autoSend,
+      waitForNavigation: false, waitAfterClick: FORM_ACTION_SETTLE_MS });
     console.log('Clicked submit button');
     const backOnList = () => URL_PATTERNS.searchVacancy.test(commander.getUrl());
     for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !backOnList() && !await isResponseSubmitted(commander); waited += 1000) {

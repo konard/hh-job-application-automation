@@ -229,7 +229,8 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     const mode = argv.processChats
       ? ['--auto', ...(argv.autoSendExactAnswers ? ['--auto-send'] : []), ...(argv.autoReuseAnswers ? ['--auto-reuse'] : [])]
       : ['--clear-rejections', ...(argv.autoSendExactAnswers ? ['--auto-send'] : [])];
-    chatProcess = spawn(process.execPath, [chatScriptPath, ...mode, `--poll=${intervalSeconds}`], {
+    chatProcess = spawn(process.execPath, [chatScriptPath, ...mode, `--poll=${intervalSeconds}`,
+      argv.askRejectionReason ? '--ask-rejection-reason' : '--no-ask-rejection-reason', `--rejection-reason-reply=${argv.rejectionReasonReply}`], {
       // Its own output straight into this log: through a pipe it came only when it exited
       stdio: ['ignore', 'inherit', 'inherit'],
     });

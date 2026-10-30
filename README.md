@@ -117,6 +117,12 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
   Detached runs also alert for unanswered questions, drafts needing review, and held validation
   errors. CV Save waits and external forms alert in their own browser slots. Repeated checks and
   overlapping waits share one alert per browser; completion or navigation removes it.
+- **Form timing** - ready full-page forms proceed after a short validation settle; there is no
+  fixed 30-second review pause. Expanding a cover letter waits for the field to appear, and a
+  disabled Send button is checked for up to five seconds. Questions and answers are checked
+  again before sending. Forms requiring your input or review wait passively, keep saving answers,
+  and show an explicit waiting message without repeatedly refilling or scrolling. The adaptive
+  1–4 minute pause between vacancies still applies.
 - **Login** - if the automation profile is not logged in yet, the browsers on this machine are
   checked for an hh.ru session or a VK, Mail.ru, OK, Google or Gosuslugi session (only cookie names
   are counted). The hh.ru session of any browser you use (Google Chrome, Safari, Firefox, Edge,
@@ -333,8 +339,14 @@ bun run apply -- --message-file data/cover-letter.txt --keep-browser-open
 ```
 
 Alongside the application loop, unread rejections («Отказ») in hh.ru chats are opened every 2
-hours in the separate chat browser slot (port 9340), so they leave the unread chats; nothing is
-typed in them. Between those checks, the unread list is checked every 10 seconds while the chat
+hours in the separate chat browser slot (port 9340), so they leave the unread chats. Closed chats
+are only read. When replies are still allowed, the default is to send
+«Здравствуйте, могу я узнать причину?» once. The full conversation is checked first: questions,
+existing drafts, prior replies after a rejection, and active or unverified window state prevent
+automatic sending. Private receipts in `logs/rejection-replies/` prevent repeated requests across
+workers/restarts, including when a send was not confirmed. `--no-ask-rejection-reason` (or
+`ASK_REJECTION_REASON: false` in `.lenv`) keeps read-only cleanup; `--rejection-reason-reply`
+(`REJECTION_REASON_REPLY` in `.lenv`) changes the message. Between those checks, the unread list is checked every 10 seconds while the chat
 window is inactive. The pass covers the whole unread list, including rejections below the visible
 rows, and returns to the selected chat with its draft, selection, unread filter and scroll position
 restored. A draft does not block this background cleanup. The pass pauses when you return to the

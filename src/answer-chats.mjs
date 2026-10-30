@@ -42,6 +42,7 @@ import { learnChatQuestions } from './chat-learning.mjs';
 import { readFullChat, setUnreadFilter, waitForChat, watchChats } from './chat-recording.mjs';
 import { createChatPrefillQueue } from './chat-prefill-queue.mjs';
 import { createBackgroundRejectionSweep } from './background-rejections.mjs';
+import { createRejectionResponder, DEFAULT_REJECTION_REPLY } from './rejection-replies.mjs';
 import { browserWindowActive } from './notify.mjs';
 import { getAnswerFinalPeriod } from './answer-variants.mjs';
 
@@ -54,12 +55,16 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
                          for you to check, or none found) it stops with that chat open and waits until you
                          have answered it
   --clear-rejections     In an inactive window, open unread rejections («Отказ») from the chat list, so they leave the unread
-                         chats; nothing is typed in them (apply runs it by default every 2 hours). An unread
+                         chats; open chats get one reason request (apply runs it by default every 2 hours). An unread
                          template message (a saved one word for word, «Спасибо за отклик! Мы рассмотрим Ваше
                          резюме…») is read too, and with --auto-send answered with its reply. Between
                          those passes the unread list is checked every 10 seconds in the background; the current
                          chat, draft, filter and list position are restored afterwards. Returning to the window stops the pass.
   --no-live-rejections   Read rejections only in the scheduled passes, without the background checks between them
+  --no-ask-rejection-reason
+                         Only read rejections; do not send a reason request in open chats
+  --rejection-reason-reply <text>
+                         Reason request (default: «${DEFAULT_REJECTION_REPLY}»)
   --auto-reuse           Answer a recruiter bot's offer to reuse earlier answers («Используем эти ответы?»): «Да»
                          when each is the saved answer, «Нет» when one differs; without it you choose
   --auto-send            Send an exact answer (the saved question word for word, or a bot's button that is the saved
@@ -77,7 +82,9 @@ const USAGE = `Usage: bun run answer-chats -- [<chat url or id> ...] [options]
   --poll <seconds>       How often the chat list is checked in --watch / --auto (default 300)`;
 
 function parseArgs(args) {
-  const parsed = { chats: [], watch: false, learnAll: false, relearn: false, auto: false, clearRejections: false, liveRejections: true, autoSend: false, autoReuse: false, draft: true, forms: true, learn: true, poll: 300 };
+  const parsed = { chats: [], watch: false, learnAll: false, relearn: false, auto: false, clearRejections: false, liveRejections: true, autoSend: false, autoReuse: false, draft: true, forms: true, learn: true, poll: 300,
+    askRejectionReason: !/^(0|false|no|off)$/i.test(process.env.ASK_REJECTION_REASON ?? ''),
+    rejectionReasonReply: process.env.REJECTION_REASON_REPLY ?? DEFAULT_REJECTION_REPLY };
   for (let i = 0; i < args.length; i++) {
     const [flag, inline] = args[i].split('=');
     if (flag === '--help' || flag === '-h') {
@@ -101,6 +108,10 @@ function parseArgs(args) {
       parsed.watch = true; // --auto implies watch mode
     } else if (flag === '--no-live-rejections') {
       parsed.liveRejections = false;
+    } else if (flag === '--no-ask-rejection-reason' || flag === '--ask-rejection-reason') {
+      parsed.askRejectionReason = flag === '--ask-rejection-reason';
+    } else if (flag === '--rejection-reason-reply') {
+      parsed.rejectionReasonReply = inline ?? args[++i] ?? '';
     } else if (flag === '--no-draft') {
       parsed.draft = false;
     } else if (flag === '--no-forms') {
@@ -124,6 +135,7 @@ function parseArgs(args) {
 }
 
 const argv = parseArgs(process.argv.slice(2));
+const answerRejection = createRejectionResponder({ enabled: argv.askRejectionReason, reply: argv.rejectionReasonReply });
 const CHAT_SLOT_PORT = 9340;
 // --learn-all reads the chat history in a window of its own, apart from the chat window the user answers in
 const CHAT_HISTORY_PORT = 9341;
@@ -633,7 +645,7 @@ async function learnFromAllChats() {
 
 /**
  * The unread rejections opened one by one, going down the list: opening one reads it, so it leaves
- * the unread chats. Nothing is typed in a rejection
+ * the unread chats. Open chats get the authorized reason request once, without replacing drafts.
  * @returns {Promise<number|null>} How many were read; null behind a captcha
  */
 async function clearRejections({
@@ -662,6 +674,17 @@ async function clearRejections({
       rejections += 1;
       console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
       recordEvent('rejection_read', { chatId: chat.id, live });
+      const outcome = await answerRejection({ chatId: chat.id,
+        readChat: () => readChatIn(page),
+        readDraft: () => page.locator(MESSAGE_INPUT).first().inputValue({ timeout: 1000 }).catch(() => '[unavailable]'),
+        maySend: async () => await canContinue() && await browserWindowActive(page, { port: CHAT_SLOT_PORT }) === false,
+        send: (messageId, reply) => sendChatAnswer(page.mainFrame(), messageId, reply) });
+      if (outcome.status === 'sent') {
+        recordEvent('rejection_reason_requested', { chatId: chat.id, messageId: outcome.messageId });
+        console.log(`✅ Chat ${chat.id}: asked for the rejection reason`);
+      } else if (outcome.status === 'unconfirmed') {
+        console.log(`⚠️  Chat ${chat.id}: rejection reason request was not confirmed; no automatic retry`);
+      }
     }
     await humanPause();
     return false;

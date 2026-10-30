@@ -14,7 +14,7 @@ import {
   previewNextVacancy,
   waitForButtonsAfterNavigation,
 } from './vacancies.mjs';
-import { handleVacancyResponsePage, saveQAPairs } from './vacancy-response.mjs';
+import { handleVacancyResponsePage, saveQAPairs, waitForManualResponse } from './vacancy-response.mjs';
 import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
 import { dismissOverlays, isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { registerPageTriggers, saveFormAnswers } from './page-triggers.mjs';
@@ -265,33 +265,45 @@ export function createOrchestrator({
     }
     handledResponseUrl = commander.getUrl();
     const retryId = retryingVacancyId;
-    responseHandling = runVacancyResponseHandler().finally(() => {
-      responseHandling = null;
+    const operation = runVacancyResponseHandler().finally(() => {
+      // An earlier form may finish after the next one's handler has started.
+      if (responseHandling === operation) responseHandling = null;
       if (retryingVacancyId === retryId) retryingVacancyId = null;
     });
-    return responseHandling;
+    responseHandling = operation;
+    return operation;
   };
-  const runVacancyResponseHandler = () => handleVacancyResponsePage({
-    commander,
-    MESSAGE,
-    selectApplicationResume,
-    readQADatabase: qaDB.readQADatabase,
-    addOrUpdateQA: qaDB.addOrUpdateQA,
-    contacts,
-    // A form with a non-exact answer is sent after the user's `y` (decideSend); unattended only with this flag
-    autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
-    onMissingAnswers: argv.onMissingAnswers,
-    ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
-    returnUrl: lastSearchPageUrl,
-    onApplicationSent: afterApplicationSent,
-    onApplicationNotConfirmed: applicationNotConfirmed,
-    deferredQuestions,
-    autoSendExact: argv.autoSendExactAnswers,
-    vacancyFilters,
-    skippedVacancies,
-    retrySubmission: retryingVacancyId !== null && extractVacancyIdFromResponseUrl(commander.getUrl()) === retryingVacancyId,
-    verbose: argv.verbose,
-  });
+  const runVacancyResponseHandler = async () => {
+    const formUrl = commander.getUrl();
+    const result = await handleVacancyResponsePage({
+      commander,
+      MESSAGE,
+      selectApplicationResume,
+      readQADatabase: qaDB.readQADatabase,
+      addOrUpdateQA: qaDB.addOrUpdateQA,
+      contacts,
+      // A form with a non-exact answer is sent after the user's `y` (decideSend); unattended only with this flag
+      autoSubmitEnabled: argv.autoSubmitVacancyResponseForm,
+      onMissingAnswers: argv.onMissingAnswers,
+      ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
+      returnUrl: lastSearchPageUrl,
+      onApplicationSent: afterApplicationSent,
+      onApplicationNotConfirmed: applicationNotConfirmed,
+      deferredQuestions,
+      autoSendExact: argv.autoSendExactAnswers,
+      vacancyFilters,
+      skippedVacancies,
+      retrySubmission: retryingVacancyId !== null && extractVacancyIdFromResponseUrl(commander.getUrl()) === retryingVacancyId,
+      verbose: argv.verbose,
+    });
+    if (result?.status !== 'awaiting_user' || commander.getUrl() !== formUrl) return;
+    console.log('⏸️  Waiting for your review and manual Send; answers continue to be saved.');
+    const outcome = await waitForManualResponse({ commander, formUrl, isPageClosed: getPageClosedByUser });
+    if (outcome === 'submitted') {
+      await afterApplicationSent(extractVacancyIdFromResponseUrl(formUrl));
+      if (commander.getUrl() === formUrl) await commander.goto({ url: lastSearchPageUrl, waitForStableUrlBefore: false });
+    }
+  };
 
   const deferVisibleSubmissionError = () => deferFailedSubmission({ commander, returnUrl: lastSearchPageUrl,
     saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
@@ -429,6 +441,12 @@ export function createOrchestrator({
           await followUp;
           continue;
         }
+        // A form opened on startup or by its page trigger has the same passive review wait.
+        // Do not restart work timing or revisit fields while that handler is still active.
+        if (responseHandling && handledResponseUrl === commander.getUrl()) {
+          await responseHandling;
+          continue;
+        }
         // Ensure page is fully loaded
         if (commander.navigationManager?.isNavigating() || commander.shouldAbort()) {
           log.debug(() => 'Page is loading, waiting for it to be fully ready...');
@@ -508,23 +526,22 @@ export function createOrchestrator({
         plannedVacancy = null;
 
         if (result.status === 'vacancy_response_detected') {
-          // The page trigger fills the form; a form it did not start on is filled here, never left as it is
+          // Start immediately, or join the trigger's existing handler. No fixed wait for a
+          // network-idle trigger to pick up a form whose DOM is already ready.
           const formUrl = commander.getUrl();
-          for (let waited = 0; waited < 8000 && handledResponseUrl !== formUrl; waited += 500) {
-            await commander.wait({ ms: 500, reason: 'the full form handler to start' });
-          }
-          // A handler still busy with an earlier form keeps the trigger from starting on this one
-          if (handledResponseUrl !== formUrl && URL_PATTERNS.vacancyResponse.test(commander.getUrl())) {
-            console.log(`⚠️  The full form was not picked up by its page handler${responseHandling ? ' (it is still busy with an earlier form)' : ''}: filling it here`);
+          if (responseHandling && handledResponseUrl === formUrl) {
+            await responseHandling;
+          } else if (handledResponseUrl !== formUrl && URL_PATTERNS.vacancyResponse.test(formUrl)) {
             // What the user types is saved as the page trigger would
             const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
-            await vacancyResponseHandler().catch((error) => console.error('Error in vacancy response handler:', error.message));
-            await stopSaving();
-            // Sent in the browser: hh.ru opened its vacancy page, which the safety net checks and leaves
-            const formVacancyId = extractVacancyIdFromResponseUrl(formUrl);
-            if (formVacancyId && extractVacancyId(commander.getUrl()) === formVacancyId) {
-              isOnVacancyPageFromResponse = true;
-            }
+            try { await vacancyResponseHandler(); }
+            catch (error) { console.error('Error in vacancy response handler:', error.message); }
+            finally { await stopSaving(); }
+          }
+          // Sent in the browser: hh.ru opened its vacancy page, which the safety net checks and leaves
+          const formVacancyId = extractVacancyIdFromResponseUrl(formUrl);
+          if (formVacancyId && extractVacancyId(commander.getUrl()) === formVacancyId) {
+            isOnVacancyPageFromResponse = true;
           }
         }
         if (openedVacancy(result) && result.status !== 'success') {

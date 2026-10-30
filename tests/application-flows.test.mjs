@@ -13,7 +13,7 @@ import os from 'os';
 import path from 'path';
 import { describe, test, assert } from 'test-anywhere';
 import { clearProcessedVacancies, findAndProcessVacancyButton, isVacancyProcessed } from '../src/vacancies.mjs';
-import { handleVacancyResponsePage } from '../src/vacancy-response.mjs';
+import { handleVacancyResponsePage, setupQAHandling, waitForManualResponse } from '../src/vacancy-response.mjs';
 import { createSkippedVacancies } from '../src/skipped-vacancies.mjs';
 import { createVacancyFilters } from '../src/vacancy-filters.mjs';
 import { disableConfirmations } from '../src/confirmations.mjs';
@@ -272,7 +272,7 @@ const RESPONSE_URL = 'https://hh.ru/applicant/vacancy_response?vacancyId=1391000
  * @param {Function} [options.onWait] - Runs on every wait (e.g. the periodic auto-save)
  */
 function fakeForm({ questions = [], confirms = true, direct = false, withoutTest = false, reviewOnly = false, onWait = () => {} } = {}) {
-  const state = { questions: questions.map((question) => ({ question, value: '' })), submitted: false, clicks: [], gotos: [] };
+  const state = { questions: questions.map((question) => ({ question, value: '' })), submitted: false, clicks: [], gotos: [], waits: [] };
   const items = () => state.questions.map(({ question, value }, index) => ({
     type: 'textarea', question, selector: `textarea[name="task_${index}"]`, index, currentValue: value,
     ...(reviewOnly ? { requiresReview: true } : {}),
@@ -337,13 +337,80 @@ function fakeForm({ questions = [], confirms = true, direct = false, withoutTest
       }
     },
     goto: async ({ url }) => state.gotos.push(url),
-    wait: async () => onWait(state),
+    wait: async (options) => { state.waits.push(options); return onWait(state, options); },
   };
 }
 
 const sends = (form) => form.state.clicks.filter(({ selector }) => selector === SELECTORS.submitButtonLetter);
 
 describe('full response form', () => {
+  test('a ready cover-letter form sends promptly and keeps confirmation checks', async () => {
+    disableConfirmations();
+    const form = fakeForm();
+    await handleVacancyResponsePage({ commander: form, MESSAGE: 'Здравствуйте', readQADatabase: async () => new Map(),
+      addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL });
+    assert.equal(sends(form).length, 1);
+    assert.equal(sends(form)[0].scrollIntoView, true);
+    assert.equal(sends(form)[0].waitForNavigation, false);
+    assert.equal(form.state.waits.reduce((ms, wait) => ms + wait.ms, 0) <= 1000, true);
+    assert.deepEqual(form.state.gotos, [SEARCH_URL]);
+  });
+
+  test('a temporarily disabled Send is checked again instead of an arbitrary review pause', async () => {
+    disableConfirmations();
+    const form = fakeForm();
+    let checks = 0;
+    form.isEnabled = async () => ++checks > 2;
+    await handleVacancyResponsePage({ commander: form, MESSAGE: '', readQADatabase: async () => new Map(),
+      addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL });
+    assert.equal(sends(form).length, 1);
+    assert.equal(form.state.waits.filter(({ reason }) => reason.includes('button to become enabled')).length, 2);
+  });
+
+  test('conditional questions appearing during button validation prevent submission', async () => {
+    disableConfirmations();
+    const form = fakeForm({ onWait: (state, { reason }) => {
+      if (reason.includes('button to become enabled')) state.questions.push({ question: 'New required question?', value: '' });
+    } });
+    let checks = 0;
+    form.isEnabled = async () => ++checks > 1;
+    const result = await handleVacancyResponsePage({ commander: form, MESSAGE: '', readQADatabase: async () => new Map(),
+      addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL });
+    assert.equal(result.status, 'awaiting_user');
+    assert.equal(sends(form).length, 0);
+    assert.deepEqual(form.state.gotos, []);
+  });
+
+  test('existing text is preserved without a pause for a skipped fill', async () => {
+    const form = fakeForm({ questions: ['Опыт Linux?'] });
+    form.state.questions[0].value = 'My own answer';
+    form.fillTextArea = async () => ({ skipped: true });
+    await setupQAHandling({ commander: form, readQADatabase: async () => new Map([['Опыт Linux?', 'Ubuntu.']]), addOrUpdateQA: async () => {} });
+    assert.equal(form.state.questions[0].value, 'My own answer');
+    assert.deepEqual(form.state.waits, []);
+  });
+
+  test('manual review stays passive until the user submits, and stops on navigation or an interrupted wait', async () => {
+    for (const outcome of ['submitted', 'left', 'interrupted', 'closed']) {
+      const form = fakeForm();
+      let polls = 0;
+      let closed = false;
+      let url = RESPONSE_URL;
+      form.getUrl = () => url;
+      form.wait = async () => {
+        if (++polls < 3) return;
+        if (outcome === 'submitted') form.state.submitted = true;
+        if (outcome === 'left') url = SEARCH_URL;
+        if (outcome === 'closed') closed = true;
+        if (outcome === 'interrupted') return { aborted: true };
+      };
+      assert.equal(await waitForManualResponse({ commander: form, isPageClosed: () => closed }), outcome);
+      assert.equal(polls, 3);
+      assert.deepEqual(form.state.clicks, []);
+      assert.deepEqual(form.state.gotos, []);
+    }
+  });
+
   test('review-only drafts are never auto-submitted, even after learning and with auto-submit enabled', async () => {
     disableConfirmations();
     const qa = new Map([['Опыт Linux?', 'Работал с Ubuntu и Docker.']]);

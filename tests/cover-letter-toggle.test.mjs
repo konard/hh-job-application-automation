@@ -33,6 +33,24 @@ describe('cover letter toggle', () => {
     assert.equal(form.clicks(), 1);
   });
 
+  test('a delayed inline expansion is awaited without clicking the toggle again', async () => {
+    const form = fakeForm({ opensOnClick: 1 });
+    let ready = false;
+    const options = [];
+    form.commander.isVisible = async ({ selector }) => ready && selector === SELECTORS.coverLetterTextareaPopup;
+    form.commander.clickButton = async (value) => { options.push(value); };
+    form.commander.count = async ({ selector }) => Number(selector === SELECTORS.coverLetterToggle ||
+      (ready && selector === SELECTORS.coverLetterTextareaPopup));
+    form.commander.wait = async () => { ready = true; };
+    form.commander.waitForSelector = async ({ selector }) => {
+      if (!ready || selector !== SELECTORS.coverLetterTextareaPopup) throw new Error('not ready');
+    };
+    assert.equal(await prepareCoverLetterTextarea({ commander: form.commander }), SELECTORS.coverLetterTextareaPopup);
+    assert.equal(options.length, 1);
+    assert.equal(options[0].waitForNavigation, false);
+    assert.equal(options[0].scrollIntoView, true);
+  });
+
   test('a toggle that never opens is clicked at most three times', async () => {
     const form = fakeForm({ opensOnClick: 99 });
     assert.equal(await prepareCoverLetterTextarea({ commander: form.commander }), null);
