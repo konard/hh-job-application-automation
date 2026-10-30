@@ -6,7 +6,12 @@ import { collectStack } from './resume-stack.mjs';
 export const TECHNOLOGY_ALIASES_FILE = path.join(process.cwd(), 'data/technology-aliases.lino');
 const escape = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const key = (text) => String(text).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
-const regex = (term) => new RegExp(`(?<![\\p{L}\\p{N}#+])${term === 'Go' ? '(?:Go|GO)' : escape(term).replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}#+])`, ['Go', 'npm'].includes(term) ? 'gu' : 'giu');
+const regex = (term) => {
+  const basic = /^basic$/i.test(term);
+  const pattern = basic ? '(?:BASIC|Basic)(?!\\s+(?:knowledge|understanding|skills?|concepts?|principles?|requirements?|experience)\\b)'
+    : term === 'Go' ? '(?:Go|GO)' : escape(term).replace(/\s+/g, '\\s+');
+  return new RegExp(`(?<![\\p{L}\\p{N}#+])${pattern}(?![\\p{L}\\p{N}#+])`, basic || ['Go', 'npm'].includes(term) ? 'gu' : 'giu');
+};
 export const containsTechnologySpelling = (text, spelling) => regex(spelling).test(text);
 
 export async function loadTechnologyAliases(file = TECHNOLOGY_ALIASES_FILE) {
@@ -61,9 +66,10 @@ export function observedTechnologyNames(vacancies, aliases) {
   return [...counts.values()].flatMap((names) => [...names.values()]).sort((a, b) => b.vacancies - a.vacancies || a.spelling.localeCompare(b.spelling));
 }
 
-const REQUIRED = /^(?:требования|основные требования|что (?:мы )?(?:ожидаем|жд[её]м)|мы (?:ожидаем|ищем)|нам важно|вам потребуется|необходимые навыки|requirements|must[- ]have|what you (?:bring|need)|qualifications)\s*[:：]?$/iu;
+const REQUIRED = /^(?:требования|основные требования|что (?:мы )?(?:ожидаем|жд[её]м)(?: от (?:вас|тебя))?|мы (?:ожидаем|жд[её]м|ищем)(?: от (?:вас|тебя))?|нам важно|вам потребуется|необходимые навыки|requirements|must[- ]have|what you (?:bring|need)|qualifications)\s*[:：]?$/iu;
 const PREFERRED = /^(?:будет плюсом|желательно|преимуществом будет|nice[- ]to[- ]have|preferred|bonus)\s*[:：]?$/iu;
-const OTHER = /^(?:обязанности|задачи|чем предстоит заниматься|что предстоит делать|мы предлагаем|условия|о компании|responsibilities|what we offer|benefits|about us)\s*[:：]?$/iu;
+const OTHER = /^(?:обязанности|(?:(?:твои|ваши|основные) )?задачи|чем предстоит заниматься|что предстоит делать|мы предлагаем|условия|о компании|responsibilities|what we offer|benefits|about us)\s*[:：]?$/iu;
+const NON_TECH_SKILL = /^(?:(?:english|английский(?: язык)?)(?:\s*[-—–(].*)?|деловая коммуникация)$/iu;
 const REQUIREMENT_SIGNALS = [
   ['English', /английск|\benglish\b/iu],
   ['Commercial experience', /коммерческ\p{L}*\s+опыт|опыт\p{L}*\s+коммерческ|commercial\s+experience/iu],
@@ -88,7 +94,7 @@ export function vacancyRequirements(description) {
     if (PREFERRED.test(line)) { section = preferred; continue; }
     if (OTHER.test(line)) { section = null; continue; }
     if (line && section) {
-      const target = section === required && /будет плюсом|желательно|необязател|nice[- ]to[- ]have|preferred|bonus/iu.test(line) ? preferred : section;
+      const target = section === required && /будет плюсом|желательно|необязател|как преимуществ|(?:будет|считается) преимуществом|nice[- ]to[- ]have|preferred|bonus/iu.test(line) ? preferred : section;
       target.push(line.replace(/^[•*\-–]\s*/, ''));
     }
   }
@@ -97,11 +103,12 @@ export function vacancyRequirements(description) {
 
 export function compareVacancyToResume(vacancy, resume, aliases) {
   aliases = new Map(aliases);
-  for (const skill of vacancy.skills ?? []) {
+  const technologySkills = (vacancy.skills ?? []).filter((skill) => !NON_TECH_SKILL.test(skill));
+  for (const skill of technologySkills) {
     if (skill.length > 1 && skill !== 'NPM' && !technologyMentions(skill, aliases).length) aliases.set(skill, [skill]);
   }
   const sections = vacancyRequirements(vacancy.description);
-  const explicit = [...vacancy.skills ?? [], ...sections.required].join('\n');
+  const explicit = [...technologySkills, ...sections.required].join('\n');
   const scope = explicit.trim() ? 'listed skills and requirements' : 'technologies mentioned in the description';
   const wanted = technologyMentions(explicit.trim() ? explicit : vacancy.description, aliases);
   const body = resumeText(resume);
@@ -119,7 +126,7 @@ export function compareVacancyToResume(vacancy, resume, aliases) {
       .filter((candidate) => candidate.similarity >= 0.8).sort((a, b) => b.similarity - a.similarity).slice(0, 3);
     return candidates.length ? [{ technology: item.canonical, candidates: candidates.map((candidate) => candidate.name) }] : [];
   });
-  return { scope, matched, missing, aliases: variants, similarNames, ambiguousNames: ambiguousTechnologyNames(explicit.trim() ? explicit : vacancy.description), total: wanted.length,
+  return { scope, matched, missing, aliases: variants, similarNames, otherSkills: (vacancy.skills ?? []).filter((skill) => NON_TECH_SKILL.test(skill)), ambiguousNames: ambiguousTechnologyNames(explicit.trim() ? explicit : vacancy.description), total: wanted.length,
     coverage: wanted.length ? Math.round(100 * matched.length / wanted.length) : null, ...sections };
 }
 
@@ -127,7 +134,7 @@ export function compareVacancyToResume(vacancy, resume, aliases) {
 export function withResumeVocabulary(aliases, resume) {
   const expanded = new Map(aliases);
   for (const name of collectStack(resume).all) {
-    if (name.length > 1 && name.length < 70 && name !== 'NPM' && !technologyMentions(name, aliases).length) expanded.set(name, [name]);
+    if (name.length > 1 && name.length < 70 && name !== 'NPM' && !NON_TECH_SKILL.test(name) && !technologyMentions(name, aliases).length) expanded.set(name, [name]);
   }
   return expanded;
 }

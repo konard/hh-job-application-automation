@@ -73,13 +73,25 @@ export async function discardUnchangedHhAbout(page, { resumeHash, expectedAbout 
 }
 
 /** Open only this CV's About field, check its current value, and leave Save to the owner. */
-export async function prepareHhAboutChange(page, change, { resumeHash }) {
+export async function openHhAboutEditor(page, { resumeHash }) {
   if (await hhCvFormOpen(page)) throw new Error('hh.ru: finish the existing CV draft before editing About');
   await page.goto(`https://hh.ru/resume/${encodeURIComponent(resumeHash)}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   if (await page.locator('input[name*="captcha"], [data-qa="account-login-form"]').count()) {
     throw new Error('hh.ru: the CV slot needs manual sign-in or CAPTCHA completion');
   }
+  // HH renders the button before hydration attaches its click handler. An earlier click can
+  // silently do nothing, leaving the alias updater waiting for an editor that never opens.
+  await page.waitForFunction(() => {
+    const button = document.querySelector('[data-qa="resume-edit-button-about"]');
+    const props = button?.[Object.keys(button).find((key) => key.startsWith('__reactProps$'))];
+    return button && !button.disabled && (props ? typeof props.onClick === 'function' : typeof button.onclick === 'function');
+  }, null, { timeout: 20000 });
   await page.locator('[data-qa="resume-edit-button-about"]').click();
+  await page.locator('textarea[data-qa="resume-editor-about"]').waitFor({ state: 'visible', timeout: 15000 });
+}
+
+export async function prepareHhAboutChange(page, change, { resumeHash }) {
+  await openHhAboutEditor(page, { resumeHash });
   return prefillHhAboutDraft(page, change, { resumeHash });
 }
 

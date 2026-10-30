@@ -874,7 +874,11 @@ function makeBackgroundRejections() {
 function readRejectionsAsTheyShow() {
   const timer = setInterval(async () => {
     try { await backgroundRejections.run({ includeTemplates: true }); }
-    catch (error) { console.log(`⚠️  Background rejections: ${error.message.split('\n')[0]}`); }
+    catch (error) {
+      // The page can close while a pass is reading it. The normal lifecycle watcher reopens
+      // the slot; reporting this as a failed rejection handler is misleading.
+      if (!page.isClosed()) console.log(`⚠️  Background rejections: ${error.message.split('\n')[0]}`);
+    }
     finally {
       seenUrl = page.isClosed() ? null : page.url();
     }

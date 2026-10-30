@@ -312,7 +312,7 @@ export async function latestResumeSearchUrl(commander, url, { knownResumes } = {
   const state = parseResumeState(resumeStateFromHtml(html ?? ''));
   const choice = state ? pickSearchResume(state.resumes, knownResumes ?? await loadApplicationResumes()) : { resume: undefined };
   if (!choice.resume) {
-    console.log('📄 Keeping the resume of the open search page: the resume list could not be read');
+    console.log('📄 Keeping the search URL: the resume list could not be read');
     return url;
   }
   console.log(describeChoice(choice, state.resumes.length));
@@ -321,7 +321,8 @@ export async function latestResumeSearchUrl(commander, url, { knownResumes } = {
   }
   const switched = new URL(url);
   switched.searchParams.set('resume', choice.resume.hash);
-  console.log('📄 The open search page showed another resume; switching, filters kept');
+  console.log(current ? '📄 The matching search used another resume; updating its URL, filters kept'
+    : '📄 Prepared the matching-search URL for the selected resume; the open form is unchanged');
   return switched.toString();
 }
 

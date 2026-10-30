@@ -166,8 +166,15 @@ function fixture() {
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
   const context = await browser.newContext();
+  let slowAboutButton = false;
   await context.route('**/*', (route) => route.fulfill({ contentType: 'text/html',
-    body: `<!doctype html><html lang="en"><main></main><script>(${fixture.toString()})()</script></html>` }));
+    body: `<!doctype html><html lang="en"><main></main><script>(${fixture.toString()})();${slowAboutButton ? `
+      const button = document.querySelector('[data-qa="resume-edit-button-about"]');
+      const onClick = button.onclick;
+      button.onclick = () => {};
+      button.__reactProps$fixture = {};
+      setTimeout(() => { button.__reactProps$fixture = { onClick }; button.onclick = onClick; }, 400);
+    ` : ''}</script></html>` }));
   const page = await context.newPage();
   // Inline-edit resumes can have Add buttons for unrelated sections and no View all link.
   await page.goto('https://hh.ru/resume/direct-add');
@@ -293,8 +300,10 @@ try {
   assert.equal((await readHhCvForm(page)).about, 'An unsaved edit.');
   await discardUnchangedHhAbout(page, { resumeHash: 'en', expectedAbout: 'An unsaved edit.' });
   assert.equal(await readHhCvForm(page), null);
+  slowAboutButton = true;
   const aliasDraft = await applyResumeAliases(page, { resume: { hash: 'en', title: 'Developer', keySkills: ['Go'], jobs: [] },
     aliases: [{ canonical: 'Go', spelling: 'Golang' }], catalog: new Map([['Go', ['Go', 'Golang']]]) });
+  slowAboutButton = false;
   assert.equal(aliasDraft.pending, true);
   assert.ok((await readHhCvForm(page)).about.includes('Go (Golang)'));
   assert.equal(await page.evaluate(() => window.saveCount), 0); // fresh fixture document, no Save

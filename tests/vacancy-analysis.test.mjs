@@ -2,7 +2,7 @@ import { describe, test, expect } from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { loadTechnologyAliases, technologyMentions, compareVacancyToResume, vacancyStatistics, vacancyRequirements, observedTechnologyNames } from '../src/vacancy-analysis.mjs';
+import { loadTechnologyAliases, technologyMentions, compareVacancyToResume, vacancyStatistics, vacancyRequirements, observedTechnologyNames, withResumeVocabulary } from '../src/vacancy-analysis.mjs';
 import { createVacancyCache } from '../src/vacancy-cache.mjs';
 import { createVacancyInsights } from '../src/vacancy-insights.mjs';
 import { planResumeAliases, createResumeAliasUpdater, ALIAS_HEADING } from '../src/resume-aliases.mjs';
@@ -27,6 +27,21 @@ describe('vacancy analysis', () => {
     expect(result.missing.map((item) => item.canonical).sort()).toEqual(['Python', 'SQL']);
     expect(result.total).toBe(2);
     expect(compareVacancyToResume({ skills: ['NovelDatabaseBrand'], description: '' }, resume, catalog).missing[0].canonical).toBe('NovelDatabaseBrand');
+  });
+  test('conversational Russian headings and inline preferences do not lose or overstate requirements', () => {
+    expect(vacancyRequirements('Твои задачи:\nРазработка API\nМы ждём от тебя:\nC# и SQL\nОпыт интеграции с СМЭВ (как преимущество)\nМы предлагаем:\nDocker-клуб'))
+      .toEqual({ required: ['C# и SQL'], preferred: ['Опыт интеграции с СМЭВ (как преимущество)'] });
+    expect(vacancyRequirements('Что мы ожидаем от вас:\nLinux\nВаши задачи:\nОбучение Docker'))
+      .toEqual({ required: ['Linux'], preferred: [] });
+  });
+  test('basic knowledge is not BASIC experience, and language/communication tags are not technology gaps', () => {
+    const vocabulary = withResumeVocabulary(catalog, { ...resume, keySkills: ['Basic'] });
+    expect(technologyMentions('basic knowledge of SQL, Basic understanding of Docker', vocabulary).map((item) => item.canonical))
+      .toEqual(['Docker', 'SQL']);
+    expect(technologyMentions('BASIC, Basic', vocabulary)).toEqual([{ canonical: 'Basic', spellings: ['BASIC', 'Basic'] }]);
+    const result = compareVacancyToResume({ skills: ['English — B1 — Intermediate', 'Деловая коммуникация', 'NovelDatabaseBrand'], description: '' }, resume, vocabulary);
+    expect(result.missing.map((item) => item.canonical)).toEqual(['NovelDatabaseBrand']);
+    expect(result.otherSkills).toEqual(['English — B1 — Intermediate', 'Деловая коммуникация']);
   });
   test('statistics count a technology once per vacancy, with spelling frequencies and missing résumé evidence', () => {
     const vacancies = [{ id: '1', status: 'applied', skills: ['JS', 'JavaScript', 'Postgres'], description: 'Requirements:\nSQL experience' },

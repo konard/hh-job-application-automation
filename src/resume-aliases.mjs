@@ -6,7 +6,7 @@ import { quoteLino, resumeToCv } from './cv.mjs';
 import { loadTechnologyAliases, observedTechnologyNames } from './vacancy-analysis.mjs';
 import { createVacancyCache } from './vacancy-cache.mjs';
 import { auditCvTechnologies } from './cv-technologies.mjs';
-import { prefillHhAboutDraft } from './hh-cv-editor.mjs';
+import { openHhAboutEditor, prefillHhAboutDraft } from './hh-cv-editor.mjs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openSlot } from './browser-slots.mjs';
@@ -23,10 +23,7 @@ export function planResumeAliases(resume, requested, catalog) {
 export async function applyResumeAliases(page, { resume, aliases, catalog, backup = async () => {} }) {
   const editor = page.locator('textarea[data-qa="resume-editor-about"]');
   if (await editor.count()) throw new Error('The résumé About editor already has an open draft; left for the user');
-  await page.goto(`https://hh.ru/resume/${resume.hash}`, { waitUntil: 'domcontentloaded' });
-  if (await page.locator('input[name*="captcha"], [data-qa="account-login-form"]').count()) throw new Error('The résumé slot needs manual sign-in or CAPTCHA completion');
-  await page.locator('[data-qa="resume-edit-button-about"]').click();
-  await editor.waitFor({ state: 'visible', timeout: 15000 });
+  await openHhAboutEditor(page, { resumeHash: resume.hash });
   const before = await editor.inputValue();
   const plan = planResumeAliases({ ...resume, about: before }, aliases, catalog);
   if (plan.about === before) {
