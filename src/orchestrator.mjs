@@ -279,6 +279,7 @@ export function createOrchestrator({
       commander,
       MESSAGE,
       selectApplicationResume,
+      readVacancy: vacancyInsights?.read,
       readQADatabase: qaDB.readQADatabase,
       addOrUpdateQA: qaDB.addOrUpdateQA,
       contacts,

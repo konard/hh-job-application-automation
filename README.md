@@ -83,7 +83,8 @@ applies to the vacancies hh.ru suggests for it. If no Russian CV is available, i
 
 Each application selects its own CV: dollar-denominated pay (USD, USDT or USDC) or English
 questions select the English version; Russian questions select the Russian version. Vacancy
-text decides when there are no questions. The app opens the full application form, checks the
+text decides when there are no questions, using the collected full description ahead of job titles
+or localized application labels. The app opens the full application form, checks the
 selected CV against local exports before sending. An already correct CV needs no chooser access;
 otherwise the app scrolls the chooser into view, selects it once at the start and verifies the
 resulting title or checked option without reopening the menu. Repeated form checks and worker restarts keep that choice and any
@@ -91,6 +92,12 @@ manual CV changes. A restart also preserves answers on an unfinished full applic
 The cover letter follows that language. This prevents a one-click application
 from sending HH.ru's default CV before the language check. Export both versions with
 `bun run cv -- export` first. `--no-auto-select-resume-language` disables this behavior.
+
+The vacancy is visited and collected before opening its application. Its full description, HTML,
+skills and requirements stay in the private `data/vacancies/<id>.lino` cache (excluded from git).
+An unfinished form restores this context after a restart, for CV language, currency and saved-answer
+matching. Recruiter chats and external form drafts also prefer the collected description over a new
+network request. Disabling collection still retains context in RAM for the current run.
 
 During the pause between applications, the app scrolls to the next unprocessed vacancy and logs
 its title. It stays on that card before opening the vacancy or application; previewing does not

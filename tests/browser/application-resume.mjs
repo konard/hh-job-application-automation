@@ -146,6 +146,19 @@ try {
   assert.deepEqual(await counts(), { opened: 2, chosen: 2 }, 'Different modal applications on one document each select once');
   await visibleChooser();
   await preserved();
+  await mount();
+  assert.equal((await select({ commander, vacancy: { description: 'We are looking for a backend engineer to develop our platform for international customers.' },
+    context: ['Разработчик, Москва. Отклик на вакансию. Сопроводительное письмо.'] })).hash, 'en1');
+  assert.deepEqual(await counts(), { opened: 1, chosen: 1 }, 'Collected English description selects English despite localized UI context');
+  await visibleChooser();
+  await preserved();
+
+  await mount({ selected: 'en1' });
+  assert.equal((await select({ commander, vacancy: { description: 'Ищем разработчика для развития продукта и поддержки наших сервисов.' },
+    context: ['Senior Software Engineer. Vacancy response. Covering letter. Send application.'] })).hash, 'ru1');
+  assert.deepEqual(await counts(), { opened: 1, chosen: 1 }, 'Collected Russian description selects Russian despite English UI context');
+  await visibleChooser();
+  await preserved();
   console.log('CV chooser checks passed: visible scrolling for changes, zero access for correct CVs, one switch per form, stationary retries, restarts, manual changes and failures; no submission or draft loss.');
 } finally {
   await browser.close();

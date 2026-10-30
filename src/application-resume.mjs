@@ -6,11 +6,14 @@ const TITLE = '[data-qa="resume-title"][data-hh-application-resume="true"]';
 const OPTION_LIST = '[data-qa="magritte-select-option-list"]';
 
 /** Only employer questions and vacancy text belong here, never the applicant's CV salary. */
-export function applicationResumeLanguage({ questions = [], context = [] } = {}) {
-  const text = [...questions, ...context].join('\n');
+export function applicationResumeLanguage({ questions = [], context = [], vacancy = null } = {}) {
+  const text = [...questions, vacancy?.salary ?? '', vacancy?.description ?? '', ...context].join('\n');
   if (/\bUSD[TC]?\b|\bdollars?\b|доллар|\$\s*\d|\d[\d\s.,]*\s*\$/iu.test(text)) return 'en';
   if (isClearlyEnglish(questions)) return 'en';
   if (/[а-яё]/iu.test(questions.join(' '))) return 'ru';
+  // The actual description is stronger evidence than a localized form or a short job title.
+  if (isClearlyEnglish([vacancy?.description ?? ''])) return 'en';
+  if (/[а-яё]/iu.test(vacancy?.description ?? '')) return 'ru';
   if (isClearlyEnglish(context)) return 'en';
   return /[а-яё]/iu.test(context.join(' ')) ? 'ru' : null;
 }
@@ -42,8 +45,8 @@ export function chooseApplicationResume(options, resumes, language) {
 
 export function createApplicationResumeSelector({ readResumes = loadApplicationResumes, log = console.log } = {}) {
   const pending = new Map();
-  return async ({ commander, questions = [], context = [], vacancyId }) => {
-    const language = applicationResumeLanguage({ questions, context });
+  return async ({ commander, questions = [], context = [], vacancyId, vacancy = null }) => {
+    const language = applicationResumeLanguage({ questions, context, vacancy });
     if (!language) return { ready: true, language: null };
     const read = () => commander.evaluate({ fn: readApplicationResumeChoices, args: [{ vacancyId }] });
     const initial = await read();
@@ -73,6 +76,7 @@ export function createApplicationResumeSelector({ readResumes = loadApplicationR
       const current = selectedResume(choices);
       if (current?.language === language) {
         if (choices.options.length) await click(TITLE);
+        log(`📄 Application CV already correct: ${language.toUpperCase()} · ${current.title} (${current.hash})`);
         return save({ ready: true, language, hash: current.hash });
       }
       // A manual correction can recover a failed check without reopening the chooser.

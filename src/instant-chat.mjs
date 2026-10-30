@@ -209,7 +209,7 @@ export function createInstantChat({
         buttonQuestions.add(normalizeQuestion(last.text));
       }
       const contexts = await loadAnswerContexts();
-      const known = [...vacancyContext(vacancyId), ...chatContextTexts(chat)];
+      const known = [...await vacancyContext(vacancyId), ...chatContextTexts(chat)];
       if (isReuseOffer(last.text)) {
         const inContexts = answersInContexts(readQADatabase, contexts);
         const compared = await compareReusedAnswers(chat.messages, (question) => inContexts(question, known));

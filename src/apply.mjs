@@ -37,6 +37,7 @@ import { createChatHistory } from './chat-history.mjs';
 import { learnChatQuestions, withChatHistoryAnswers } from './chat-learning.mjs';
 import { watchChats } from './chat-recording.mjs';
 import { createVacancyInsights } from './vacancy-insights.mjs';
+import { vacancyContextTexts } from './vacancy-context.mjs';
 import { createResumeAliasUpdater } from './resume-aliases.mjs';
 import { submissionRetries } from './submission-retries.mjs';
 import { watchVacancyFeedback } from './vacancy-feedback.mjs';
@@ -216,7 +217,8 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
       autoSend: argv.autoSendExactAnswers,
       autoReuse: argv.autoReuseAnswers,
       closePanel: () => closeChatPanel(commander),
-      vacancyContext: (vacancyId) => [vacancyFilters.card?.(vacancyId) ?? '', vacancyFilters.description?.(vacancyId) ?? ''],
+      vacancyContext: async (vacancyId) => [...vacancyContextTexts(await vacancyInsights.read(vacancyId)),
+        vacancyFilters.card?.(vacancyId) ?? '', vacancyFilters.description?.(vacancyId) ?? ''],
     }) : undefined,
     onApplicationSent: () => ++applicationsSent === argv.maxApplications &&
       shutdown(`Sent ${applicationsSent} application(s), the --max-applications limit`),
@@ -233,6 +235,7 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
       argv.askRejectionReason ? '--ask-rejection-reason' : '--no-ask-rejection-reason', `--rejection-reason-reply=${argv.rejectionReasonReply}`], {
       // Its own output straight into this log: through a pipe it came only when it exited
       stdio: ['ignore', 'inherit', 'inherit'],
+      env: { ...process.env, VACANCY_CACHE_DIR: argv.vacancyCacheDir },
     });
     chatProcess.on('exit', (code) => {
       chatProcess = null;

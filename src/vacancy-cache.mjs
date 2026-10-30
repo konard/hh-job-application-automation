@@ -5,7 +5,7 @@ import { Parser } from 'links-notation';
 import { quoteLino } from './cv.mjs';
 import { withFileLock } from './helpers/mutex.mjs';
 
-export const VACANCY_CACHE_DIR = path.join(process.cwd(), 'data/vacancies');
+export const VACANCY_CACHE_DIR = path.resolve(process.env.VACANCY_CACHE_DIR || path.join(process.cwd(), 'data/vacancies'));
 const lists = new Set(['skills', 'required', 'preferred']);
 
 export function createVacancyCache(directory = VACANCY_CACHE_DIR, { now = () => new Date() } = {}) {

@@ -4,12 +4,19 @@
  * (the top of a range), plus the user's comfortable rate, so a lower-paid application still goes
  * through every stage. The answer is short: the two sums, no calculation.
  *
- * The vacancy is read once from its public page (a plain request, no browser).
+ * The collected local description is preferred, including after a worker restart. A public-page
+ * request is only a fallback for vacancies not yet collected.
  *
  * @module vacancy-context
  */
 
 import { splitQuestions } from './multi-question.mjs';
+import { createVacancyCache } from './vacancy-cache.mjs';
+
+/** Employer-authored context, excluding application UI labels and the applicant's CV. */
+export const vacancyContextTexts = (vacancy) => [...new Set([
+  vacancy?.salary, vacancy?.title, vacancy?.description, ...(vacancy?.skills ?? []),
+].filter(Boolean))];
 
 /** A question about pay: salary, rate, income. A questionnaire is never just a salary field. */
 const PAY_QUESTION = /зарплат|оплат|ставк|доход|вознагражд|\bз\s?\/\s?п\b|salary|compensation|\brate\b|\bpay\b/i;
@@ -36,12 +43,16 @@ export function parseVacancyPage(html) {
  * @param {string} url - https://hh.ru/vacancy/<id>
  * @returns {Promise<{url: string, title: string, salary: string, description: string}|null>}
  */
-export async function fetchVacancy(url) {
+export async function fetchVacancy(url, { cache = createVacancyCache(), fetchPage = globalThis.fetch } = {}) {
   if (!url) {
     return null;
   }
   try {
-    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'ru' }, signal: globalThis.AbortSignal.timeout(20000) });
+    const parsed = new URL(url);
+    const id = /^(?:www\.)?hh\.ru$/i.test(parsed.hostname) && parsed.pathname.match(/^\/vacancy\/(\d+)\/?$/)?.[1];
+    const collected = id ? await cache.read(id).catch(() => null) : null;
+    if (collected?.description) return collected;
+    const response = await fetchPage(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'ru' }, signal: globalThis.AbortSignal.timeout(20000) });
     if (!response.ok) {
       return null;
     }

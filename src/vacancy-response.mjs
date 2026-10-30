@@ -35,6 +35,7 @@ import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs
 import { deferFailedSubmission, isPassingError, submissionRetries } from './submission-retries.mjs';
 import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft, saveApplicationDraft } from './application-drafts.mjs';
 import { alertUntilDone } from './notify.mjs';
+import { vacancyContextTexts } from './vacancy-context.mjs';
 import {
   dismissOverlays,
   findFirstSelector,
@@ -408,6 +409,7 @@ export async function handleVacancyResponsePage({
   commander,
   MESSAGE,
   selectApplicationResume = null,
+  readVacancy = async () => null,
   readQADatabase,
   addOrUpdateQA,
   contacts = {},
@@ -488,8 +490,11 @@ export async function handleVacancyResponsePage({
     if (await draftsAwaitReview()) return { status: 'awaiting_user' };
     const form = await readFormForFilters(commander);
     title = form.vacancy;
+    const vacancy = await readVacancy(vacancyId);
+    if (vacancy?.description) console.log(`📚 Vacancy ${vacancyId} context: collected description (${vacancy.description.length} characters), ${vacancy.skills?.length ?? 0} listed skill(s)`);
+    const description = vacancy?.description || vacancyFilters?.description?.(vacancyId) || '';
     // What the salary answers' currency is told by: the card, the description and the form's text
-    const salaryContext = [vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? '', form.page];
+    const salaryContext = [vacancy?.salary ?? '', vacancyFilters?.card?.(vacancyId) ?? '', ...vacancyContextTexts(vacancy), description, form.page];
 
     // Direct application vacancies are applied on the employer's site - skip them
     const direct = await checkAndCloseDirectApplicationModal({ commander });
@@ -499,7 +504,7 @@ export async function handleVacancyResponsePage({
     }
 
     // With the description when it was read on the vacancy list (vacancies.mjs)
-    const filterMatch = await vacancyFilters?.match({ ...form, description: vacancyFilters.description?.(vacancyId) ?? '' });
+    const filterMatch = await vacancyFilters?.match({ ...form, description });
     if (filterMatch) {
       console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)})`);
       await vacancyFilters.remember(vacancyId, filterMatch, { title });
@@ -507,8 +512,8 @@ export async function handleVacancyResponsePage({
       return;
     }
 
-    const selectedResume = await selectApplicationResume?.({ commander, vacancyId, questions: form.questions,
-      context: [form.vacancy, vacancyFilters?.card?.(vacancyId) ?? '', vacancyFilters?.description?.(vacancyId) ?? ''] });
+    const selectedResume = await selectApplicationResume?.({ commander, vacancyId, questions: form.questions, vacancy,
+      context: [...vacancyContextTexts(vacancy), form.vacancy, vacancyFilters?.card?.(vacancyId) ?? '', description] });
     if (selectedResume?.ready === false) {
       notifyForReview();
       return { status: 'awaiting_user' };

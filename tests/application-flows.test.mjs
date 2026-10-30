@@ -20,6 +20,10 @@ import { disableConfirmations } from '../src/confirmations.mjs';
 import { SELECTORS } from '../src/hh-selectors.mjs';
 import { LETTER_SELECTORS } from '../src/letter-attach.mjs';
 import { submissionRetries } from '../src/submission-retries.mjs';
+import { createVacancyCache } from '../src/vacancy-cache.mjs';
+import { createVacancyInsights } from '../src/vacancy-insights.mjs';
+import { applicationResumeLanguage } from '../src/application-resume.mjs';
+import { withContacts } from '../src/contacts.mjs';
 
 const SEARCH_URL = 'https://hh.ru/search/vacancy?resume=1';
 
@@ -327,7 +331,7 @@ function fakeForm({ questions = [], confirms = true, direct = false, withoutTest
       const index = Number(selector.match(/task_(\d+)/)?.[1] ?? -1);
       if (index >= 0) {
         state.questions[index].value = text;
-      }
+      } else state.letter = text;
       return { filled: true };
     },
     clickButton: async (options) => {
@@ -344,6 +348,28 @@ function fakeForm({ questions = [], confirms = true, direct = false, withoutTest
 const sends = (form) => form.state.clicks.filter(({ selector }) => selector === SELECTORS.submitButtonLetter);
 
 describe('full response form', () => {
+  test('a restarted form restores vacancy context for currency, CV and letter without the filters RAM maps', async () => {
+    disableConfirmations();
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'restarted-form-context-'));
+    try {
+      await createVacancyCache(directory).record({ id: '139100001', title: 'Backend Engineer', salary: '6000 USD',
+        description: 'We build a distributed platform with Go and PostgreSQL.', skills: ['Go', 'PostgreSQL'] });
+      const restarted = createVacancyInsights({ directory, log: () => {} });
+      const form = fakeForm({ questions: ['Ваши зарплатные ожидания?'] });
+      const db = withContacts({ readQADatabase: async () => new Map([['Ваши зарплатные ожидания?', 'От {{salary_net}} в месяц на руки.']]) },
+        { salary_net: '450 000 ₽', salary_net_usd: '$6 000' });
+      let selected;
+      await handleVacancyResponsePage({ commander: form, MESSAGE: { ru: 'Здравствуйте', en: 'Hello, my English letter.' },
+        readQADatabase: db.readQADatabase, addOrUpdateQA: async () => {}, readVacancy: restarted.read,
+        selectApplicationResume: async (options) => { selected = { ready: true, language: applicationResumeLanguage(options) }; return selected; },
+        returnUrl: SEARCH_URL, autoSendExact: true });
+      assert.equal(selected.language, 'en');
+      assert.equal(form.state.letter, 'Hello, my English letter.');
+      assert.equal(form.state.questions[0].value, 'От $6 000 в месяц на руки.');
+      assert.equal(sends(form).length, 1);
+    } finally { await fs.rm(directory, { recursive: true, force: true }); }
+  });
+
   test('a ready cover-letter form sends promptly and keeps confirmation checks', async () => {
     disableConfirmations();
     const form = fakeForm();

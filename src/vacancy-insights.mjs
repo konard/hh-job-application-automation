@@ -26,8 +26,11 @@ export function readVacancyDetails() {
 export function createVacancyInsights({ enabled = true, collect = true, compare = true, update = true,
   directory, resumeFile = path.join(process.cwd(), 'data/resume/resume.json'), updateAliases, log = console.log } = {}) {
   const cache = createVacancyCache(directory);
+  const collected = new Map();
   return {
     enabled: enabled && (collect || compare || update), cache,
+    // Independent of the filters' RAM maps, so an open form can recover its context on restart.
+    read: async (id) => /^\d+$/.test(String(id)) ? collected.get(String(id)) ?? await cache.read(id) : null,
     async visit({ commander, vacancyId, returnUrl }) {
       const url = `https://hh.ru/vacancy/${vacancyId}`;
       log(`📖 Reading the full vacancy before applying: ${url}`);
@@ -36,6 +39,7 @@ export function createVacancyInsights({ enabled = true, collect = true, compare 
         await commander.waitForSelector({ selector: '[data-qa="vacancy-description"]', timeout: 20000 });
         const vacancy = await commander.evaluate({ fn: readVacancyDetails });
         if (vacancy.id !== String(vacancyId) || !vacancy.description) throw new Error('The full vacancy description was not loaded');
+        collected.set(String(vacancyId), vacancy);
         const sections = vacancyRequirements(vacancy.description);
         if (collect) await cache.record({ ...vacancy, ...sections, status: 'encountered' });
         if (compare || update) {

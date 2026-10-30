@@ -20,6 +20,14 @@ describe('per-application CV language', () => {
   test('English vacancy text selects English without a questionnaire', () => {
     assert.equal(applicationResumeLanguage({ context: ['We are looking for a senior backend engineer to develop our platform.'] }), 'en');
   });
+  test('the collected description outweighs localized UI text and an ambiguous job title', () => {
+    assert.equal(applicationResumeLanguage({ context: ['Разработчик, Москва. Отклик на вакансию. Сопроводительное письмо.'],
+      vacancy: { title: 'Разработчик', description: 'We are looking for a backend engineer to develop our platform and work with international customers.' } }), 'en');
+    assert.equal(applicationResumeLanguage({ context: ['Senior Software Engineer. Vacancy response. Covering letter. Send application.'],
+      vacancy: { title: 'Senior Software Engineer', description: 'Ищем разработчика для развития продукта и поддержки наших сервисов.' } }), 'ru');
+    assert.equal(applicationResumeLanguage({ questions: ['Какой у вас опыт работы?'],
+      vacancy: { salary: '$6,000 monthly', description: 'Ищем разработчика.' } }), 'en');
+  });
   test('CV language comes from the export rather than the job title or option position', () => {
     const options = [{ hash: 'ru1', title: 'Senior Developer', checked: true },
       { hash: 'en1', title: 'Senior Developer', checked: false }];

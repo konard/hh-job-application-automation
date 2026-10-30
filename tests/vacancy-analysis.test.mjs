@@ -114,6 +114,9 @@ test('the full vacancy is visited, collected and compared before returning to th
     await insights.visit({ commander, vacancyId: '123', returnUrl: url });
     expect(visits).toEqual(['https://hh.ru/vacancy/123', 'https://hh.ru/search/vacancy?resume=resume1']);
     expect((await insights.cache.read('123')).description).toBe('Requirements:\nGolang');
+    const restarted = createVacancyInsights({ directory: path.join(dir, 'cache'), log: () => {} });
+    expect((await restarted.read('123')).description).toBe('Requirements:\nGolang');
+    expect(await restarted.read(null)).toBe(null);
     expect(reports.some((line) => line.includes('Technology coverage: 1/1 (100%)'))).toBe(true);
     expect(updates[0].aliases[0].spelling).toBe('Golang');
     // A different CV may be the latest root export while the search uses Russian.
@@ -126,6 +129,8 @@ test('the full vacancy is visited, collected and compared before returning to th
     expect(createVacancyInsights({ enabled: false }).enabled).toBe(false);
     const noCache = createVacancyInsights({ collect: false, compare: false, update: false, directory: path.join(dir, 'disabled') });
     expect(noCache.enabled).toBe(false);
+    await noCache.visit({ commander, vacancyId: '123', returnUrl: url });
+    expect((await noCache.read('123')).description).toBe('Requirements:\nGolang');
     const disabledExists = await fs.stat(path.join(dir, 'disabled')).then(() => true, () => false);
     expect(disabledExists).toBe(false);
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
