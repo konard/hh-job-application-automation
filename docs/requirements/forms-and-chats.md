@@ -9,6 +9,23 @@ Part of [the full list of requirements](README.md).
 
 Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 in progress · ⬜ to do
 
+## Daily application limit
+
+The 200-applications-per-24-hours server refusal is an account-wide pause, wherever it appears:
+full application forms, popups, standalone alerts, the no-test action and native manual submission.
+Before waiting, save all answers and a recovery copy including the cover letter. Keep the failed
+form open, continue chats with the configured notification settings, and block automatic
+application routes across restarts. A daily-limit pause must cancel existing attention reminders
+for the application window and show no recurring notifications: the user cannot resolve the
+server limit. Actionable chats and other browser slots retain their notifications, and application
+alerts become available again when the pause ends. Repeated observations must not extend the original two-hour
+deadline. Refresh and restore the failed application after expiry; a fresh server refusal starts
+another pause. Never count the refusal as success, a skipped vacancy or a generic five-hour RAM
+retry. Hidden stale banners, unrelated rate limits and character-count validation do not qualify.
+
+Verification: `tests/application-limits.test.mjs`, `tests/browser/application-limits.mjs`,
+`tests/popup-application.test.mjs`, `tests/pacing.test.mjs` and `tests/notify.test.mjs`.
+
 ## The user's words
 
 1. «Set by default, that we auto fill the vacancy form with questions and auto submit it only if

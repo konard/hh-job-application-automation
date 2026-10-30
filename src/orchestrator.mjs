@@ -23,7 +23,7 @@ import { resolveApplicationStart } from './resumes.mjs';
 import { checkpoint } from './tracing.mjs';
 import { URL_PATTERNS, extractVacancyId, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
-import { isInteractive, waitForUser } from './confirmations.mjs';
+import { isInteractive, waitForUser, withdrawPrompt } from './confirmations.mjs';
 import { ADAPTIVE_PACE, PACING_POLICY_VERSION, adaptivePace, limitHeldUntil, nextVacancyAt, pacingResetNeeded } from './pacing.mjs';
 import { paceLine, readEvents, recordEvent } from './stats.mjs';
 import { noteSkip } from './skipped-vacancies.mjs';
@@ -32,6 +32,8 @@ import { coverLetterFor } from './cover-letter.mjs';
 import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
 import { createApplicationResumeSelector } from './application-resume.mjs';
 import { completeApplicationDraft } from './application-drafts.mjs';
+import { prepareApplicationLimit, waitForApplicationLimit } from './application-limits.mjs';
+import { silenceAlertsUntil } from './notify.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -52,6 +54,7 @@ const PAGE_READY_TIMEOUT = 120000;
  */
 export function createOrchestrator({
   commander, page, argv, qaDB, contacts = {}, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, vacancyInsights = null, onPageClosed,
+  getEvents = readEvents,
   onApplicationSent = async () => {},
   answerInstantChat = async () => {},
 }) {
@@ -60,12 +63,12 @@ export function createOrchestrator({
   const selectApplicationResume = argv.autoSelectResumeLanguage !== false ? createApplicationResumeSelector() : null;
   // A fixed pace when --job-application-interval is given, else the adaptive one (pacing.mjs)
   const FIXED_INTERVAL_MS = argv.jobApplicationInterval > 0 ? argv.jobApplicationInterval * 1000 : null;
-  const intervalNow = () => FIXED_INTERVAL_MS ?? adaptivePace(readEvents()).intervalMs;
+  const intervalNow = () => FIXED_INTERVAL_MS ?? adaptivePace(getEvents()).intervalMs;
   if (FIXED_INTERVAL_MS === null) {
-    if (pacingResetNeeded(readEvents())) {
+    if (pacingResetNeeded(getEvents())) {
       recordEvent('pacing_reset', { intervalMs: ADAPTIVE_PACE.startMs, policyVersion: PACING_POLICY_VERSION });
     }
-    console.log(paceLine(readEvents()));
+    console.log(paceLine(getEvents()));
   }
 
   let pageClosedByUser = false;
@@ -101,12 +104,13 @@ export function createOrchestrator({
   const sentVacancyIds = new Set();
   // The next application waits until then, so the load on hh.ru stays low; after hh.ru's daily
   // limit (of this run or one before) until the cooldown is over
-  const dailyLimitUntil = limitHeldUntil(readEvents());
+  const dailyLimitUntil = limitHeldUntil(getEvents());
   // A controlled diagnostic reload must not shorten a pause already scheduled by the worker.
   const handedOffAt = Number(process.env.HH_NEXT_APPLICATION_AT_HANDOFF);
   delete process.env.HH_NEXT_APPLICATION_AT_HANDOFF;
   let nextApplicationAt = Math.max(dailyLimitUntil, Number.isFinite(handedOffAt) ? handedOffAt : 0);
   if (dailyLimitUntil > 0) {
+    silenceAlertsUntil({ port: argv.browserPort, until: dailyLimitUntil });
     console.log(`💤 hh.ru's daily limit was reached: no vacancy is opened until ${new Date(dailyLimitUntil).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
   } else if (nextApplicationAt > Date.now()) {
     console.log(`♻️  Preserved the application pause during code reload until ${new Date(nextApplicationAt).toISOString()}`);
@@ -118,6 +122,31 @@ export function createOrchestrator({
   // The chat of the application just sent, answered before anything else happens on the page
   let followUp = null;
   let plannedVacancy = null;
+  let dailyLimitRecovery = null;
+
+  async function recoverDailyLimit(limit) {
+    nextApplicationAt = Math.max(nextApplicationAt, limit.until);
+    silenceAlertsUntil({ port: argv.browserPort, until: limit.until });
+    if (dailyLimitRecovery) return dailyLimitRecovery;
+    const operation = (async () => {
+      console.log(`💤 Daily application limit: submissions paused until ${new Date(limit.until).toISOString()}. The current form is preserved; chats continue.`);
+      withdrawPrompt('hh.ru reached its daily application limit; answers are saved and submissions are paused');
+      const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
+      let resumed;
+      try {
+        resumed = await waitForApplicationLimit({ commander, limit, isPageClosed: getPageClosedByUser,
+          saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
+      } finally { await stopSaving(); }
+      handledResponseUrl = null;
+      if (resumed) console.log('♻️  Daily-limit cooldown finished; resuming the saved application.');
+      return resumed;
+    })().catch((error) => {
+      if (error.expectedNavigation || commander.isActionStoppedError?.(error)) return;
+      throw error;
+    }).finally(() => { if (dailyLimitRecovery === operation) dailyLimitRecovery = null; });
+    dailyLimitRecovery = operation;
+    return operation;
+  }
 
   /**
    * Schedule the next vacancy (see pacing.mjs), so the load on hh.ru stays low
@@ -243,6 +272,11 @@ export function createOrchestrator({
    * Wait until the next application may be sent
    */
   async function waitForApplicationSlot() {
+    const held = limitHeldUntil(getEvents());
+    if (held > Date.now()) {
+      await commander.wait({ ms: Math.min(30000, held - Date.now()), reason: 'daily application limit cooldown' });
+      return;
+    }
     // Preview during the pause, before reading the vacancy or opening an application.
     // A five-hour retry which will be due takes priority over a new search card.
     if (!submissionRetries.ids().some((id) => submissionRetries.get(id).until <= nextApplicationAt)) {
@@ -275,6 +309,16 @@ export function createOrchestrator({
   };
   const runVacancyResponseHandler = async () => {
     const formUrl = commander.getUrl();
+    const held = limitHeldUntil(getEvents());
+    if (held > Date.now()) {
+      const visible = await prepareApplicationLimit({ commander,
+        saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
+      await recoverDailyLimit(visible ?? { until: held, visible: false });
+      if (commander.getUrl() !== formUrl || pageClosedByUser || limitHeldUntil(getEvents()) > Date.now()) {
+        handledResponseUrl = null;
+        return;
+      }
+    }
     const result = await handleVacancyResponsePage({
       commander,
       MESSAGE,
@@ -297,17 +341,42 @@ export function createOrchestrator({
       retrySubmission: retryingVacancyId !== null && extractVacancyIdFromResponseUrl(commander.getUrl()) === retryingVacancyId,
       verbose: argv.verbose,
     });
+    if (result?.status === 'daily_limit') {
+      await recoverDailyLimit(result);
+      handledResponseUrl = null;
+      return;
+    }
+    if (result?.status === 'interrupted') {
+      handledResponseUrl = null;
+      return;
+    }
     if (result?.status !== 'awaiting_user' || commander.getUrl() !== formUrl) return;
     console.log('⏸️  Waiting for your review and manual Send; answers continue to be saved.');
     const outcome = await waitForManualResponse({ commander, formUrl, isPageClosed: getPageClosedByUser });
+    if (outcome === 'interrupted') {
+      handledResponseUrl = null;
+      return;
+    }
+    if (outcome === 'daily_limit') {
+      const limit = await prepareApplicationLimit({ commander,
+        saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
+      if (limit) await recoverDailyLimit(limit);
+      handledResponseUrl = null;
+      return;
+    }
     if (outcome === 'submitted') {
       await afterApplicationSent(extractVacancyIdFromResponseUrl(formUrl));
       if (commander.getUrl() === formUrl) await commander.goto({ url: lastSearchPageUrl, waitForStableUrlBefore: false });
     }
   };
 
-  const deferVisibleSubmissionError = () => deferFailedSubmission({ commander, returnUrl: lastSearchPageUrl,
-    saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
+  const deferVisibleSubmissionError = async () => {
+    const limit = await prepareApplicationLimit({ commander,
+      saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
+    if (limit) { await recoverDailyLimit(limit); return true; }
+    return deferFailedSubmission({ commander, returnUrl: lastSearchPageUrl,
+      saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
+  };
 
   /**
    * Handle one result of findAndProcessVacancyButton
@@ -334,7 +403,11 @@ export function createOrchestrator({
     }
     case 'limit_error':
     case 'limit_error_after_submit':
-      await handleLimitError({ commander, START_URL });
+      {
+        const limit = result.limit ?? await handleLimitError({ commander, vacancyId: result.vacancyId,
+          saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }) });
+        if (limit) await recoverDailyLimit(limit);
+      }
       return true;
     case 'direct_application_skipped':
       await commander.wait({ ms: 1000, reason: 'brief pause after skipping direct application' });
@@ -420,13 +493,20 @@ export function createOrchestrator({
       process.on('exit', cleanupTriggers);
 
       // A native send can fail while the handler is still waiting for confirmation on stdin.
+      let inspectingError = false;
       const submissionErrors = setInterval(() => {
-        deferVisibleSubmissionError().catch((error) => console.log(`⚠️  Could not defer failed application: ${error.message}`));
+        if (inspectingError || dailyLimitRecovery) return;
+        inspectingError = true;
+        deferVisibleSubmissionError().catch((error) => {
+          if (error.expectedNavigation || pageClosedByUser || commander.isActionStoppedError?.(error)) {
+            log.debug(() => `Application error check interrupted by navigation: ${error.message}`);
+          } else console.log(`⚠️  Could not defer failed application: ${error.message}`);
+        }).finally(() => { inspectingError = false; });
       }, 1000);
       submissionErrors.unref();
       process.once('exit', () => clearInterval(submissionErrors));
 
-      if (!start.preserveCurrentForm) await attachPendingLetters();
+      if (!start.preserveCurrentForm && !limitHeldUntil(getEvents())) await attachPendingLetters();
       await this.runMainLoop();
     },
 
@@ -435,6 +515,7 @@ export function createOrchestrator({
      */
     async runMainLoop() {
       while (!pageClosedByUser) {
+        nextApplicationAt = Math.max(nextApplicationAt, limitHeldUntil(getEvents()));
         if (stopError) {
           throw stopError;
         }
@@ -453,6 +534,11 @@ export function createOrchestrator({
           log.debug(() => 'Page is loading, waiting for it to be fully ready...');
           await waitForPageReady('ensuring page is ready before automation');
           log.debug(() => `Page ready: ${commander.getUrl()}`);
+          continue;
+        }
+        if (URL_PATTERNS.vacancyResponse.test(commander.getUrl()) && handledResponseUrl !== commander.getUrl()) {
+          const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
+          try { await vacancyResponseHandler(); } finally { await stopSaving(); }
           continue;
         }
 

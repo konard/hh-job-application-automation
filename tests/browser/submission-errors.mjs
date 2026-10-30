@@ -10,6 +10,9 @@ import { saveQAPairs } from '../../src/vacancy-response.mjs';
 import { createSubmissionRetries, deferFailedSubmission, readSubmissionError, SUBMISSION_RETRY_MS } from '../../src/submission-retries.mjs';
 import { readApplicationDraft, restoreApplicationDraft, saveApplicationDraft } from '../../src/application-drafts.mjs';
 
+process.env.NODE_ENV = 'test';
+process.env.NOTIFY = '0';
+
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'failed-form-browser-'));
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {

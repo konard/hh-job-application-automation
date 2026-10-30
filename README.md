@@ -162,6 +162,16 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
   out from `logs/stats.jsonl`, so it carries over restarts; `bun run stats` shows it and the
   captchas per 100 applications at each pace. `--job-application-interval <seconds>` sets a fixed
   pace instead. The revised policy starts once at 2 minutes, retaining older statistics.
+- **Daily application limit** - a visible `negotiations-limit-exceeded` error (200 responses per
+  rolling 24 hours) pauses all application routes for two hours, including after a restart.
+  Full forms, popups, the no-test button, manual submissions and standalone limit alerts use
+  the same handling. Answers and the cover letter are backed up before the pause; the current
+  form stays open and chats continue. Repeated checks reuse the original deadline. The
+  application window's attention reminders are silent throughout the pause, including ones
+  already displayed; actionable chat notifications keep working. After expiry
+  the failed form is refreshed and its answers restored before retrying. This is an account-wide
+  pause, never a successful application or a five-hour per-vacancy RAM skip. A fresh server
+  refusal starts another pause; hidden banners and unrelated errors do not.
 - **One tab** - the automation browser keeps a single tab: when a run attaches, every other
   tab is closed (the tab the automation used last is kept, else an hh.ru one), and tabs opened
   during the run are closed as they appear. Turn it off with `--no-single-tab`.

@@ -2,7 +2,7 @@ import { describe, test, assert } from 'test-anywhere';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUntilDone, alertUser, browserWindowActive, focusActive, notificationSoundEnabled, prepareAlerts, readNotifierOutput } from '../src/notify.mjs';
+import { ALERT_TEXT, WINDOW_SCRIPT, alertNeeded, alertsEnabled, alertUntilDone, alertUser, browserWindowActive, focusActive, notificationSoundEnabled, prepareAlerts, readNotifierOutput, silenceAlertsUntil } from '../src/notify.mjs';
 
 function alertRuntime() {
   const pending = new Map(), displays = [], focused = [];
@@ -87,6 +87,33 @@ describe('visual notification delivery and cleanup', () => {
     done = false; alertUntilDone(owner, options);
     assert.equal(started, 2);
     url = 'https://hh.ru/search/vacancy'; await tick(); assert.equal(stopped, 2);
+  });
+
+  test('a daily limit dismisses existing reminders and prevents new ones only in the held window', async () => {
+    const main = alertRuntime(), chat = alertRuntime();
+    const end = alertUser({ port: 9571, log: () => {} }, main.runtime);
+    main.tick();
+    const release = silenceAlertsUntil({ port: 9571, until: Date.now() + 60000 });
+    assert.equal(main.removed(), 1);
+    assert.equal(main.pending.size, 0);
+    const blocked = alertUser({ port: 9571, log: () => {} }, main.runtime);
+    assert.equal(main.pending.size, 0);
+    let reviewStarted = false;
+    alertUntilDone({ getUrl: () => 'held form' }, { port: 9571, alert: () => { reviewStarted = true; } });
+    assert.equal(reviewStarted, false);
+    const endChat = alertUser({ port: 9572, log: () => {} }, chat.runtime);
+    chat.tick();
+    assert.equal(chat.displays.length, 1, 'Actionable chats continue to notify');
+    endChat(); blocked(); end(); release();
+    const resumed = alertUser({ port: 9571, log: () => {} }, main.runtime);
+    main.tick();
+    assert.equal(main.displays.length, 2);
+    resumed();
+    const expired = silenceAlertsUntil({ port: 9571, until: Date.now() - 1 });
+    const afterExpiry = alertUser({ port: 9571, log: () => {} }, main.runtime);
+    main.tick();
+    assert.equal(main.displays.length, 3, 'Notifications resume automatically after the deadline');
+    afterExpiry(); expired();
   });
 });
 

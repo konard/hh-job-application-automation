@@ -13,15 +13,15 @@ export const DAILY_APPLICATION_LIMIT = 200;
 export const LIMIT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 /**
- * Until when the daily limit holds: the latest limit_reached event plus LIMIT_COOLDOWN_MS (so a
- * restarted run waits too); 0 when it is over
+ * Until when the daily limit holds: the explicit deadline of the latest limit_reached event,
+ * or its time plus LIMIT_COOLDOWN_MS for older records. Restarts preserve the hold; 0 once over.
  * @param {Array<Object>} events - Of stats.mjs
  * @param {number} [now=Date.now()]
  * @returns {number} Milliseconds since the epoch, or 0
  */
 export function limitHeldUntil(events, now = Date.now()) {
   const last = events.filter((event) => event.type === 'limit_reached').at(-1);
-  const until = last ? Date.parse(last.at) + LIMIT_COOLDOWN_MS : 0;
+  const until = last ? (Number.isFinite(last.until) ? last.until : Date.parse(last.at) + LIMIT_COOLDOWN_MS) : 0;
   return until > now ? until : 0;
 }
 

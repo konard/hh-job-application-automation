@@ -242,6 +242,24 @@ export async function focusBrowser(port) {
 const shown = new Set();
 process.on('exit', () => shown.forEach((stop) => stop()));
 const activeAlerts = new Map();
+const alertHolds = new Map();
+function alertsHeld(port) {
+  const hold = alertHolds.get(port);
+  if (hold?.until > Date.now()) return true;
+  if (hold) alertHolds.delete(port);
+  return false;
+}
+
+/** An account cooldown is not actionable. Dismiss existing reminders for that window too. */
+export function silenceAlertsUntil({ port = MAIN_PORT, until }) {
+  const hold = { until: Math.max(until, alertHolds.get(port)?.until ?? 0) };
+  alertHolds.set(port, hold);
+  const active = activeAlerts.get(port);
+  active?.end();
+  if (activeAlerts.get(port) === active) activeAlerts.delete(port);
+  return () => { if (alertHolds.get(port) === hold) alertHolds.delete(port); };
+}
+
 function retainAlert(shared) {
   shared.users++;
   let ended = false;
@@ -250,7 +268,7 @@ function retainAlert(shared) {
     ended = true;
     if (--shared.users === 0) {
       shared.end();
-      activeAlerts.delete(shared.port);
+      if (activeAlerts.get(shared.port) === shared) activeAlerts.delete(shared.port);
     }
   };
 }
@@ -341,7 +359,7 @@ function postNotification({ text, pid, onAnswer, log }) {
  */
 export function alertUser({ delayMs = 0, port = MAIN_PORT, remindMs = REMIND_MS, message = ALERT_TEXT, log = console.log } = {}, runtime = {}) {
   const enabled = runtime.enabled ?? alertsEnabled;
-  if (!enabled()) {
+  if (!enabled() || alertsHeld(port)) {
     return () => {};
   }
   if (activeAlerts.has(port)) return retainAlert(activeAlerts.get(port));
@@ -410,6 +428,7 @@ const attention = new WeakMap();
 export function alertUntilDone(owner, { port = MAIN_PORT, getUrl = () => owner.getUrl?.() ?? owner.url(),
   isDone = async () => false, alert = alertUser, pollMs = 1000, message,
   every = setInterval, cancel = clearInterval } = {}) {
+  if (alertsHeld(port)) { attention.get(owner)?.stop(); return () => {}; }
   if (alert === alertUser && !alertsEnabled()) return () => {};
   const url = getUrl();
   const previous = attention.get(owner);
@@ -429,7 +448,7 @@ export function alertUntilDone(owner, { port = MAIN_PORT, getUrl = () => owner.g
   timer = every(async () => {
     if (checking || ended) return;
     checking = true;
-    try { if (getUrl() !== url || await isDone()) stop(); }
+    try { if (alertsHeld(port) || getUrl() !== url || await isDone()) stop(); }
     catch { stop(); }
     finally { checking = false; }
   }, pollMs);

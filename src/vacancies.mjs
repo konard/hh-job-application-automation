@@ -16,7 +16,7 @@ import { clickButtonWhenReady, clickWasNotDispatched, ensureCoverLetterVisible, 
 import { SELECTORS, URL_PATTERNS, extractVacancyId } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { recordEvent } from './stats.mjs';
-import { LIMIT_COOLDOWN_MS } from './pacing.mjs';
+import { prepareApplicationLimit, readApplicationLimit } from './application-limits.mjs';
 import { coverLetterFor, fillCoverLetter } from './cover-letter.mjs';
 import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
@@ -26,19 +26,10 @@ export { isPassingError } from './submission-retries.mjs';
 
 /**
  * Handle limit error when detected
- * Closes modal, waits LIMIT_COOLDOWN_MS (2 hours), and refreshes the page
+ * Preserve the failed form and record the account-wide pause; the orchestrator waits.
  */
-export async function handleLimitError({ commander, START_URL }) {
-  console.log('⚠️  Limit reached: 200 applications in 24 hours');
-  recordEvent('limit_reached');
-  const until = new Date(Date.now() + LIMIT_COOLDOWN_MS).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  console.log(`💤 Waiting ${LIMIT_COOLDOWN_MS / 3600000} hours before retrying (until ${until})...`);
-
-  await closeModalIfPresent({ commander });
-  await commander.wait({ ms: LIMIT_COOLDOWN_MS, reason: `200 application limit cooldown (${LIMIT_COOLDOWN_MS / 3600000} hours)` });
-
-  console.log('🔄 Refreshing the page after wait period...');
-  await commander.goto({ url: START_URL });
+export async function handleLimitError(options) {
+  return prepareApplicationLimit(options);
 }
 
 /**
@@ -86,6 +77,9 @@ async function waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQ
       if (isFullFormOpened(commander)) {
         return FULL_FORM_OPENED;
       }
+      const limit = await prepareApplicationLimit({ commander, vacancyId,
+        saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) });
+      if (limit) return { success: false, reason: 'limit_reached', limit };
       if (addOrUpdateQA) {
         await saveMarkedQAPairs({ commander, addOrUpdateQA });
       }
@@ -136,6 +130,9 @@ export async function processModalApplication({
   if (isFullFormOpened(commander)) {
     return FULL_FORM_OPENED;
   }
+  const initialLimit = await prepareApplicationLimit({ commander, vacancyId,
+    saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) });
+  if (initialLimit) return { success: false, reason: 'limit_reached', limit: initialLimit };
   if (await deferFailedSubmission({ commander, vacancyId, title,
     saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) {
     return { success: false, reason: 'submission_error_handled' };
@@ -345,6 +342,8 @@ export async function processModalApplication({
   }
   // The answers go with the application, so they are saved, like the full form's
   await saveAll();
+  const beforeSendLimit = await prepareApplicationLimit({ commander, vacancyId, saveAnswers: saveAll });
+  if (beforeSendLimit) return { success: false, reason: 'limit_reached', limit: beforeSendLimit };
   try {
     const clicked = await clickButtonWhenReady(commander, { selector: submitButtonSelector, scrollIntoView: true, smoothScroll: true, timeout: 10000, autoSend });
     if (clickWasNotDispatched(clicked)) {
@@ -364,6 +363,8 @@ export async function processModalApplication({
   }
 
   await commander.wait({ ms: 2000, reason: 'modal to close after submission' });
+  const submittedLimit = await prepareApplicationLimit({ commander, vacancyId, saveAnswers: saveAll });
+  if (submittedLimit) return { success: false, reason: 'limit_reached', limit: submittedLimit };
   const confirmed = !vacancyId || await isVacancyCardResponded({ commander, vacancyId });
   if (!confirmed && await deferFailedSubmission({ commander, vacancyId, title, saveAnswers: saveAll })) {
     return { success: false, reason: 'submission_error_handled' };
@@ -736,10 +737,10 @@ async function handlePostClickNavigation({ commander, waitForUrlCondition, START
 }
 
 /**
- * Count limit error popups (200 applications in 24 hours)
+ * Read rendered daily-limit errors, excluding hidden templates.
  */
 async function hasLimitError({ commander }) {
-  return await commander.count({ selector: SELECTORS.limitExceededError }) > 0;
+  return Boolean(await readApplicationLimit(commander));
 }
 
 /**
@@ -747,10 +748,11 @@ async function hasLimitError({ commander }) {
  * application at the click itself (no popup): the card then says so at once, and there is no wait
  * @returns {Promise<{appeared: boolean, sentAtOnce?: boolean, offer?: string|null, limitError?: boolean, directApplication?: boolean, url?: string, status?: string}>}
  */
-async function waitForApplicationModal({ commander, vacancyId = null }) {
+export async function waitForApplicationModal({ commander, vacancyId = null }) {
   let appeared = false;
   // About 10 s
   for (let tries = 0; tries < 33; tries++) {
+    if (await hasLimitError({ commander })) return { appeared, limitError: true, status: 'limit_error' };
     if (await commander.count({ selector: SELECTORS.applicationForm }).catch(() => 0) > 0) {
       appeared = true;
       break;
@@ -774,14 +776,13 @@ async function waitForApplicationModal({ commander, vacancyId = null }) {
     return { appeared, directApplication: true, url: direct.url, status: 'direct_application' };
   }
 
+  if (await hasLimitError({ commander })) {
+    return { appeared, limitError: true, status: 'limit_error' };
+  }
   if (!appeared) {
     console.log('⚠️  Modal did not appear within timeout. This may be a different type of vacancy response.');
     console.log('💡 Skipping this button and moving to the next one...');
     return { appeared, status: 'modal_timeout' };
-  }
-
-  if (await hasLimitError({ commander })) {
-    return { appeared, limitError: true, status: 'limit_error' };
   }
 
   return { appeared };
@@ -923,7 +924,7 @@ export async function findAndProcessVacancyButton({
     // Nothing was sent: the vacancy is opened again after the cooldown
     processedVacancyIds.delete(vacancyId);
   }
-  if (!modalResult.appeared) {
+  if (!modalResult.appeared && !modalResult.limitError) {
     await noteSkip(skippedVacancies, vacancyId, { reason: 'modal_timeout', title });
   }
   if (!modalResult.appeared || modalResult.limitError) {
@@ -973,7 +974,7 @@ export async function findAndProcessVacancyButton({
   if (submitResult.reason === 'limit_reached') {
     // Nothing was sent: the vacancy is opened again after the cooldown
     processedVacancyIds.delete(vacancyId);
-    return { status: 'limit_error_after_submit', vacancyId };
+    return { status: 'limit_error_after_submit', vacancyId, limit: submitResult.limit };
   }
   if (!submitResult.success) {
     return { status: 'modal_processing_failed', reason: submitResult.reason, vacancyId };

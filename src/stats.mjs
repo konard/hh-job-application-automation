@@ -13,7 +13,7 @@
  *   pacing_reset      {intervalMs}           the adaptive pace starts again from here (pacing.mjs)
  *   rejection_read    {chatId, live}         live: read as it showed in the chat window
  *   letter_attached   {vacancyId, via}
- *   limit_reached     {}                     hh.ru's daily limit of applications
+ *   limit_reached     {until, documentId, vacancyId} hh.ru's daily limit and original retry deadline
  *
  * @module stats
  */

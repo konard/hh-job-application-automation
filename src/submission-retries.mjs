@@ -5,6 +5,7 @@ import { isResponseSubmitted } from './helpers/page-helpers.mjs';
 import { saveApplicationDraft } from './application-drafts.mjs';
 import { closeModalIfPresent } from './helpers/modal-helpers.mjs';
 import { alertUntilDone } from './notify.mjs';
+import { applicationStateReadError, isDailyApplicationLimit } from './application-limits.mjs';
 
 export const SUBMISSION_RETRY_MS = 5 * 60 * 60 * 1000;
 
@@ -51,6 +52,7 @@ export const isPassingError = (error) => Boolean(error) &&
     /произошла ошибка|an error occurred|something went wrong/iu.test(error.text));
 
 export async function readSubmissionError(commander) {
+  const url = commander.getUrl();
   const result = await commander.safeEvaluate({
     fn: () => {
       const element = [...document.querySelectorAll('[data-qa-popup-error-code]')].find((item) => item.getClientRects().length > 0);
@@ -66,7 +68,7 @@ export async function readSubmissionError(commander) {
     },
     defaultValue: null, operationName: 'popup error check', silent: true,
   });
-  if (result.success === false) throw new Error('Could not read application errors; keeping the current page');
+  if (result.success === false) throw applicationStateReadError(commander, result, url);
   return result.value;
 }
 
@@ -82,7 +84,7 @@ export function deferFailedSubmission({ commander, vacancyId, title = '', saveAn
     if (await isResponseSubmitted(commander) === true) return false;
     const error = await readSubmissionError(commander);
     const id = extractVacancyIdFromResponseUrl(url) ?? vacancyId ?? error?.vacancyId;
-    if (!id || !error || (error.vacancyId && error.vacancyId !== String(id))) return false;
+    if (!id || !error || isDailyApplicationLimit(error) || (error.vacancyId && error.vacancyId !== String(id))) return false;
     await saveAnswers();
     // The user may have sent successfully or navigated while the snapshot was being saved.
     const currentError = await readSubmissionError(commander);

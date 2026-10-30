@@ -386,6 +386,18 @@ function fakeForm({ questions = [], confirms = true, direct = false, withoutTest
 const sends = (form) => form.state.clicks.filter(({ selector }) => selector === SELECTORS.submitButtonLetter);
 
 describe('full response form', () => {
+  test('an interrupted error check returns to the orchestrator for retry without touching the form', async () => {
+    const form = fakeForm();
+    const evaluate = form.safeEvaluate;
+    form.safeEvaluate = (options) => options.operationName === 'daily application limit check'
+      ? Promise.resolve({ success: false, navigationError: true, value: null }) : evaluate(options);
+    const result = await handleVacancyResponsePage({ commander: form, MESSAGE: 'Letter',
+      readQADatabase: async () => new Map(), addOrUpdateQA: async () => {}, returnUrl: SEARCH_URL });
+    assert.deepEqual(result, { status: 'interrupted' });
+    assert.deepEqual(form.state.clicks, []);
+    assert.deepEqual(form.state.gotos, []);
+  });
+
   test('Russian questions naming dollars use an English CV and letter while answers stay Russian', async () => {
     disableConfirmations();
     const question = 'Ожидаемый уровень компенсации в $ или русских рублях, на руки';

@@ -133,4 +133,9 @@ describe('limitHeldUntil', () => {
     assert.equal(limitHeldUntil([{ at: '2026-10-24T05:59:00Z', type: 'limit_reached' }], now), 0);
     assert.equal(limitHeldUntil([], now), 0);
   });
+  test('an explicitly stored deadline survives later observations without restarting the pause', () => {
+    const until = now + 60000;
+    assert.equal(limitHeldUntil([{ type: 'limit_reached', at: new Date(now).toISOString(), until }], now), until);
+    assert.equal(limitHeldUntil([{ type: 'limit_reached', at: new Date(now).toISOString(), until }], until), 0);
+  });
 });

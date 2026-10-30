@@ -240,9 +240,15 @@ describe('popup answered with hh.ru\'s daily limit', () => {
     disableConfirmations();
     const { readQADatabase, addOrUpdateQA } = await context();
     const popup = fakePopup({ questions: [] });
-    const count = popup.count;
+    const safeEvaluate = popup.safeEvaluate;
+    const evaluate = popup.evaluate;
     let limit = false;
-    popup.count = async (options) => (options.selector === SELECTORS.limitExceededError ? (limit ? 1 : 0) : count(options));
+    popup.safeEvaluate = async (options) => options.operationName === 'daily application limit check'
+      ? { value: limit ? { code: 'negotiations-limit-exceeded', text: 'Daily application limit reached',
+        url: SEARCH_URL, vacancyId: '138000020', hasForm: true } : null } : safeEvaluate(options);
+    popup.evaluate = async (options, data) => typeof options === 'function' && data?.vacancyId
+      ? { vacancyId: data.vacancyId, fields: [{ name: 'letter', value: popup.state.letter }], error: data.error, requiresReview: false }
+      : evaluate(options);
     // hh.ru keeps the popup open and shows the limit under the letter
     popup.clickButton = async (options) => {
       popup.state.clicks.push(options);
@@ -251,7 +257,9 @@ describe('popup answered with hh.ru\'s daily limit', () => {
     const result = await processModalApplication({
       commander: popup, MESSAGE: 'Здравствуйте', vacancyId: '138000020', readQADatabase, addOrUpdateQA, autoSendExact: true,
     });
-    assert.deepEqual(result, { success: false, reason: 'limit_reached' });
+    assert.equal(result.success, false);
+    assert.equal(result.reason, 'limit_reached');
+    assert.equal(result.limit.status, 'daily_limit');
     assert.equal(sends(popup).length, 1);
   });
 });

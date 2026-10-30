@@ -36,6 +36,7 @@ import { deferFailedSubmission, isPassingError, submissionRetries } from './subm
 import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft, saveApplicationDraft } from './application-drafts.mjs';
 import { alertUntilDone } from './notify.mjs';
 import { vacancyContextTexts } from './vacancy-context.mjs';
+import { prepareApplicationLimit, readApplicationLimit } from './application-limits.mjs';
 import {
   dismissOverlays,
   findFirstSelector,
@@ -381,13 +382,14 @@ export function isFormLeftDuringWait(error, url) {
 export async function waitForManualResponse({ commander, formUrl = commander.getUrl(), isPageClosed = () => false }) {
   try {
     while (!isPageClosed() && commander.getUrl() === formUrl) {
+      if (await readApplicationLimit(commander)) return 'daily_limit';
       if (await isResponseSubmitted(commander)) return 'submitted';
       if ((await commander.wait({ ms: 1000, reason: 'your review and manual submission (answers continue to be saved)' }))?.aborted) return 'interrupted';
     }
   } catch (error) {
     if (isPageClosed()) return 'closed';
     if (commander.getUrl() !== formUrl) return 'left';
-    if (isNavigationError(error) || commander.isActionStoppedError?.(error)) return 'interrupted';
+    if (error.expectedNavigation || isNavigationError(error) || commander.isActionStoppedError?.(error)) return 'interrupted';
     throw error;
   }
   return isPageClosed() ? 'closed' : 'left';
@@ -453,11 +455,15 @@ export async function handleVacancyResponsePage({
     return true;
   };
   const notifyForReview = () => alertUntilDone(commander, { isDone: () => isResponseSubmitted(commander) });
+  const checkLimit = () => prepareApplicationLimit({ commander, vacancyId,
+    saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) });
 
   try {
     console.log('Detected vacancy_response page, handling application form...');
     await commander.waitForSelector({ selector: 'body' });
     await dismissOverlays(commander);
+    const limit = await checkLimit();
+    if (limit) return limit;
     // hh.ru stays on this page after a response and offers to respond again
     if (await isResponseSubmitted(commander)) {
       await completeApplicationDraft(vacancyId);
@@ -555,9 +561,13 @@ export async function handleVacancyResponsePage({
       // Questions outside the test (e.g. the salary) still take their saved answers
       await setupQAHandling({ commander, readQADatabase, addOrUpdateQA, verbose, context: salaryContext, contacts });
       if (await draftsAwaitReview()) return { status: 'awaiting_user' };
+      const beforeTestLimit = await checkLimit();
+      if (beforeTestLimit) return beforeTestLimit;
       await commander.clickButton({ selector: submitWithoutTestSelector, scrollIntoView: true, smoothScroll: true });
       console.log('Clicked "Откликнуться без теста" button');
       await commander.wait({ ms: 2000, reason: 'submit without test to complete' });
+      const afterTestLimit = await checkLimit();
+      if (afterTestLimit) return afterTestLimit;
       return;
     }
 
@@ -688,6 +698,8 @@ export async function handleVacancyResponsePage({
     for (let waited = 0; waited < 5000 && !await isButtonEnabled(commander, submitSelector); waited += FORM_ACTION_SETTLE_MS) {
       if ((await commander.wait({ ms: FORM_ACTION_SETTLE_MS, reason: 'the submit button to become enabled' }))?.aborted) return;
     }
+    const finalLimit = await checkLimit();
+    if (finalLimit) return finalLimit;
     if (!URL_PATTERNS.vacancyResponse.test(commander.getUrl()) || await isResponseSubmitted(commander)) return;
     if (await deferFailedSubmission({ commander, vacancyId, title, returnUrl, saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) })) {
       return extractVacancyIdFromResponseUrl(commander.getUrl()) === vacancyId ? { status: 'awaiting_user' } : undefined;
@@ -715,9 +727,13 @@ export async function handleVacancyResponsePage({
     console.log('Clicked submit button');
     const backOnList = () => URL_PATTERNS.searchVacancy.test(commander.getUrl());
     for (let waited = 0; waited < SUBMIT_CONFIRMATION_TIMEOUT_MS && !backOnList() && !await isResponseSubmitted(commander); waited += 1000) {
+      const limit = await checkLimit();
+      if (limit) return limit;
       await commander.wait({ ms: 1000, reason: 'submission to complete' });
     }
     // Back on the vacancy list: the vacancy page watch saw it sent and counted it
+    const completedLimit = await checkLimit();
+    if (completedLimit) return completedLimit;
     if (backOnList()) {
       return;
     }
@@ -734,6 +750,10 @@ export async function handleVacancyResponsePage({
     }
     await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
   } catch (error) {
+    if (error.expectedNavigation) {
+      log.debug(() => `Application state changed during navigation: ${error.message}`);
+      return { status: 'interrupted' };
+    }
     if (error instanceof PromptWithdrawnError) {
       return;
     }
