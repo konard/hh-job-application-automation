@@ -13,7 +13,7 @@ import { saveMarkedQAPairs, saveQAPairs, savedAnswersInContext, setupQAHandling 
 import { resumeVisibility } from './resume-visibility.mjs';
 import { closeModalIfPresent, checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { clickButtonWhenReady, clickWasNotDispatched, ensureCoverLetterVisible, isButtonEnabled, typeLongText } from './helpers/page-helpers.mjs';
-import { SELECTORS, URL_PATTERNS } from './hh-selectors.mjs';
+import { SELECTORS, URL_PATTERNS, extractVacancyId } from './hh-selectors.mjs';
 import { log } from './logging.mjs';
 import { recordEvent } from './stats.mjs';
 import { LIMIT_COOLDOWN_MS } from './pacing.mjs';
@@ -807,6 +807,8 @@ export async function findAndProcessVacancyButton({
   vacancyFilters = null,
   skippedVacancies = null,
   vacancyInsights = null,
+  applyFromVacancyPage = false,
+  vacancyPreviewMs = 0,
   verbose = false,
   waitForUrlCondition,
   START_URL,
@@ -837,17 +839,21 @@ export async function findAndProcessVacancyButton({
   await showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title });
   const card = cardLines.join('\n');
   let details = null;
-  if (vacancyInsights?.enabled && vacancyId) {
-    details = await vacancyInsights.visit({ commander, vacancyId, returnUrl: currentPageUrl });
+  const stayOnVacancy = Boolean(applyFromVacancyPage && vacancyInsights && vacancyId);
+  if (vacancyInsights && (vacancyInsights.enabled || stayOnVacancy) && vacancyId) {
+    details = await vacancyInsights.visit({ commander, vacancyId, returnUrl: currentPageUrl, stayOnVacancy, previewMs: vacancyPreviewMs });
     if (!details) return { status: 'vacancy_collection_failed', vacancyId, descriptionRead: true };
+    if (stayOnVacancy && extractVacancyId(commander.getUrl()) !== String(vacancyId)) return { status: 'navigation_detected', vacancyId, descriptionRead: true };
+    if (!stayOnVacancy) {
     // Returning from the vacancy can reorder the search cards. Find this ID again, never reuse
     // the old position and accidentally apply to another vacancy.
-    const refreshed = await scanApplyButtons({ commander, selector, targetVacancyId: vacancyId });
-    if (refreshed.navigationError) return { status: 'navigation_detected', vacancyId, descriptionRead: true };
-    buttonIndex = refreshed.value.buttonIndex;
-    // The full form is opened by the verified vacancy ID, even when reading its description
-    // makes HH.ru remove its card from recommendations. Only a card click needs its new index.
-    if (buttonIndex < 0 && !selectApplicationResume) return { status: 'vacancy_not_listed', vacancyId, descriptionRead: true };
+      const refreshed = await scanApplyButtons({ commander, selector, targetVacancyId: vacancyId });
+      if (refreshed.navigationError) return { status: 'navigation_detected', vacancyId, descriptionRead: true };
+      buttonIndex = refreshed.value.buttonIndex;
+      // The full form is opened by the verified vacancy ID, even when reading its description
+      // makes HH.ru remove its card from recommendations. Only a card click needs its new index.
+      if (buttonIndex < 0 && !selectApplicationResume) return { status: 'vacancy_not_listed', vacancyId, descriptionRead: true };
+    }
   }
   // The description only when the card does not settle the filters (one request, see readVacancyDescription)
   const descriptionRead = Boolean(details) || Boolean(vacancyFilters && vacancyId && await vacancyFilters.needsDescription?.(card));
@@ -859,6 +865,7 @@ export async function findAndProcessVacancyButton({
   if (filterMatch) {
     console.log(`🚫 Vacancy ${vacancyId} filtered out by vacancy-filters.lino (${describeFilterMatch(filterMatch)}): ${describeVacancyCard(cardLines)}`);
     await vacancyFilters.remember(vacancyId, filterMatch, { title });
+    if (stayOnVacancy) await commander.goto({ url: currentPageUrl, waitForStableUrlBefore: false, waitForNetworkIdle: false });
     return { status: 'filtered_out', vacancyId, descriptionRead };
   }
   if (isInteractive()) {
@@ -867,10 +874,10 @@ export async function findAndProcessVacancyButton({
 
   // A card can submit immediately with HH.ru's default CV. Open the chooser first so
   // employer questions and the exact selected CV can be checked before anything is sent.
-  if (selectApplicationResume && vacancyId) {
+  if ((selectApplicationResume || stayOnVacancy) && vacancyId) {
     // Collecting the description reloads the search page. Show this card again before
     // navigating to the full form; clicking Apply here could send HH.ru's default CV.
-    await showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title });
+    if (!stayOnVacancy) await showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title });
     await commander.goto({ url: `https://hh.ru/applicant/vacancy_response?vacancyId=${encodeURIComponent(vacancyId)}&startedWithQuestion=false`,
       waitForStableUrlBefore: false, waitForNetworkIdle: false });
     return { status: 'vacancy_response_detected', vacancyId, descriptionRead };

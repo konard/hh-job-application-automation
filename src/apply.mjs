@@ -188,6 +188,10 @@ process.on('SIGTERM', () => shutdown('Received SIGTERM'));
     update: argv.updateResumeAliases, directory: argv.vacancyCacheDir,
     updateAliases: createResumeAliasUpdater({ fromPort: argv.browserPort }),
   });
+  console.log(`🗃️  Private vacancy archive: ${vacancyInsights.cache.directory}`);
+  console.log(argv.applyFromVacancyPage
+    ? `📖 Application route: vacancy page (${argv.vacancyPreviewSeconds} s preview) → application form`
+    : '📖 Application route: collected vacancy → search → application form');
   const orchestrator = createOrchestrator({
     // Nothing touches the page while hh.ru shows a captcha, except its answer: Haiku's reading is sent
     // once (--captcha-auto-send), after that it is only prefilled and the user sends it

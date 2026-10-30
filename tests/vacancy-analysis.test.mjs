@@ -136,6 +136,32 @@ test('the full vacancy is visited, collected and compared before returning to th
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
+test('a visible vacancy-first visit collects before preview and returns to search on failure', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'vacancy-visible-'));
+  try {
+    let url = 'https://hh.ru/search/vacancy?resume=ru';
+    let fails = false;
+    const visits = [], waits = [];
+    const insights = createVacancyInsights({ directory: root, compare: false, update: false, log: () => {} });
+    const commander = { getUrl: () => url, goto: async ({ url: next }) => { url = next; visits.push(next); },
+      waitForSelector: async () => { if (fails) throw new Error('Not loaded'); },
+      evaluate: async ({ fn }) => fn.name === 'readVacancyDetails' ? { id: '123', description: 'Full text', skills: ['Go'] } : null,
+      wait: async ({ ms }) => { expect((await insights.cache.read('123')).description).toBe('Full text'); waits.push(ms); } };
+    await insights.visit({ commander, vacancyId: '123', returnUrl: url, stayOnVacancy: true, previewMs: 3000 });
+    expect(visits).toEqual(['https://hh.ru/vacancy/123']);
+    expect(waits).toEqual([3000]);
+    const returnUrl = 'https://hh.ru/search/vacancy?resume=ru';
+    fails = true;
+    expect(await insights.visit({ commander, vacancyId: '123', returnUrl, stayOnVacancy: true })).toBe(null);
+    expect(url).toBe(returnUrl);
+    const disabled = createVacancyInsights({ enabled: false, directory: path.join(root, 'disabled'), log: () => {} });
+    fails = false;
+    await disabled.visit({ commander, vacancyId: '123', returnUrl, stayOnVacancy: true });
+    expect(await fs.stat(path.join(root, 'disabled')).then(() => true, () => false)).toBe(false);
+    expect((await disabled.read('123')).description).toBe('Full text');
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
 test('an open résumé draft is protected before session seeding can navigate away', async () => {
   let seeded = false, released = false;
   const update = createResumeAliasUpdater({ log: () => {},

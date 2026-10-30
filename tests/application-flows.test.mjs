@@ -88,6 +88,44 @@ const runList = (commander, { skippedVacancies, vacancyFilters }) => findAndProc
 });
 
 describe('vacancy list', () => {
+  test('the vacancy-first path opens its form directly after collection, with no search bounce or Apply click', async () => {
+    clearProcessedVacancies();
+    const list = fakeList({ vacancyId: '139000020', card: ['Backend Developer', 'Example'] });
+    let url = SEARCH_URL;
+    const steps = [];
+    list.getUrl = () => url;
+    list.goto = async ({ url: next }) => { steps.push(next); url = next; };
+    const result = await findAndProcessVacancyButton({ commander: list, applyFromVacancyPage: true, vacancyPreviewMs: 3000,
+      selectApplicationResume: async () => {}, vacancyInsights: { enabled: true, visit: async (options) => {
+        assert.equal(options.stayOnVacancy, true);
+        assert.equal(options.previewMs, 3000);
+        url = 'https://hh.ru/vacancy/139000020'; steps.push(url);
+        return { id: '139000020', description: 'Build backend services.' };
+      } } });
+    assert.equal(result.status, 'vacancy_response_detected');
+    assert.deepEqual(steps.map((url) => new URL(url).pathname), ['/vacancy/139000020', '/applicant/vacancy_response']);
+    assert.equal(new URL(url).searchParams.get('vacancyId'), '139000020');
+    assert.deepEqual(list.state.clicks, []);
+  });
+
+  test('a vacancy filtered after collection returns to search; a user leaving its page is preserved', async () => {
+    for (const userLeft of [false, true]) {
+      clearProcessedVacancies();
+      const list = fakeList({ vacancyId: '139000021', card: ['Technician', 'Example'] });
+      let url = SEARCH_URL;
+      const navigations = [];
+      list.getUrl = () => url;
+      list.goto = async ({ url: next }) => { navigations.push(next); url = next; };
+      const result = await findAndProcessVacancyButton({ commander: list, applyFromVacancyPage: true,
+        vacancyInsights: { enabled: true, visit: async () => {
+          url = userLeft ? 'https://hh.ru/chat/123' : 'https://hh.ru/vacancy/139000021';
+          return { id: '139000021', description: 'On-site service work.' };
+        } }, vacancyFilters: { match: async () => ({ kind: 'page', pattern: 'On-site' }), remember: async () => {} } });
+      assert.equal(result.status, userLeft ? 'navigation_detected' : 'filtered_out');
+      assert.deepEqual(navigations, userLeft ? [] : [SEARCH_URL]);
+    }
+  });
+
   test('a verified vacancy is still opened by ID when its card disappears after collection', async () => {
     clearProcessedVacancies();
     const list = fakeList({ vacancyId: '139000019', card: ['Backend Developer', 'Acme'] });

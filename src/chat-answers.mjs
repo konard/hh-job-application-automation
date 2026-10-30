@@ -466,9 +466,11 @@ export const patternSays = (pattern, core) => !ASKS_TO_DO.test(core) && !ASKS_FO
 
 /** Acknowledgements can state an active review without promising a separate follow-up. */
 const REVIEWS = /рассмотр|рассматр|анализ|изуч|ознаком|в работу|приня(?:ли|то)|получили|подходит|подойд|review|consider/iu;
-const COMES_BACK = /свяж|сообщ|верн[её]м|верн[её]тся|обратн\p{L}* связ|позвон|напиш(?:ем|ет)|результат|contact|get back|reach out/iu;
+const COMES_BACK = /свяж|сообщ|верн[её]м|верн[её]тся|вернут(?:ься|ся)|обратн\p{L}* связ|позвон|напиш(?:ем|ет)|результат|contact|get back|reach out/iu;
 const ABOUT_APPLICATION = /резюме|отклик|кандидат|опыт|информаци|resume|cv|application|information/iu;
 const UNDER_REVIEW = /(?:резюме|кандидатура|отклик)\s+(?:(?:сейчас|пока)\s+)?(?:(?:находится|находятся)\s+)?(?:на\s+(?:этапе\s+)?рассмотрени[ия]|в\s+процессе\s+рассмотрения|рассматривается)|(?:resume|cv|application|candidacy)\s+(?:is\s+)?(?:currently\s+)?(?:under\s+review|being\s+(?:reviewed|considered))/iu;
+// An active screening notice, rather than a completed/negated selection or a task for the user.
+const SCREENING = /(?:^|[.!]\s+)(?:(?:сейчас|в данный момент|в настоящее время|на данном этапе)\s+)?(?:мы\s+)?(?:проводим|вед[её]м|ид[её]т|проводится)\s+(?:(?:первичный|предварительный)\s+)?отбор(?:\s+кандидатов)?\s+по\s+резюме/iu;
 /**
  * Asks the user to do something: an imperative, an invitation, an interview (not the results of
  * interviews held), a test or a form, a link
@@ -490,7 +492,7 @@ export function isAcknowledgement(core) {
   // Optional company information is not a task for the applicant. Strip only this explicit
   // informational sentence and an hh.ru employer page; survey/test/contact links still block it.
   const text = String(core ?? '').replace(/(?:вы также можете|также вы можете)\s+(?:узнать больше о нас и\s+)?ознакомиться с (?:другими|нашими) вакансиями по ссылке\s*:\s*https:\/\/hh\.ru\/employer\/\d+\/?(?=\s|[.!]|$)\s*[.!]?/giu, '');
-  return (UNDER_REVIEW.test(text) || (REVIEWS.test(text) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text))) && !/\?/.test(text) &&
+  return (UNDER_REVIEW.test(text) || ((REVIEWS.test(text) || SCREENING.test(text)) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text))) && !/\?/.test(text) &&
     !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && !isRejection({ text }) &&
     patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
 }
@@ -616,6 +618,13 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
     }
   }
   return null;
+}
+
+/** A saved/recognized template in the full list preview, checked before opening its chat. */
+export function templateReplyFromPreview(chat, templates) {
+  if (chat.lastIsMine || !chat.last || isQuestion(chat.last)) return null;
+  const reply = knownReply({ title: '', text: chat.last }, { templates, qaMap: new Map() });
+  return reply?.perfect && reply.source.startsWith('chat-templates') ? reply : null;
 }
 
 /**

@@ -32,6 +32,13 @@ describe('apply --clear-rejections', () => {
 });
 
 describe('default vacancy insights', () => {
+  test('the visible vacancy-first path is default, with the previous path and preview duration configurable', () => {
+    assert.equal(configOf().applyFromVacancyPage, true);
+    assert.equal(configOf().vacancyPreviewSeconds, 3);
+    assert.equal(configOf('--no-apply-from-vacancy-page').applyFromVacancyPage, false);
+    assert.equal(configOf('--vacancy-preview-seconds', '0').vacancyPreviewSeconds, 0);
+    assert.throws(() => configOf('--vacancy-preview-seconds', '-1'), /non-negative/);
+  });
   test('collection, comparisons and verified aliases are enabled and can be disabled independently', () => {
     const defaults = configOf();
     for (const name of ['vacancyInsights', 'collectVacancies', 'compareResume', 'updateResumeAliases']) assert.equal(defaults[name], true);

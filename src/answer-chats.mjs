@@ -26,7 +26,7 @@ import { rememberFormVacancy } from './assignments.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { fetchVacancy } from './vacancy-context.mjs';
 import {
-  TEMPLATE_THRESHOLD, chatDraftPrompt, chatsShown, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isConversationFinished, isPattern, isQuestion, isSupportChat, isApplication, isRejection, isRejectionCell, knownReply, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, templateCore, withLearnedPatterns,
+  TEMPLATE_THRESHOLD, chatDraftPrompt, chatsShown, compareReusedAnswers, describeReuse, formLinks, isChatAnswered, isConversationFinished, isPattern, isSupportChat, isApplication, isRejection, isRejectionCell, isReuseOffer, chatContextTexts, knownReplyInContexts, reuseOption, learnedPairs, pendingMessages, readChatIn, readChatList, readUserActivity, scrollChatList, templateCore, withLearnedPatterns,
   userIsActive,
 } from './chat-answers.mjs';
 import { readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
@@ -43,6 +43,7 @@ import { readFullChat, setUnreadFilter, waitForChat, watchChats } from './chat-r
 import { createChatPrefillQueue } from './chat-prefill-queue.mjs';
 import { createBackgroundRejectionSweep } from './background-rejections.mjs';
 import { createRejectionResponder, DEFAULT_REJECTION_REPLY } from './rejection-replies.mjs';
+import { templateReplyFromPreview } from './chat-answers.mjs';
 import { browserWindowActive } from './notify.mjs';
 import { getAnswerFinalPeriod } from './answer-variants.mjs';
 
@@ -656,7 +657,7 @@ async function clearRejections({
   // The list line holds the whole last message: a saved template is known before the chat is opened
   const templates = onlyRejections ? new Map() : await templatesDb.readQADatabase();
   const stopped = await walkChatList(async (chat) => {
-    const template = chat.unread && !isRejectionCell(chat) ? templateCell(chat, templates) : null;
+    const template = chat.unread && !isRejectionCell(chat) ? templateReplyFromPreview(chat, templates) : null;
     // A template to reply to is opened only when its reply is sent (--auto-send); otherwise it stays unread for you
     if (!chat.unread || !mayVisit(chat) || (!isRejectionCell(chat) && !(template && (template.noReply || argv.autoSend)))) {
       return false;
@@ -669,7 +670,7 @@ async function clearRejections({
       return true;
     }
     if (template) {
-      await answerTemplate(chat);
+      await answerTemplate(chat, { canContinue });
     } else {
       rejections += 1;
       console.log(`📭 Chat ${chat.id} (${chat.title}): rejection read`);
@@ -693,23 +694,10 @@ async function clearRejections({
 }
 
 /**
- * An unread chat whose last message, as its list line shows it, is a saved template word for word
- * (greeting and signature aside), not a question
- * @returns {Object|null} knownReply
- */
-function templateCell(chat, templates) {
-  if (chat.lastIsMine || !chat.last || isQuestion(chat.last)) {
-    return null;
-  }
-  const reply = knownReply({ title: '', text: chat.last }, { templates, qaMap: new Map() });
-  return reply?.perfect && reply.source.startsWith('chat-templates') ? reply : null;
-}
-
-/**
  * The open chat's template message answered with its reply (one of those the user gave to it), or
  * only read when it needs none. A chat with more waiting than the template is left for the user
  */
-async function answerTemplate(chat) {
+async function answerTemplate(chat, { canContinue = async () => true } = {}) {
   const read = await waitForChat(page, chat.id).catch(() => null);
   if (!read) {
     return;
@@ -733,7 +721,14 @@ async function answerTemplate(chat) {
     console.log(`👉 Chat ${chat.id} (${chat.title}): more than a template waits in it, left for you`);
     return;
   }
-  if (await sendChatAnswer(page.mainFrame(), last.id, { answer: reply.answer, option: null }).catch(() => false)) {
+  const maySend = async () => {
+    if (!await canContinue() || await browserWindowActive(page, { port: CHAT_SLOT_PORT }) !== false) return false;
+    const current = await readChatIn(page);
+    const waiting = pendingMessages(current.messages);
+    return !current.transitioning && current.id === chat.id && current.canReply && !current.turnedOff &&
+      waiting.length === 1 && waiting[0].id === last.id;
+  };
+  if (await sendChatAnswer(page.mainFrame(), last.id, { answer: reply.answer, option: null, preserveDraft: true, maySend }).catch(() => false)) {
     console.log(`✅ Chat ${chat.id} (${chat.title}): «${about}» answered: ${reply.answer}`);
     recordEvent('template_answered', { chatId: chat.id });
   } else {

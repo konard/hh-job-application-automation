@@ -31,18 +31,19 @@ export function createVacancyInsights({ enabled = true, collect = true, compare 
     enabled: enabled && (collect || compare || update), cache,
     // Independent of the filters' RAM maps, so an open form can recover its context on restart.
     read: async (id) => /^\d+$/.test(String(id)) ? collected.get(String(id)) ?? await cache.read(id) : null,
-    async visit({ commander, vacancyId, returnUrl }) {
+    async visit({ commander, vacancyId, returnUrl, stayOnVacancy = false, previewMs = 0 }) {
       const url = `https://hh.ru/vacancy/${vacancyId}`;
       log(`📖 Reading the full vacancy before applying: ${url}`);
       await commander.goto({ url, waitForStableUrlBefore: false, waitForNetworkIdle: false });
+      let complete = false;
       try {
         await commander.waitForSelector({ selector: '[data-qa="vacancy-description"]', timeout: 20000 });
         const vacancy = await commander.evaluate({ fn: readVacancyDetails });
         if (vacancy.id !== String(vacancyId) || !vacancy.description) throw new Error('The full vacancy description was not loaded');
         collected.set(String(vacancyId), vacancy);
         const sections = vacancyRequirements(vacancy.description);
-        if (collect) await cache.record({ ...vacancy, ...sections, status: 'encountered' });
-        if (compare || update) {
+        if (enabled && collect) await cache.record({ ...vacancy, ...sections, status: 'encountered' });
+        if (enabled && (compare || update)) {
           let resume = await fs.readFile(resumeFile, 'utf8').then(JSON.parse).catch(() => null);
           const expectedHash = new URL(returnUrl).searchParams.get('resume');
           if (expectedHash && resume?.hash !== expectedHash && /^[a-z0-9]+$/i.test(expectedHash)) {
@@ -56,12 +57,18 @@ export function createVacancyInsights({ enabled = true, collect = true, compare 
             if (update && comparison.aliases.length && updateAliases) await updateAliases({ resume, aliases: comparison.aliases, vacancyId });
           }
         }
+        if (stayOnVacancy && commander.getUrl().split('?')[0] === url) {
+          await commander.evaluate({ fn: () => document.querySelector('[data-qa="vacancy-description"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) });
+          log(`👀 Vacancy ${vacancyId} collected: showing its description before the application`);
+          if (previewMs > 0) await commander.wait({ ms: previewMs, reason: 'showing the collected vacancy before its application' });
+        }
+        complete = true;
         return vacancy;
       } catch (error) {
         log(`⚠️  Vacancy ${vacancyId} was not fully collected: ${error.message.split('\n')[0]}; no application sent`);
         return null;
       } finally {
-        if (commander.getUrl().split('?')[0] === url) await commander.goto({ url: returnUrl, waitForStableUrlBefore: false, waitForNetworkIdle: false });
+        if ((!stayOnVacancy || !complete) && commander.getUrl().split('?')[0] === url) await commander.goto({ url: returnUrl, waitForStableUrlBefore: false, waitForNetworkIdle: false });
       }
     },
     async applied(id) {

@@ -2,17 +2,17 @@
 /** Aggregate private cached vacancies without revisiting hh.ru or using AI tokens. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createVacancyCache } from './vacancy-cache.mjs';
+import { createVacancyCache, VACANCY_CACHE_DIR } from './vacancy-cache.mjs';
 import { loadTechnologyAliases, vacancyStatistics, withResumeVocabulary } from './vacancy-analysis.mjs';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
-  console.log('Usage: bun run vacancy-stats -- [--top 30] [--json] [--cache-dir data/vacancies] [--resume data/resume/resume.json]');
+  console.log('Usage: bun run vacancy-stats -- [--top 30] [--json] [--cache-dir ~/.hh-automation/vacancies] [--resume data/resume/resume.json]');
   process.exit(0);
 }
 const value = (flag, fallback) => args.includes(flag) ? args[args.indexOf(flag) + 1] : fallback;
 const resume = JSON.parse(await fs.readFile(value('--resume', 'data/resume/resume.json'), 'utf8'));
-const vacancies = await createVacancyCache(path.resolve(value('--cache-dir', 'data/vacancies'))).all();
+const vacancies = await createVacancyCache(path.resolve(value('--cache-dir', VACANCY_CACHE_DIR))).all();
 const aliases = withResumeVocabulary(await loadTechnologyAliases(), resume);
 const stats = vacancyStatistics(vacancies, resume, aliases);
 if (args.includes('--json')) console.log(JSON.stringify(stats, null, 2));

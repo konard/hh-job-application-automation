@@ -94,7 +94,7 @@ from sending HH.ru's default CV before the language check. Export both versions 
 `bun run cv -- export` first. `--no-auto-select-resume-language` disables this behavior.
 
 The vacancy is visited and collected before opening its application. Its full description, HTML,
-skills and requirements stay in the private `data/vacancies/<id>.lino` cache (excluded from git).
+skills and requirements stay in the private `~/.hh-automation/vacancies/<id>.lino` app cache, outside the repository.
 An unfinished form restores this context after a restart, for CV language, currency and saved-answer
 matching. Recruiter chats and external form drafts also prefer the collected description over a new
 network request. Disabling collection still retains context in RAM for the current run.
@@ -262,9 +262,15 @@ Confirmed submission releases the hold while retaining the local recovery copy.
 ### Vacancy collection, résumé matching and technology statistics
 
 By default, before applying, the browser visits the full vacancy page, saves its description,
-HTML, skills, employer and other visible job details in `data/vacancies/<id>.lino`, and returns
-to the application flow. This private directory is ignored by Git: employer descriptions are
-not published. Each selected vacancy is collected, including ones the filters later exclude.
+HTML, skills, employer and other visible job details in `~/.hh-automation/vacancies/<id>.lino`,
+scrolls to the description and shows it for three seconds, then opens that vacancy's application
+directly. `--vacancy-preview-seconds 0` removes the preview pause; `--no-apply-from-vacancy-page`
+keeps the previous route through the search page before opening the form. The settings also work
+as `VACANCY_PREVIEW_SECONDS` and `APPLY_FROM_VACANCY_PAGE` in `.lenv`.
+Employer descriptions are kept outside the repository and never published. Existing ignored
+`data/vacancies/` records are copied automatically, retaining their full content and the originals;
+existing app records are not overwritten. `--vacancy-cache-dir` changes the private location.
+Each selected vacancy is collected, including ones the filters later exclude.
 Updates use the same vacancy ID, so repeated reads do not inflate demand statistics. Successful
 applications are marked in the cache. If the full description cannot be read, that application
 is left unsent on this pass.
@@ -371,6 +377,12 @@ is a saved template of `data/chat-templates.lino` word for word (greeting and si
 за отклик! Мы рассмотрим Ваше резюме и позже сообщим о своем решении.») is opened and answered with
 its reply (one of those you gave to it, with `--auto-send-exact-answers`, on by default), or only read
 when it needs none. A chat with anything else waiting is left for you, and other chats stay unread.
+
+General review notices also qualify without an exact saved wording, including initial screening
+with a no-calls notice and requests for more time followed by a promise to return with feedback.
+They get the saved acknowledgement (for example, «Здравствуйте, благодарю, ожидаю.»).
+Questions, tasks, contact requests, invitations and rejections remain separate. Automatic template
+replies preserve existing drafts and stop if the window becomes active or the conversation changes.
 
 To also answer unread hh.ru chats automatically, add `--process-chats` (the rejections are always
 cleared first). The chat processor runs in the separate chat browser slot (port 9340, never

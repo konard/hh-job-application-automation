@@ -4,7 +4,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   formLinks, isPattern, isRejection, knownReply, learnedPairs, learnPatterns, matchesPattern, pendingMessages, PATTERN_PREFIX,
-  NO_REPLY, REJECTION_KEY, isConversationFinished, isSupportChat, questionCore, summaryPairs, templateCore, withLearnedPatterns,
+  NO_REPLY, REJECTION_KEY, isAcknowledgement, isConversationFinished, isSupportChat, questionCore, summaryPairs, templateCore, templateReplyFromPreview, withLearnedPatterns,
 } from '../src/chat-answers.mjs';
 
 const templates = new Map([
@@ -331,6 +331,57 @@ describe('A message in English is answered in English', () => {
 });
 
 describe('Acknowledgements of the application, in any company\'s words', () => {
+  test('a delayed review promising to return with feedback is handled from its preview', () => {
+    const notices = [
+      'Нам нужно немного времени, чтобы ознакомиться с вашим резюме и решить, какие этапы предложить. Постараемся вернуться с фидбеком как можно скорее. Хорошего дня!',
+      'Здравствуйте! Нам потребуется время, чтобы изучить ваше резюме. Планируем вернуться с обратной связью на следующей неделе.',
+    ];
+    for (const last of notices) {
+      const reply = templateReplyFromPreview({ last }, templates);
+      assert.equal(reply?.perfect, true);
+      assert.equal(reply?.answer, 'Здравствуйте, благодарю, ожидаю.');
+      assert.equal(isConversationFinished({ canReply: true, messages: [{ mine: false, text: last },
+        { mine: true, text: reply.answer }] }), true);
+      for (const extra of [' Когда можете начать?', ' Пришлите примеры кода.', ' Укажите ваш Telegram.',
+        ' Пройдите тест https://forms.gle/example.', ' К сожалению, мы выбрали другого кандидата.']) {
+        assert.equal(isAcknowledgement(last + extra), false, extra);
+        assert.equal(templateReplyFromPreview({ last: last + extra }, templates), null, extra);
+      }
+    }
+  });
+
+  test('initial screening and a no-calls notice get a saved acknowledgement from the preview without learning the wording', () => {
+    // Synthetic notices, using only older templates: no employer transcript is published here.
+    const notices = [
+      'Спасибо за отклик! Сейчас мы проводим первичный отбор по резюме. Приём входящих звонков временно приостановлен. Пожалуйста, не звоните: мы сами напишем или позвоним подходящим кандидатам.',
+      'Здравствуйте! В данный момент идёт предварительный отбор кандидатов по резюме. Мы сами свяжемся с теми, чей опыт подойдёт.',
+      'Мы ведём отбор по резюме. Когда выберем подходящих кандидатов, напишем им. Входящие звонки пока не принимаем.',
+    ];
+    for (const last of notices) {
+      assert.equal(isAcknowledgement(last), true);
+      const reply = templateReplyFromPreview({ last }, templates);
+      assert.equal(reply?.perfect, true);
+      assert.equal(reply?.answer, 'Здравствуйте, благодарю, ожидаю.');
+      assert.equal(isConversationFinished({ canReply: true, messages: [{ mine: false, text: last },
+        { mine: true, text: 'Здравствуйте, благодарю, ожидаю.' }] }), true);
+      assert.equal(templateReplyFromPreview({ last, lastIsMine: true }, templates), null);
+    }
+  });
+
+  test('a screening notice with a question, task, invitation or rejection stays for the user', () => {
+    const notice = 'Сейчас мы проводим первичный отбор по резюме. Мы сами напишем подходящим кандидатам. Пожалуйста, не звоните.';
+    for (const extra of [' Какой у вас опыт с Docker?', ' Укажите зарплатные ожидания.',
+      ' Пришлите примеры кода.', ' Заполните анкету https://forms.gle/example.',
+      ' Напишите нам в Telegram.', ' Приглашаем вас на собеседование.', ' Мы выбрали другого кандидата.']) {
+      assert.equal(isAcknowledgement(notice + extra), false, extra);
+      assert.equal(templateReplyFromPreview({ last: notice + extra }, templates), null, extra);
+    }
+    for (const last of ['Мы не проводим первичный отбор по резюме. Напишем вам позже.',
+      'Первичный отбор по резюме завершён. Мы свяжемся позднее.']) {
+      assert.equal(isAcknowledgement(last), false, last);
+    }
+  });
+
   test('an active review needs no promise of a follow-up to be handled from the list preview', async () => {
     const { isAcknowledgement } = await import('../src/chat-answers.mjs');
     const preview = 'Здравствуйте, Константин Константинович!\n\nБольшое спасибо за интерес к вакансии! В данный момент, Ваше резюме находится на этапе рассмотрения.\n\nС Уважением, Наумова Дарья';

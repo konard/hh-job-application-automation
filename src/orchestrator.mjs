@@ -488,8 +488,14 @@ export function createOrchestrator({
         let result;
         if (retry) {
           console.log(`🔁 Retrying vacancy ${retry.vacancyId}: its five-hour submission cooldown has expired`);
-          if (vacancyInsights?.enabled && !await vacancyInsights.visit({ commander, vacancyId: retry.vacancyId, returnUrl: lastSearchPageUrl })) {
+          if (vacancyInsights && (vacancyInsights.enabled || argv.applyFromVacancyPage) &&
+              !await vacancyInsights.visit({ commander, vacancyId: retry.vacancyId, returnUrl: lastSearchPageUrl,
+                stayOnVacancy: argv.applyFromVacancyPage, previewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000 })) {
             submissionRetries.defer(retry.vacancyId, retry);
+            continue;
+          }
+          if (vacancyInsights && argv.applyFromVacancyPage && extractVacancyId(commander.getUrl()) !== retry.vacancyId) {
+            submissionRetries.restore([retry]);
             continue;
           }
           // Force the same handler/fallback path as a newly opened full application form.
@@ -519,6 +525,8 @@ export function createOrchestrator({
           vacancyFilters,
           skippedVacancies,
           vacancyInsights,
+          applyFromVacancyPage: argv.applyFromVacancyPage,
+          vacancyPreviewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000,
           verbose: argv.verbose,
           waitForUrlCondition,
           START_URL,

@@ -13,6 +13,7 @@ import fs from 'fs';
 import { makeConfig } from 'lino-arguments';
 import { CONFIRM_STEPS } from './confirmations.mjs';
 import { englishLetterFile } from './cover-letter.mjs';
+import { VACANCY_CACHE_DIR } from './vacancy-cache.mjs';
 
 function loadMessageFromFile(filePath) {
   if (!filePath) {
@@ -148,8 +149,17 @@ export function createConfig() {
           default: getenv('CAPTCHA_PREFILL', true),
         })
         .option('vacancy-insights', {
-          type: 'boolean', description: 'Visit vacancy pages before applying; collect private descriptions, compare the résumé and add verified technology aliases',
+          type: 'boolean', description: 'Collect private vacancy descriptions, compare the résumé and add verified technology aliases; application entry is controlled separately',
           default: getenv('VACANCY_INSIGHTS', true),
+        })
+        .option('apply-from-vacancy-page', {
+          type: 'boolean',
+          description: 'Show and collect the vacancy page, then open its application directly; disable to return to search before opening the form',
+          default: getenv('APPLY_FROM_VACANCY_PAGE', true),
+        })
+        .option('vacancy-preview-seconds', {
+          type: 'number', description: 'Show the collected vacancy before its application (seconds, 0 disables the pause)',
+          default: getenv('VACANCY_PREVIEW_SECONDS', 3),
         })
         .option('collect-vacancies', {
           type: 'boolean', description: 'Cache full vacancy descriptions locally in Links Notation (never committed)',
@@ -165,7 +175,7 @@ export function createConfig() {
         })
         .option('vacancy-cache-dir', {
           type: 'string', description: 'Private local vacancy cache directory',
-          default: getenv('VACANCY_CACHE_DIR', path.join(process.cwd(), 'data/vacancies')),
+          default: getenv('VACANCY_CACHE_DIR', VACANCY_CACHE_DIR),
         })
         .option('captcha-auto-send', {
           type: 'boolean',
@@ -282,6 +292,9 @@ export function createConfig() {
     throw new Error(`Unknown --confirm step(s): ${unknownSteps.join(', ')}; use ${CONFIRM_STEPS.join(', ')}`);
   }
 
+  if (!Number.isFinite(config.vacancyPreviewSeconds) || config.vacancyPreviewSeconds < 0) {
+    throw new Error('--vacancy-preview-seconds must be a non-negative number');
+  }
   return config;
 }
 

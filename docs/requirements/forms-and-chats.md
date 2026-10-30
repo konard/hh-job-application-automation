@@ -69,6 +69,8 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 | A9 | Ready full-page forms have no fixed 30-second pause. Wait for actual field expansion and validation, recheck questions before sending, and retain one passive handler during manual review without refilling/repeated scrolling. Keep answer saving and the separate vacancy pace | `tests/application-flows.test.mjs`, `tests/cover-letter-toggle.test.mjs`, isolated `tests/browser/form-timing.mjs` | 🧪 |
 | A10 | Visit the full vacancy before applying, cache its full text/HTML/skills/requirements privately, and reuse that context for language, CV/letter selection and question answering, including after restart. The actual description outweighs localized form labels and a job title; explicit employer-question and currency rules still apply. Chat/form context reads the cache first | `tests/vacancy-analysis.test.mjs`, `tests/vacancy-context.test.mjs`, `tests/application-resume.test.mjs`, `tests/application-flows.test.mjs`; verified local record and pre-application log for vacancy 139005910 | 🧪 |
 | A11 | A confirmed application returns to the last search page even when another handler already counted it. Do not repeatedly detect the same success, count it twice, treat an Apply click as confirmation, or navigate over another form/chat opened during the callback | Vacancy 139011384 incident; `tests/submission-return.test.mjs`, isolated `tests/browser/submission-return.mjs` | 🧪 |
+| A12 | Keep full encountered/applied vacancy records in the local app data folder (`~/.hh-automation/vacancies` by default), independently of the repository and public listing availability. Preserve source URL, full description/HTML, requirements, skills and timestamps so a recruiter/company/technology query can recover the original vacancy later; never publish the cache to GitHub. Migrate existing ignored repository-local records without losing data | Centaursoftware speech-to-text recruiter lookup, vacancy 138608159; `tests/vacancy-cache.test.mjs` | 🧪 |
+| A13 | The default visible route is search → full vacancy (collect/cache/compare, scroll description, three-second preview) → application, without returning through search. Keep the earlier route as `--no-apply-from-vacancy-page`, allow preview duration changes, preserve language checks and already open answers, and return filtered/failed visits to search | `tests/application-flows.test.mjs`, `tests/vacancy-analysis.test.mjs`, `tests/process-chats.test.mjs`, isolated `tests/browser/vacancy-flow.mjs` | 🧪 |
 
 ## B. External forms (Google Forms, Yandex Forms, a company's own job form)
 
@@ -125,7 +127,13 @@ Status: ✅ done and verified live · 🧪 done, verified offline only · 🚧 i
 
 ## D. Rules for all of it
 
-- Nothing is sent or submitted without the user, except A2 (exact answers) and C9 (the explicitly authorized rejection reason request).
+Current acknowledgement handling (C4): initial-screening/no-calls notices and delayed review with
+a promised return/feedback are recognized from the full chat-list preview and automatically get
+the saved thanks in an inactive window. Changed questions, requests, invitations or rejections do
+not become acknowledgements. Existing drafts and user activity block automatic sends. See
+`tests/chat-answers.test.mjs` and `tests/browser/rejection-replies.mjs` (shared guarded sender).
+
+- Nothing is sent or submitted without the user, except A2 (exact answers), C4 (recognized acknowledgements) and C9 (the explicitly authorized rejection reason request).
 - No visible markers on pages; marks are data attributes only.
 - Requests to hh.ru are kept low: the automation browser keeps one tab; the chat slot opens one chat at a time.
 - Cookies and passwords are never printed or stored in the repository; personal data (the resume
