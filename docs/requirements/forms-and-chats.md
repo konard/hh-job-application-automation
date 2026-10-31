@@ -170,6 +170,11 @@ chat-prefill command and live chat watcher. See `tests/chat-options.test.mjs` an
 An acknowledgement such as “Благодарим Вас за честные ответы чат-боту. Мы рассмотрим Ваше
 резюме.” requires no promise of a follow-up. Earlier completed bot summaries and handover
 notices do not block its saved thanks, while a real unanswered question still blocks the send.
+After an automatic send, verify the expected outgoing text and reveal its confirmed bubble in
+ordinary and reversed message panes. Restoring a background view must not hide a new outgoing
+reply when there is no draft. Preserve user edits, manual scrolling during delivery and the
+selected conversation. A reply already confirmed as sent must never be sent again because it
+was outside the visible viewport. See `tests/browser/chat-reply-visibility.mjs`.
 
 - Nothing is sent or submitted without the user, except A2 (exact answers), C4 (recognized acknowledgements) and C9 (the explicitly authorized rejection reason request).
 - No visible markers on pages; marks are data attributes only.

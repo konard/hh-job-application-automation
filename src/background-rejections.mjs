@@ -1,6 +1,7 @@
 /** Read rejections while the chat window is inactive, then restore its conversation and draft. */
 import { isConversationFinished, readChatIn, scrollChatList } from './chat-answers.mjs';
 import { setUnreadFilter, waitForChat } from './chat-recording.mjs';
+import { revealChatMessage } from './chat-scroll.mjs';
 
 /** Runs in the browser; a reversed message column may have a negative scroll position. */
 function messageScroll(top = null) {
@@ -23,13 +24,15 @@ export async function captureChatView(page) {
   });
   const chat = await readChatIn(page);
   const chatId = new URL(view.url).pathname.match(/\/chat\/(\d+)/)?.[1];
-  return { ...view, chatId, finished: chat.id === chatId && isConversationFinished(chat),
+  return { ...view, chatId, lastMessageId: chat.messages.at(-1)?.id, finished: chat.id === chatId && isConversationFinished(chat),
     listTop: (await page.evaluate(scrollChatList, null))?.top ?? null,
     messageTop: await page.evaluate(messageScroll, null) };
 }
 
-export async function restoreChatView(page, view, { allowRestore = async () => true } = {}) {
+export async function restoreChatView(page, view, { allowRestore = async () => true, canAdjust = async () => true } = {}) {
   if (page.isClosed() || !await allowRestore()) return false;
+  // The user returned to this same chat and may be reading or editing. Keep that live view.
+  if (page.url() === view.url && await canAdjust() !== true) return false;
   if (page.url() !== view.url) {
     const steps = await page.evaluate((length) => window.history.length - length, view.historyLength).catch(() => 0);
     if (steps > 0) {
@@ -42,11 +45,16 @@ export async function restoreChatView(page, view, { allowRestore = async () => t
     }
   }
   const id = new URL(view.url).pathname.match(/\/chat\/(\d+)/)?.[1];
-  if (id) await waitForChat(page, id);
+  const currentChat = id ? await waitForChat(page, id) : null;
   if (page.url() !== view.url) return false;
   if (typeof view.unreadOnly === 'boolean') await page.evaluate(setUnreadFilter, view.unreadOnly);
   if (view.listTop !== null) await page.evaluate(scrollChatList, view.listTop);
-  if (view.messageTop !== null) await page.evaluate(messageScroll, view.messageTop);
+  const previous = currentChat?.messages.findIndex(message => message.id === view.lastMessageId) ?? -1;
+  const reply = previous >= 0 && currentChat.messages.slice(previous + 1).find(message => message.mine);
+  if (reply && !view.draft?.value?.trim()) {
+    // Restoring the old viewport must not hide a reply sent during the background pass.
+    await page.evaluate(revealChatMessage, { messageId: reply.id, expectedUrl: view.url });
+  } else if (view.messageTop !== null) await page.evaluate(messageScroll, view.messageTop);
   if (view.draft) {
     const input = page.locator('textarea[data-qa="text-input"]').first();
     const current = await input.inputValue({ timeout: 1000 }).catch(() => null);
@@ -94,7 +102,8 @@ export function createBackgroundRejectionSweep({
           if (view && !page.isClosed()) {
             // A user who returned and selected another chat keeps that choice.
             if (view.finished && !view.draft?.value?.trim()) onFinished(view.chatId);
-            else await restore(page, view, { allowRestore: async () => page.url() === ownedUrl || page.url() === view.url });
+            else await restore(page, view, { allowRestore: async () => page.url() === ownedUrl || page.url() === view.url,
+              canAdjust: async () => await isActive() === false });
           }
         } finally {
           if (!page.isClosed()) await page.evaluate(() => { window.__chatAutomating = false; }).catch(() => {});

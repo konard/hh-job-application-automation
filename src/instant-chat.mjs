@@ -26,8 +26,11 @@ import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs'
 import { learnChatQuestions } from './chat-learning.mjs';
 import { answerWasRepeated, chooseChatOption, requiresChatOption } from './chat-options.mjs';
 import { readChatChoiceControls, readQuickReplies, clearAutomaticChatDraft, prefillSavedChatAnswer } from './chat-choice-controls.mjs';
+import { revealChatMessage } from './chat-scroll.mjs';
 export { perfectOption } from './chat-options.mjs';
 export { readQuickReplies } from './chat-choice-controls.mjs';
+export { revealChatMessage as scrollToLastMessage } from './chat-scroll.mjs';
+const scrollToLastMessage = revealChatMessage;
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
@@ -41,34 +44,20 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export const answersPassed = (message) => isAnswersPassedNotice(message?.text ?? '');
 
-/**
- * Runs in the chat frame: the reply buttons the bot offers under its last message
- * @returns {string[]}
- */
-/** Runs in the chat frame: scrolled down to the last message, so the user sees what is asked */
-export function scrollToLastMessage() {
-  const messages = document.querySelectorAll('[data-qa^="chatik-chat-message-"]');
-  const last = messages[messages.length - 1];
-  let box = last?.parentElement;
-  while (box && !(box.scrollHeight > box.clientHeight + 10 && /auto|scroll/.test(window.getComputedStyle(box).overflowY))) {
-    box = box.parentElement;
-  }
-  if (box) {
-    box.scrollTop = box.scrollHeight;
-  } else {
-    last?.scrollIntoView({ block: 'end' });
-  }
-}
-
 /** The user's own message after the given one appeared */
 const answeredAfter = (chat, messageId) => {
   const index = chat?.messages.findIndex((message) => message.id === messageId) ?? -1;
   return index >= 0 && chat.messages.slice(index + 1).some((message) => message.mine);
 };
 
-async function waitForAnswer(frame, messageId, ms) {
+async function waitForAnswer(frame, messageId, answer, anchor, ms) {
   for (const started = Date.now(); Date.now() - started < ms; await sleep(500)) {
-    if (answeredAfter(await readChatIn(frame).catch(() => null), messageId)) {
+    const chat = await readChatIn(frame).catch(() => null);
+    const index = chat?.messages.findIndex(message => message.id === messageId) ?? -1;
+    const reply = index < 0 || chat.transitioning ? null : chat.messages.slice(index + 1)
+      .find(message => message.mine && normalizeQuestion(message.text) === normalizeQuestion(answer));
+    if (reply) {
+      await frame.evaluate(revealChatMessage, { ...anchor, messageId: reply.id }).catch(() => {});
       return true;
     }
   }
@@ -119,7 +108,11 @@ export async function sendChatAnswer(frame, messageId, { answer, option, maySend
       await input.press('Enter');
     }
   }
-  return waitForAnswer(frame, messageId, 8000);
+  // HH can leave a just-sent bubble below an older scroll position. Reveal the newest end
+  // before checking delivery, then the confirmed reply. A subsequent user action wins.
+  const anchor = await frame.evaluate(() => ({ expectedUrl: window.location.href, userAt: window.__chatUserActivity?.at ?? null }));
+  await frame.evaluate(revealChatMessage, anchor).catch(() => {});
+  return waitForAnswer(frame, messageId, option ?? answer, anchor, 8000);
 }
 
 /**
