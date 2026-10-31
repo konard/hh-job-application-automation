@@ -12,7 +12,8 @@ try {
   const page = await browser.newPage();
   page.on('pageerror', (error) => console.error('Fixture page error:', error.message));
   await page.route('https://hh.ru/**', (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body:
-    new URL(route.request().url()).pathname === '/search/vacancy' ? '<main>Vacancies</main>' : `
+    new URL(route.request().url()).pathname === '/search/vacancy'
+      ? '<main>Vacancies<article>Вы откликнулись на другую вакансию</article></main>' : `
       <main><form name="vacancy_response" onsubmit="event.preventDefault(); window.sent++; window.scrollAtSend=scrollY; document.querySelector('main').innerHTML='Вы откликнулись'" style="margin-top:1300px">
       <button type="button" data-qa="vacancy-response-letter-toggle" onclick="window.toggles++; setTimeout(() => { document.querySelector('[name=letter]').hidden=false; this.remove() }, 200)">Add a cover letter</button>
       <textarea hidden name="letter" data-qa="vacancy-response-form-letter-input"></textarea>
@@ -50,6 +51,17 @@ try {
   assert.equal(await page.evaluate(() => window.toggles), 0, 'A review wait must not reopen or refill anything');
   await page.locator('[data-qa="vacancy-response-letter-submit"]').click();
   assert.equal(await waiting, 'submitted');
+
+  await page.goto('https://hh.ru/applicant/vacancy_response?vacancyId=991000003');
+  const safeEvaluate = commander.safeEvaluate.bind(commander);
+  commander.safeEvaluate = async (options) => {
+    if (options.operationName === 'response submitted check') {
+      await page.goto(returnUrl);
+    }
+    return safeEvaluate(options);
+  };
+  assert.equal(await waitForManualResponse({ commander }), 'left',
+    'An already-applied search result must not count the form we just left as sent');
   await commander.destroy();
   console.log(`Form timing checks passed: ready form ${elapsed}ms, one expansion/send, visible scrolling, passive review and native submission.`);
 } finally { await browser.close(); }

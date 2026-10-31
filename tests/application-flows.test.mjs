@@ -506,6 +506,22 @@ describe('full response form', () => {
     }
   });
 
+  test('leaving during a manual-review check never counts another page as a submission', async () => {
+    for (const operation of ['daily application limit check', 'response submitted check']) {
+      const form = fakeForm();
+      let url = RESPONSE_URL;
+      form.getUrl = () => url;
+      const evaluate = form.safeEvaluate;
+      form.safeEvaluate = async (options) => {
+        if (options.operationName !== operation) return evaluate(options);
+        url = SEARCH_URL;
+        return { value: operation === 'response submitted check' ? true : null };
+      };
+      assert.equal(await waitForManualResponse({ commander: form }), 'left');
+      assert.deepEqual(form.state.clicks, []);
+    }
+  });
+
   test('review-only drafts are never auto-submitted, even after learning and with auto-submit enabled', async () => {
     disableConfirmations();
     const qa = new Map([['Опыт Linux?', 'Работал с Ubuntu и Docker.']]);

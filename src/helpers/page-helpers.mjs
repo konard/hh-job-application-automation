@@ -91,8 +91,10 @@ export async function ensureCoverLetterVisible(commander, { selector, texts, ele
  * @returns {Promise<boolean>} False also when navigation interrupted the check
  */
 export async function isResponseSubmitted(commander) {
+  const expectedUrl = commander.getUrl?.();
   const { value } = await commander.safeEvaluate({
-    fn: (texts, marks) => {
+    fn: (texts, marks, expectedUrl) => {
+      if (expectedUrl && window.location.href !== expectedUrl) return false;
       if (document.querySelector(marks)) {
         return true;
       }
@@ -100,12 +102,12 @@ export async function isResponseSubmitted(commander) {
       const bodyText = (document.body?.textContent ?? '').replace(/\s+/g, ' ');
       return texts.some((text) => bodyText.includes(text));
     },
-    args: [RESPONSE_SENT_TEXTS, RESPONSE_SENT_MARKS],
+    args: [RESPONSE_SENT_TEXTS, RESPONSE_SENT_MARKS, expectedUrl],
     defaultValue: false,
     operationName: 'response submitted check',
     silent: true,
   });
-  return value;
+  return value === true && (!expectedUrl || commander.getUrl() === expectedUrl);
 }
 
 /**

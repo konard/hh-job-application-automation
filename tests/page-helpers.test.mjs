@@ -33,6 +33,17 @@ describe('isResponseSubmitted()', () => {
       false,
     );
   });
+
+  test('ignores sent markers read after navigation to another page', async () => {
+    let url = 'https://hh.ru/applicant/vacancy_response?vacancyId=123';
+    assert.equal(await isResponseSubmitted({
+      getUrl: () => url,
+      safeEvaluate: async () => {
+        url = 'https://hh.ru/search/vacancy';
+        return { value: true };
+      },
+    }), false);
+  });
 });
 
 describe('createMutex()', () => {

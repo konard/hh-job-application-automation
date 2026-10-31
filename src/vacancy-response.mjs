@@ -382,8 +382,12 @@ export function isFormLeftDuringWait(error, url) {
 export async function waitForManualResponse({ commander, formUrl = commander.getUrl(), isPageClosed = () => false }) {
   try {
     while (!isPageClosed() && commander.getUrl() === formUrl) {
-      if (await readApplicationLimit(commander)) return 'daily_limit';
-      if (await isResponseSubmitted(commander)) return 'submitted';
+      const limit = await readApplicationLimit(commander);
+      if (commander.getUrl() !== formUrl) return 'left';
+      if (limit) return 'daily_limit';
+      const submitted = await isResponseSubmitted(commander);
+      if (commander.getUrl() !== formUrl) return 'left';
+      if (submitted) return 'submitted';
       if ((await commander.wait({ ms: 1000, reason: 'your review and manual submission (answers continue to be saved)' }))?.aborted) return 'interrupted';
     }
   } catch (error) {
