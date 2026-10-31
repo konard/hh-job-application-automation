@@ -708,10 +708,12 @@ browser. For the message waiting for an answer the reply is typed into the messa
   window, as rejections are read.
 
 `--watch` waits until you send the reply (or type `s` to skip) before the next chat. With `--auto-send`,
-buttons are selected for exact saved answers and unambiguous salary ranges, including in the live
+buttons are selected for exact saved answers, unique accepted answers from a completed bot summary,
+and unambiguous salary ranges, including in the live
 chat window and the application panel. A contradictory net/gross question is answered automatically
 only when both configured amounts fit the same range. Ambiguous ranges and unknown answers wait
-for review. Explicit choice-only questions never get a free-text draft, and a bot repeating the
+for review. Strict bot options (including Yes/No without a “choose” instruction) never get a
+free-text draft; HH's generic conversation suggestions are excluded. A bot repeating the
 question after an answer does not get the same text suggested again. Buttons arriving after their
 question are detected too; clearing an unsent draft retries the choice. Saved answers and frequency counts are retained; plain salary
 suggestions are filtered to the requested net or gross basis.

@@ -36,6 +36,17 @@ try {
   assert.equal((await respond(options)).status, 'left_for_user', 'The outgoing reply ends the flow');
   assert.equal(await page.evaluate(() => window.sent), 1);
 
+  await page.goto('https://hh.ru/chat/123455');
+  await page.evaluate(() => {
+    const messages = document.getElementById('messages');
+    messages.insertAdjacentHTML('afterbegin', '<div data-qa="chatik-chat-message-89"><div data-qa="chat-bubble-text">Есть ли у вас опыт с микросервисами?: ДА</div></div><div data-qa="chatik-chat-message-90"><div data-qa="chat-bubble-text">Спасибо за ответы! Мы передали их работодателю.</div></div>');
+    document.querySelector('[data-qa="chatik-chat-message-91"] [data-qa="chat-bubble-text"]').textContent = 'Благодарим Вас за честные ответы чат-боту. Мы рассмотрим Ваше резюме.';
+    document.body.insertAdjacentHTML('beforeend', '<div class="buttons-wrapper"><button>Здравствуйте!</button><button>Какая схема оплаты?</button><button>Где находится место работы?</button></div>');
+  });
+  assert.equal((await respond(options)).status, 'sent', 'Completed bot summaries must not block the human acknowledgement');
+  assert.equal(await page.evaluate(() => window.sent), 1);
+  assert.equal((await respond(options)).status, 'left_for_user');
+
   await page.goto('https://hh.ru/chat/123452');
   await page.locator('textarea').fill('My existing draft.');
   assert.equal((await respond(options)).status, 'left_for_user');

@@ -18,6 +18,17 @@ async function fixture(run) {
 }
 
 describe('pending acknowledgement in an already-read chat', () => {
+  test('the reported human acknowledgement after a completed bot summary is answered, without dropping real pending questions', () => {
+    const last = { id: '15', mine: false, title: '', text: 'Кандидат, здравствуйте!\nБлагодарим Вас за честные ответы чат-боту. Мы рассмотрим Ваше резюме.\nАнна Примерова' };
+    const chat = { ...makeChat(), messages: [makeChat().messages[0],
+      { id: '12', mine: false, text: 'Есть ли у Вас опыт работы с микросервисами?: ДА' },
+      { id: '13', mine: false, text: 'Спасибо за ответы! Мы передали их работодателю.' }, last] };
+    assert.deepEqual(unansweredAcknowledgement(chat, templates), { chatId: '12345', messageId: '15', answer: thanks });
+    chat.messages.splice(2, 0, { id: '14', mine: false, text: 'Когда сможете выйти на работу?' });
+    assert.equal(unansweredAcknowledgement(chat, templates), null);
+    chat.messages.splice(2, 1, { id: '14', mine: false, text: 'Спасибо за ответы! Мы передали их работодателю. Пришлите примеры кода.' });
+    assert.equal(unansweredAcknowledgement(chat, templates), null);
+  });
   test('a finished conversation can still need its saved thanks without an unread badge or exact example', async () => {
     const chat = makeChat();
     assert.equal(isConversationFinished(chat), true);

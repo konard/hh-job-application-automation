@@ -153,9 +153,23 @@ not become acknowledgements. Existing drafts and user activity block automatic s
 Opening a chat must not lose its pending acknowledgement when hh.ru removes the unread badge.
 The inactive-window pass checks the currently open conversation before scanning the unread list,
 using the existing saved thanks even without an exact example of that wording. A prior manual
-reply, a new question, multiple pending messages, a draft or user activity prevents a send;
+reply, a new question, multiple actionable pending messages, a draft or user activity prevents a send;
 private per-message reservations prevent duplicate retries after uncertain sends and restarts.
 See `tests/acknowledgement-replies.test.mjs` and `tests/browser/acknowledgement-replies.mjs`.
+
+Strict recruiter-bot options must be clicked directly when the exact saved answer or a unique
+accepted answer in a completed bot summary matches a displayed choice. This includes plain
+Yes/No questions without an explicit “choose” instruction. Never draft or send a free-text
+answer instead of a strict option. Generic HH conversation starters are not answer choices.
+Delayed or disabled buttons keep the choice flow pending; remove only unchanged automatic
+drafts when the actual options appear, preserving user edits. Unknown or conflicting choices
+remain for manual selection. The same reader and sender cover the application chat panel,
+chat-prefill command and live chat watcher. See `tests/chat-options.test.mjs` and
+`tests/browser/chat-choices.mjs`.
+
+An acknowledgement such as “Благодарим Вас за честные ответы чат-боту. Мы рассмотрим Ваше
+резюме.” requires no promise of a follow-up. Earlier completed bot summaries and handover
+notices do not block its saved thanks, while a real unanswered question still blocks the send.
 
 - Nothing is sent or submitted without the user, except A2 (exact answers), C4 (recognized acknowledgements) and C9 (the explicitly authorized rejection reason request).
 - No visible markers on pages; marks are data attributes only.

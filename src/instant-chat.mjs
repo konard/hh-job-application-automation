@@ -17,16 +17,17 @@
  * @module instant-chat
  */
 
-import { chatContextTexts, compareReusedAnswers, describeReuse, isQuestion, isReuseOffer, knownReplyInContexts, pendingMessages, readChatIn, reuseOption } from './chat-answers.mjs';
+import { chatContextTexts, compareReusedAnswers, describeReuse, isQuestion, isReuseOffer, isAnswersPassedNotice, knownReplyInContexts, pendingMessages, readChatIn, reuseOption } from './chat-answers.mjs';
 import { normalizeQuestion } from './qa-database.mjs';
 import { askUser, isInteractive, withdrawPrompt } from './confirmations.mjs';
 import { extractVacancyId } from './hh-selectors.mjs';
 import { answersInContexts, loadAnswerContexts } from './answer-contexts.mjs';
 import { createChatHistory, replyVariants, varyReply } from './chat-history.mjs';
-import { ANSWERS_PASSED } from './hh-words.mjs';
 import { learnChatQuestions } from './chat-learning.mjs';
 import { answerWasRepeated, chooseChatOption, requiresChatOption } from './chat-options.mjs';
+import { readChatChoiceControls, readQuickReplies, clearAutomaticChatDraft, prefillSavedChatAnswer } from './chat-choice-controls.mjs';
 export { perfectOption } from './chat-options.mjs';
+export { readQuickReplies } from './chat-choice-controls.mjs';
 
 /** The panel's chat is a frame of chatik.hh.ru */
 const CHAT_FRAME = /^https:\/\/chatik\.hh\.ru\/chat\/(\d+)/;
@@ -38,18 +39,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * @param {{text: string}} message
  * @returns {boolean}
  */
-export const answersPassed = (message) => ANSWERS_PASSED.test(message?.text ?? '');
+export const answersPassed = (message) => isAnswersPassedNotice(message?.text ?? '');
 
 /**
  * Runs in the chat frame: the reply buttons the bot offers under its last message
  * @returns {string[]}
  */
-export function readQuickReplies() {
-  const wrappers = [...document.querySelectorAll('[class*="buttons-wrapper"]')].filter((wrapper) => wrapper.getClientRects().length > 0);
-  const last = wrappers[wrappers.length - 1];
-  return last ? [...last.querySelectorAll('button')].map((button) => button.innerText.trim()).filter(Boolean) : [];
-}
-
 /** Runs in the chat frame: scrolled down to the last message, so the user sees what is asked */
 export function scrollToLastMessage() {
   const messages = document.querySelectorAll('[data-qa^="chatik-chat-message-"]');
@@ -90,14 +85,33 @@ async function waitForAnswer(frame, messageId, ms) {
  */
 export async function sendChatAnswer(frame, messageId, { answer, option, maySend = async () => true, preserveDraft = false }) {
   if (!await maySend()) return false;
+  if ((await readChatIn(frame)).transitioning) return false;
+  const controls = await frame.evaluate(readChatChoiceControls);
+  if (controls.optionMessageId !== String(messageId)) return false;
   if (option) {
-    await frame.getByRole('button', { name: option, exact: true }).last().click({ timeout: 5000 });
+    const index = controls.options.indexOf(option);
+    if (index < 0 || !await clearAutomaticChatDraft(frame, messageId) || !await maySend()) return false;
+    await frame.locator(`[data-hh-chat-option="${messageId}:${index}"]`).click({ timeout: 5000 });
   } else {
+    if (controls.strictOptions) return false;
     const input = frame.locator(INPUT).first();
-    if (preserveDraft && (await input.inputValue()).trim()) return false;
+    const before = await input.evaluate(e => ({ value: e.value, owned: e.dataset.hhAutomaticChatDraft,
+      review: e.dataset.hhAnswerDraft, reviewMessageId: e.dataset.hhDraftMessageId }));
+    let owned;
+    try { owned = JSON.parse(before.owned); } catch { /* User drafts have no automation marker. */ }
+    if (before.value.trim() && (preserveDraft ||
+      (before.review && (!before.reviewMessageId || before.reviewMessageId === String(messageId))) ||
+      owned?.messageId !== String(messageId) || owned?.value !== before.value)) return false;
     await input.fill(answer);
+    await input.evaluate((e, owned) => { if (e.value === owned.value) e.dataset.hhAutomaticChatDraft = JSON.stringify(owned); },
+      { messageId: String(messageId), value: answer });
     await sleep(500);
-    if (!await maySend() || (preserveDraft && await input.inputValue() !== answer)) return false;
+    const fresh = await frame.evaluate(readChatChoiceControls);
+    if (fresh.strictOptions || fresh.optionMessageId !== String(messageId) || (await readChatIn(frame)).transitioning) {
+      await clearAutomaticChatDraft(frame, messageId);
+      return false;
+    }
+    if (!await maySend() || await input.inputValue() !== answer) return false;
     const sendButton = frame.locator('button[data-qa*="send"]').first();
     if (await sendButton.isVisible().catch(() => false)) {
       await sendButton.click({ timeout: 5000 });
@@ -204,7 +218,7 @@ export function createInstantChat({
       }
       handled = last.id;
       await frame.evaluate(scrollToLastMessage).catch(() => {});
-      const options = await frame.evaluate(readQuickReplies).catch(() => []);
+      const options = await readQuickReplies(frame).catch(() => []);
       if (options.length > 0) {
         buttonQuestions.add(normalizeQuestion(last.text));
       }
@@ -253,7 +267,7 @@ export function createInstantChat({
         quietSince = Date.now();
         continue;
       }
-      const selection = chooseChatOption({ question: last.text, reply, options, contacts });
+      const selection = chooseChatOption({ question: last.text, reply, options, contacts, history: await chatHistory.read() });
       const option = selection?.option ?? null;
       const perfect = option ? selection.autoSend : Boolean(reply?.perfect) && options.length === 0;
       log(`💬 ${last.title || 'Chat'}: ${asked}${options.length > 0 ? ` [${options.join(' / ')}]` : ''}`);
@@ -270,10 +284,10 @@ export function createInstantChat({
         log('💬 Not a perfect match: the chat is left for the chat processor');
         return false;
       }
-      if (reply && !option && !requiresChatOption(last.text, options) && !answerWasRepeated(chat, last, reply.answer)) {
+      if (reply && !option && !requiresChatOption(last.text, options, chat.strictOptions) && !answerWasRepeated(chat, last, reply.answer)) {
         const input = frame.locator(INPUT).first();
         if (!(await input.inputValue().catch(() => '')).trim()) {
-          await input.fill(reply.answer).catch(() => {});
+          await prefillSavedChatAnswer(frame, last.id, reply.answer).catch(() => {});
         }
       }
       log(reply

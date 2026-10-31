@@ -1,11 +1,12 @@
 /** Reply to a pending acknowledgement even when opening its chat already marked it read. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { isAcknowledgement, isSupportChat, knownReply, pendingMessages, templateCore } from './chat-answers.mjs';
+import { isAcknowledgement, isSummary, isCompletionNotice, isAnswersPassedNotice, isSupportChat, knownReply, pendingMessages, templateCore } from './chat-answers.mjs';
 
 export function unansweredAcknowledgement(chat, templates) {
   if (!chat?.id || chat.transitioning || !chat.canReply || chat.turnedOff || isSupportChat(chat)) return null;
-  const pending = pendingMessages(chat.messages);
+  const pending = pendingMessages(chat.messages).filter(message => !isSummary(message.text) &&
+    !isCompletionNotice(message.text) && !isAnswersPassedNotice(message.text));
   if (pending.length !== 1) return null;
   const message = pending[0];
   if (!message.id || !isAcknowledgement(templateCore(message.text, { sender: message.title }))) return null;

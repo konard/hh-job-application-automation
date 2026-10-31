@@ -1,5 +1,5 @@
 /** Capture sent chat messages as the DOM changes, and read older bubbles in the history slot. */
-import { readChat, readChatIn, isApplication } from './chat-answers.mjs';
+import { CHAT_READER_SOURCE, readChatIn, isApplication } from './chat-answers.mjs';
 import { TURNED_OFF_WORDS } from './hh-words.mjs';
 import { createMutex } from './helpers/mutex.mjs';
 
@@ -50,7 +50,7 @@ export function observeChat(read, turnedOffWords, owner) {
       childList: true, subtree: true, characterData: true,
       // Delivery acknowledgement can change only an existing icon's data-qa, or a bubble's
       // outgoing class/style. Record the sender correction without waiting for another message.
-      attributes: true, attributeFilter: ['data-qa', 'class', 'style'],
+      attributes: true, attributeFilter: ['data-qa', 'class', 'style', 'hidden', 'aria-hidden', 'disabled', 'aria-disabled'],
     });
     capture();
   };
@@ -79,7 +79,7 @@ export async function watchChats(page, { onChat, onError = console.error }) {
     }
   }));
   const owner = `${Date.now()}-${Math.random()}`;
-  const script = `(${observeChat.toString()})(${readChat.toString()}, ${JSON.stringify(TURNED_OFF_WORDS)}, ${JSON.stringify(owner)})`;
+  const script = `(${observeChat.toString()})(${CHAT_READER_SOURCE}, ${JSON.stringify(TURNED_OFF_WORDS)}, ${JSON.stringify(owner)})`;
   await page.addInitScript({ content: script });
   for (const frame of page.frames()) {
     await frame.evaluate(script).catch(onError);

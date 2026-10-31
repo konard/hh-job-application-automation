@@ -403,6 +403,11 @@ describe('Acknowledgements of the application, in any company\'s words', () => {
     }
     assert.equal(isAcknowledgement('Ваше резюме не находится на рассмотрении.'), false);
     assert.equal(isAcknowledgement('Ваше резюме может быть рассмотрено.'), false);
+    assert.equal(isAcknowledgement('Благодарим Вас за честные ответы чат-боту. Мы рассмотрим Ваше резюме.'), true);
+    for (const text of ['Мы не рассмотрим Ваше резюме.', 'Мы рассмотрим Ваше резюме. Пришлите код.',
+      'Мы рассмотрим Ваше резюме. Когда сможете приступить?', 'Мы рассмотрим Ваше резюме. Приглашаем на интервью.']) {
+      assert.equal(isAcknowledgement(text), false, text);
+    }
   });
 
   test('optional hh.ru company information is recognized from the preview without treating surveys as acknowledgements', async () => {

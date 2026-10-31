@@ -77,6 +77,21 @@ describe('automatic chat options', () => {
     expect(requiresChatOption(question, [])).toBe(true);
     expect(requiresChatOption(question, options)).toBe(true);
     expect(requiresChatOption('How do you choose software libraries?', [])).toBe(false);
+    expect(requiresChatOption('Есть ли у вас такой опыт?', ['ДА', 'НЕТ'])).toBe(true);
+    expect(requiresChatOption('Есть ли у вас такой опыт?', [], true)).toBe(true);
+  });
+
+  test('a unique accepted summary resolves a saved rejected free-text attempt, without guessing from another question', () => {
+    const question = 'Есть ли у Вас опыт проектирования сервисов с нуля?';
+    const history = { chat: { messages: [{ mine: false, text: `${question}: ДА` }] } };
+    expect(chooseChatOption({ question, options: ['ДА', 'НЕТ'], history,
+      reply: { answer: 'Описание опыта | ДА', perfect: false } })).toMatchObject({ option: 'ДА', autoSend: true });
+    expect(chooseChatOption({ question, options: ['ДА', 'НЕТ'], history,
+      reply: { answer: 'Нет, в этой должности не работал, но выполнял эти обязанности более пяти лет.', perfect: true } }))
+      .toMatchObject({ option: 'ДА', autoSend: true });
+    expect(chooseChatOption({ question: 'Есть ли у Вас опыт проектирования электроники с нуля?', options: ['ДА', 'НЕТ'], history })).toBe(null);
+    history.other = { messages: [{ mine: false, text: `${question}: НЕТ` }] };
+    expect(chooseChatOption({ question, options: ['ДА', 'НЕТ'], history })).toBe(null);
   });
 
   test('English instructions without a question mark are learned and counted as questions', () => {

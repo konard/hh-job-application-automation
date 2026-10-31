@@ -2,13 +2,15 @@
 import { normalizeQuestion } from './qa-database.mjs';
 import { salaryQuestion } from './salary-questions.mjs';
 import { salaryAmounts, selectSalaryOption } from './salary-options.mjs';
+import { summaryPairs } from './chat-answers.mjs';
 
 export function perfectOption(answer, options) {
   const wanted = normalizeQuestion(answer);
   return options.find((option) => normalizeQuestion(option) === wanted) ?? null;
 }
 
-export const requiresChatOption = (question, options) => options.length > 0 &&
+export const requiresChatOption = (question, options, strict = false) => strict ||
+  (options.length === 2 && options.every(option => /^(?:да|нет|yes|no)[.!\s]*$/iu.test(option))) || options.length > 0 &&
   /\b(?:select|choose|pick)\b|выбер(?:и|ите)|один\s+из\s+вариант/iu.test(question) ||
   /\b(?:select|choose|pick)\s+(?:one|an?\s+option|from)\b|выбер(?:и|ите)\s+(?:один|одну|вариант|из)/iu.test(question);
 
@@ -17,10 +19,19 @@ export const requiresChatOption = (question, options) => options.length > 0 &&
  * questions require both configured sums to fit the same range. Overlaps, gaps, unknown
  * currencies and missing baselines are left for review.
  */
-export function chooseChatOption({ question, reply, options, contacts = {} }) {
+export function chooseChatOption({ question, reply, options, contacts = {}, history = {} }) {
   const exact = reply?.answer && perfectOption(reply.answer, options);
   const asked = salaryQuestion(question);
-  if (exact && !asked) return { option: exact, autoSend: Boolean(reply.perfect), reason: 'saved answer' };
+  if (exact && !asked && reply.perfect) return { option: exact, autoSend: true, reason: 'saved answer' };
+  if (!asked) {
+    // A bot's accepted summary is stronger evidence than a rejected free-text attempt kept in
+    // the raw history. Only the very same question and a unique offered answer qualify.
+    const accepted = Object.values(history).flatMap(chat => (chat.messages ?? []).filter(message => !message.mine)
+      .flatMap(message => summaryPairs(message.text))).filter(([q]) => normalizeQuestion(q) === normalizeQuestion(question)).map(([, answer]) => answer);
+    const matches = options.filter(option => accepted.some(answer => perfectOption(answer, [option])));
+    if (matches.length === 1) return { option: matches[0], autoSend: true, reason: 'accepted answer in bot summary' };
+  }
+  if (exact && !asked) return { option: exact, autoSend: false, reason: 'saved answer' };
   if (!asked || !options.length) return null;
   const selection = selectSalaryOption({ question, options, contacts });
   if (!selection) return null;

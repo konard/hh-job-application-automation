@@ -31,6 +31,7 @@ import {
 } from './chat-answers.mjs';
 import { readQuickReplies, sendChatAnswer } from './instant-chat.mjs';
 import { answerWasRepeated, chooseChatOption, requiresChatOption } from './chat-options.mjs';
+import { clearAutomaticChatDraft, prefillSavedChatAnswer } from './chat-choice-controls.mjs';
 import { blockHangingHosts } from './hanging-hosts.mjs';
 import { createHumanInput } from './helpers/human-input.mjs';
 import { createSkippedVacancies, isSkippedForGood, SKIP_REASONS } from './skipped-vacancies.mjs';
@@ -509,7 +510,7 @@ async function prefillChat(id, depth = 0) {
     const inContexts = answersInContexts(sources.qaDatabase.readQADatabase, await loadAnswerContexts());
     const compared = await compareReusedAnswers(chat.messages, (question) => inContexts(question, chatContextTexts(chat)));
     console.log(describeReuse(compared));
-    const option = reuseOption(compared.decision, await page.evaluate(readQuickReplies).catch(() => []));
+    const option = reuseOption(compared.decision, await readQuickReplies(page).catch(() => []));
     if (argv.autoReuse && option && depth < 20) {
       if (await sendChatAnswer(page.mainFrame(), last.id, { answer: option, option }).catch(() => false)) {
         console.log(`✅ Chose: ${option}`);
@@ -528,9 +529,9 @@ async function prefillChat(id, depth = 0) {
   });
   // A template message: one of the replies the user has given to it
   reply = varyReply(reply, replyVariants(await chatHistory.read(), await templatesDb.readQADatabase()));
-  const options = await page.evaluate(readQuickReplies).catch(() => []);
-  const choice = chooseChatOption({ question: last.text, reply, options, contacts: sources.contacts });
-  if (!reply && !choice && !requiresChatOption(last.text, options) && argv.draft) {
+  const options = await readQuickReplies(page).catch(() => []);
+  const choice = chooseChatOption({ question: last.text, reply, options, contacts: sources.contacts, history: await chatHistory.read() });
+  if (!reply && !choice && !requiresChatOption(last.text, options, chat.strictOptions) && argv.draft) {
     console.log('🤖 Drafting the reply with local Claude Code from the resume and qa.lino...');
     const drafted = await askClaude(chatDraftPrompt({
       vacancy: chat.vacancy, messages: chat.messages, resume: sources.resume, related: relatedAnswers(templateCore(last.text), sources.qaMap),
@@ -560,7 +561,8 @@ async function prefillChat(id, depth = 0) {
     }
     console.log('⚠️  The answer did not show in the chat: typed in for you instead');
   }
-  if (choice || requiresChatOption(last.text, options) || (reply && answerWasRepeated(chat, last, reply.answer))) {
+  if (choice || requiresChatOption(last.text, options, chat.strictOptions) || (reply && answerWasRepeated(chat, last, reply.answer))) {
+    await clearAutomaticChatDraft(page.mainFrame(), last.id);
     console.log('👉 Choose a button in the chat; free text is not prefilled for an option-only or repeated question');
     return { id: last.id, replied: false, title: chat.vacancy };
   }
@@ -569,7 +571,7 @@ async function prefillChat(id, depth = 0) {
     console.log('✋ The message field already has text: left as it is');
     return { id: last.id, replied: true, title: chat.vacancy };
   }
-  await input.fill(reply.answer);
+  await prefillSavedChatAnswer(page.mainFrame(), last.id, reply.answer);
   console.log(`✍️  Typed the reply (${reply.source}${reply.matched ? `: ${reply.matched.slice(0, 80)}` : ''}): check it and send it yourself\n   ${reply.answer.replace(/\n/g, '\n   ')}`);
   return { id: last.id, replied: true, title: chat.vacancy };
 }
@@ -744,12 +746,12 @@ async function answerTemplate(chat, { canContinue = async () => true } = {}) {
     console.log(`📭 Chat ${chat.id} (${chat.title}): «${about}» read, no reply needed`);
     return;
   }
-  if (!reply?.perfect || !reply.source.startsWith('chat-templates') || pending.length > 1 || !read.canReply || !argv.autoSend) {
-    console.log(`👉 Chat ${chat.id} (${chat.title}): more than a template waits in it, left for you`);
+  if (argv.autoSend && read.canReply && isAcknowledgement(templateCore(last.text, { sender: last.title }))) {
+    await answerCurrentAcknowledgement({ canContinue, chatId: chat.id });
     return;
   }
-  if (isAcknowledgement(templateCore(last.text, { sender: last.title }))) {
-    await answerCurrentAcknowledgement({ canContinue, chatId: chat.id });
+  if (!reply?.perfect || !reply.source.startsWith('chat-templates') || pending.length > 1 || !read.canReply || !argv.autoSend) {
+    console.log(`👉 Chat ${chat.id} (${chat.title}): more than a template waits in it, left for you`);
     return;
   }
   const maySend = async () => {
@@ -800,15 +802,17 @@ async function writeSavedChat(chat, frame) {
     readTemplates: templatesDb.readQADatabase, readQADatabase: sources.qaDatabase.readQADatabase,
     contexts: await loadAnswerContexts(), known: chatContextTexts(chat),
   });
-  const options = chat.options ?? await frame.evaluate(readQuickReplies).catch(() => []);
-  const choice = chooseChatOption({ question: last.text, reply, options, contacts: sources.contacts });
-  if ((!reply?.answer && !choice) || reply?.noReply || frame.isDetached()) return;
+  const options = chat.options ?? await readQuickReplies(frame).catch(() => []);
+  const choice = chooseChatOption({ question: last.text, reply, options, contacts: sources.contacts, history: await chatHistory.read() });
+  if (reply?.noReply || frame.isDetached()) return;
   // Recheck after looking up the answer: the user may already have moved to another chat.
   const current = await readChatIn(frame);
   if (current.transitioning || current.id !== chat.id || pendingMessages(current.messages).at(-1)?.id !== last.id) return;
   if (passRunning || backgroundRejections?.running || await frame.evaluate(() => Boolean(window.__chatAutomating))) return false;
   const input = frame.locator(MESSAGE_INPUT).first();
+  if (requiresChatOption(last.text, options, chat.strictOptions)) await clearAutomaticChatDraft(frame, last.id);
   const draft = (await input.inputValue({ timeout: 1000 }).catch(() => '')).trim();
+  if (!reply?.answer && !choice) return;
   if (choice?.autoSend && argv.autoSend && !handledChoices.has(key) &&
     !answerWasRepeated(chat, last, choice.option) && (!draft || draft === reply?.answer?.trim())) {
     handledChoices.add(key);
@@ -817,13 +821,13 @@ async function writeSavedChat(chat, frame) {
     } else console.log(`⚠️  The selected option did not show in chat ${chat.id}; left for review`);
     return;
   }
-  if (prefilledMessages.has(key) || draft || requiresChatOption(last.text, options) || !reply?.answer) return;
+  if (prefilledMessages.has(key) || draft || requiresChatOption(last.text, options, chat.strictOptions) || !reply?.answer) return;
   if (answerWasRepeated(chat, last, reply.answer)) {
     prefilledMessages.add(key);
     console.log(`👉 Chat ${chat.id}: the bot repeated this question after that answer; the same text is not prefilled again`);
     return;
   }
-  await input.fill(reply.answer, { timeout: 1000 });
+  await prefillSavedChatAnswer(frame, last.id, reply.answer);
   prefilledMessages.add(key);
   console.log(`✍️  Saved answer prefilled in chat ${chat.id}: check it and send it yourself\n   ${reply.answer}`);
 }

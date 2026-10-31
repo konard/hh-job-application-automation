@@ -15,9 +15,10 @@
  */
 
 import { PATTERN_GAP as GAP, PATTERN_PREFIX, findBestMatch, isEnglish, isPattern, matchesPattern, normalizeQuestion, patternWords, stringSimilarity } from './qa-database.mjs';
+import { readChatChoiceControls } from './chat-choice-controls.mjs';
 import { answerText, hasAnswerVariants } from './qa.mjs';
 import { answersInContexts, showsContext } from './answer-contexts.mjs';
-import { APPLICATION_WORD, INVITE_NOTICE, REJECTION_WORD, TURNED_OFF_WORDS } from './hh-words.mjs';
+import { ANSWERS_PASSED, APPLICATION_WORD, INVITE_NOTICE, REJECTION_WORD, TURNED_OFF_WORDS } from './hh-words.mjs';
 import { salaryClarificationQuestion } from './salary-questions.mjs';
 import { composeQuestionAnswer, separateQuestionAnswers, splitQuestions } from './multi-question.mjs';
 
@@ -42,7 +43,7 @@ export const isApplication = (message) => APPLICATION_WORD.test(message.title ??
  * @returns {{vacancy: string, messages: Array<{id: string, mine: boolean, title: string, heading: string, text: string}>, canReply: boolean, turnedOff: boolean}}
  *   heading: the bubble's own title («Отказ», "Rejection"); turnedOff: the employer turned the conversation off
  */
-export function readChat(turnedOffWords) {
+export function readChat(turnedOffWords, readChoices) {
   const clean = (text) => String(text ?? '').trim();
   const messages = [...document.querySelectorAll('[data-qa^="chatik-chat-message-"]')]
     .filter((element) => /^chatik-chat-message-\d+$/.test(element.getAttribute('data-qa')))
@@ -72,8 +73,7 @@ export function readChat(turnedOffWords) {
   const header = document.querySelector('[data-qa="chatik-header-sub-header"]');
   const link = clean(header?.querySelector('[data-qa="chatik-header-vacancy-link"]')?.innerText);
   const headerLines = clean(header?.innerText).split('\n').map((line) => line.trim()).filter((line) => line && line !== link);
-  const buttons = [...document.querySelectorAll('[class*="buttons-wrapper"]')]
-    .filter((element) => element.getClientRects().length > 0).at(-1);
+  const choices = readChoices?.() ?? { options: [], strictOptions: false };
   const chat = {
     id: window.location.pathname.match(/\/chat\/(\d+)/)?.[1] ?? '',
     vacancy: headerLines.at(-1) ?? '',
@@ -88,7 +88,7 @@ export function readChat(turnedOffWords) {
       new RegExp(turnedOffWords, 'iu').test(element.textContent)),
     // Buttons can arrive after their question. Include them in the recorder's change signature
     // so the live watcher can select a choice even when the message text did not change.
-    options: buttons ? [...buttons.querySelectorAll('button')].map((button) => button.innerText.trim()).filter(Boolean) : [],
+    ...choices,
   };
   // SPA navigation changes the address before replacing the conversation. Never attribute the
   // previous pane (or a mixture of two panes) to the new chat. Message IDs are globally unique.
@@ -113,7 +113,10 @@ export function readChat(turnedOffWords) {
  * @param {{evaluate: Function}} target - Playwright's page or frame
  * @returns {Promise<Object>} readChat's
  */
-export const readChatIn = (target) => target.evaluate(readChat, TURNED_OFF_WORDS);
+// Both callers use the same self-contained reader inside the page, including the mutation
+// recorder installed before navigation. These are trusted local functions, not page content.
+export const CHAT_READER_SOURCE = `(words => (${readChat.toString()})(words, ${readChatChoiceControls.toString()}))`;
+export const readChatIn = (target) => target.evaluate(`${CHAT_READER_SOURCE}(${JSON.stringify(TURNED_OFF_WORDS)})`);
 
 /**
  * Runs in the page: where the chat list is scrolled (and on screen), or scrolled to a position. The
@@ -469,6 +472,7 @@ const REVIEWS = /рассмотр|рассматр|анализ|изуч|озн�
 const COMES_BACK = /свяж|сообщ|верн[её]м|верн[её]тся|вернут(?:ься|ся)|обратн\p{L}* связ|позвон|напиш(?:ем|ет)|результат|contact|get back|reach out/iu;
 const ABOUT_APPLICATION = /резюме|отклик|кандидат|опыт|информаци|resume|cv|application|information/iu;
 const UNDER_REVIEW = /(?:резюме|кандидатура|отклик)\s+(?:(?:сейчас|пока)\s+)?(?:(?:находится|находятся)\s+)?(?:на\s+(?:этапе\s+)?рассмотрени[ия]|в\s+процессе\s+рассмотрения|рассматривается)|(?:resume|cv|application|candidacy)\s+(?:is\s+)?(?:currently\s+)?(?:under\s+review|being\s+(?:reviewed|considered))/iu;
+const WILL_REVIEW = /(?:^|[.!]\s+)(?:мы\s+)?(?:рассмотрим|изучим)\s+(?:ваше\s+)?резюме|\bwe\s+will\s+(?:review|consider)\s+your\s+(?:resume|cv|application)\b/iu;
 // An active screening notice, rather than a completed/negated selection or a task for the user.
 const SCREENING = /(?:^|[.!]\s+)(?:(?:сейчас|в данный момент|в настоящее время|на данном этапе)\s+)?(?:мы\s+)?(?:проводим|вед[её]м|ид[её]т|проводится)\s+(?:(?:первичный|предварительный)\s+)?отбор(?:\s+кандидатов)?\s+по\s+резюме/iu;
 /**
@@ -492,7 +496,7 @@ export function isAcknowledgement(core) {
   // Optional company information is not a task for the applicant. Strip only this explicit
   // informational sentence and an hh.ru employer page; survey/test/contact links still block it.
   const text = String(core ?? '').replace(/(?:вы также можете|также вы можете)\s+(?:узнать больше о нас и\s+)?ознакомиться с (?:другими|нашими) вакансиями по ссылке\s*:\s*https:\/\/hh\.ru\/employer\/\d+\/?(?=\s|[.!]|$)\s*[.!]?/giu, '');
-  return (UNDER_REVIEW.test(text) || ((REVIEWS.test(text) || SCREENING.test(text)) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text))) && !/\?/.test(text) &&
+  return (UNDER_REVIEW.test(text) || WILL_REVIEW.test(text) || ((REVIEWS.test(text) || SCREENING.test(text)) && COMES_BACK.test(text) && ABOUT_APPLICATION.test(text))) && !/\?/.test(text) &&
     !ASKS_FOR.test(text) && !ASKS_USER.test(text) && !BAD_NEWS.test(text) && !isRejection({ text }) &&
     patternWords(text).length <= ACKNOWLEDGEMENT_WORDS;
 }
@@ -503,12 +507,16 @@ export function isCompletionNotice(text) {
     !asksSomething(text) && !ASKS_USER.test(text);
 }
 
+/** A bot handed the answers over; an appended question or instruction still needs attention. */
+export const isAnswersPassedNotice = text => ANSWERS_PASSED.test(String(text)) &&
+  !isQuestion(text) && !ASKS_FOR.test(text) && !ASKS_USER.test(text);
+
 /** Clear wrap-ups need no return visit; an unanswered question or a sent answer alone does. */
 export function isConversationFinished(chat) {
   if (!chat || chat.transitioning || !chat.messages?.length) return false;
   if (chat.canReply === false || chat.turnedOff) return true;
   const closes = (message) => !isReuseOffer(message.text) &&
-    (isSummary(message.text) || isCompletionNotice(message.text) || isRejection(message) || isAcknowledgement(templateCore(message.text, { sender: message.title })));
+    (isSummary(message.text) || isCompletionNotice(message.text) || isAnswersPassedNotice(message.text) || isRejection(message) || isAcknowledgement(templateCore(message.text, { sender: message.title })));
   const pending = pendingMessages(chat.messages);
   if (pending.length) return closes(pending.at(-1));
   const previous = chat.messages.findLast((message) => !message.mine);
@@ -556,9 +564,9 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
     return null;
   }
   // A bot's summary of the answers given is not a question to the user
-  if (isSummary(message.text) || isCompletionNotice(message.text)) {
+  if (isSummary(message.text) || isCompletionNotice(message.text) || isAnswersPassedNotice(message.text)) {
     return { answer: '', noReply: true, perfect: true,
-      source: isCompletionNotice(message.text) ? 'chat-templates.lino: completed recruiter-bot session' : 'summary of the answers given', matched: '' };
+      source: isSummary(message.text) ? 'summary of the answers given' : 'chat-templates.lino: completed recruiter-bot session', matched: '' };
   }
   // A rejection gets the saved question about its reason, whatever its wording
   if (isRejection(message) && templates.has(REJECTION_KEY)) {
