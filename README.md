@@ -347,6 +347,7 @@ on its own:
 | Option | Values | Effect |
 |--------|--------|--------|
 | `--confirm` | `answers`, `cover-letter`, `send` (default), `popup` (comma-separated), or `none` | Steps that wait for `y` on stdin: typed answers and radio/checkbox choices on the full form, its cover letter, the click that sends a form with questions (full form or popup; forms with only a cover letter are sent right away), everything in the short popup form |
+| `--questions` / `--no-questions` | enabled by default | Optional no-questions mode: skip every questionnaire in RAM until questionnaires are enabled again; saved skip/deferred lists are unchanged |
 | `--on-missing-answers` | `wait` (default), `skip` | Questions without a saved answer: wait for you to answer them in the browser, or skip the vacancy (kept in `data/deferred-questions.lino`) |
 | `--auto-send-exact-answers` | `true` (default), `false` | Send forms whose every question autofill answered with the saved answer of the very same question, without asking |
 | `--auto-reuse-answers` | `false` (default), `true` | When a recruiter bot in a chat offers the answers you gave it before («Похоже, вы отвечали на часть вопросов… Используем эти ответы?»), each is compared with your saved answer and the comparison is printed (✓ the same, ✗ differs, ? not saved); by default you choose, with this «Да» is clicked when all are the same and «Нет» when one differs (the bot then asks again and the saved answers are given) |
@@ -426,6 +427,20 @@ have to wait for them:
 - A later form whose open question matches a deferred one is skipped right away and added there.
 - A question added to the file while its form waits at the prompt skips that form too: only that
   question is kept for it, not the form's other open questions.
+For an unattended stretch, use `bun run apply -- --message-file data/cover-letter.txt --no-questions`.
+This optional mode is **off by default**. It automatically leaves full forms and popups with
+questions, even when their answers are already known. Cover-letter-only applications continue.
+Answers and recovery drafts are preserved, but questionnaire questions and vacancy IDs are not
+added to either saved skip list. The exclusion and revisit queue exist only in the worker's RAM;
+a normal restart clears them and includes questionnaires again unless `--no-questions` is passed.
+
+On macOS/Linux, `kill -USR1 <application-worker-pid>` enables the mode while running, including
+when a questionnaire is already waiting for review. `kill -USR2 <application-worker-pid>` enables
+questionnaires again and revisits the RAM queue using the normal vacancy collection, pacing,
+resume-selection and review rules. Separately saved exclusions remain in force. Recruiter chat
+panels opened after sending are left for later while this mode is active. CAPTCHA handling and
+account application-limit pauses retain their configured behavior.
+
 - `--skip-question "<text>"` skips forms that ask a matching question (a part of it is enough),
   answered or not. Repeat it for several questions, or pass several values after it:
 

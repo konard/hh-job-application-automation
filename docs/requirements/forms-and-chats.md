@@ -26,6 +26,25 @@ retry. Hidden stale banners, unrelated rate limits and character-count validatio
 Verification: `tests/application-limits.test.mjs`, `tests/browser/application-limits.mjs`,
 `tests/popup-application.test.mjs`, `tests/pacing.test.mjs` and `tests/notify.test.mjs`.
 
+## Optional no-questions mode
+
+Questionnaires are included by default. `--no-questions` opts into a session-only mode that
+automatically skips every vacancy with questions (text, radio or checkbox), including fully
+answered questionnaires and an already-open form waiting for review. Popups follow the same
+rule. Save entered answers and recovery drafts before leaving; preserve earlier review/error
+requirements. Do not add questions or IDs to deferred/permanent skip stores, do not count the
+skip as an application sent, and do not repeatedly reopen its search card. Cover-letter-only
+applications continue. Post-application recruiter bot panels must not hold the application loop.
+
+The exclusion and revisit queue live in RAM and reset on a normal restart. The running worker
+also supports SIGUSR1 to enable the mode and SIGUSR2 to include questionnaires again. On resume,
+revisit queued vacancies through normal pacing, collection, CV-language and review rules, while
+respecting separately saved exclusions. Daily account limits and manual CAPTCHA handling keep
+their existing behavior. Sound settings remain independent.
+
+Verification: `tests/questionnaire-mode.test.mjs`, `tests/browser/questionnaire-mode.mjs`, and
+the existing application-flow/popup regressions.
+
 ## The user's words
 
 1. «Set by default, that we auto fill the vacancy form with questions and auto submit it only if

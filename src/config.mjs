@@ -236,6 +236,11 @@ export function createConfig() {
           description: 'Send forms with questions (popup or full form) unattended even when not every answer is the saved answer of the very same question (default: false for safety)',
           default: getenv('AUTO_SUBMIT_VACANCY_RESPONSE_FORM', false),
         })
+        .option('questions', {
+          type: 'boolean',
+          description: 'Allow questionnaires (default). --no-questions skips them in RAM for this run, without changing saved skip lists',
+          default: true,
+        })
         .option('ignore-vacancies-with-questionnaire', {
           type: 'boolean',
           description: 'Skip vacancies that require additional questionnaire fields beyond the cover letter (kept in data/skipped-vacancies.lino)',

@@ -33,6 +33,7 @@ import { askUser, decideSend, isInteractive, PromptWithdrawnError } from './conf
 import { SELECTORS, URL_PATTERNS, extractVacancyIdFromResponseUrl } from './hh-selectors.mjs';
 import { checkAndCloseDirectApplicationModal } from './helpers/modal-helpers.mjs';
 import { deferFailedSubmission, isPassingError, submissionRetries } from './submission-retries.mjs';
+import { questionnaireMode, questionnairePrompt, skipQuestionnaireForNow } from './questionnaire-mode.mjs';
 import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft, saveApplicationDraft } from './application-drafts.mjs';
 import { alertUntilDone } from './notify.mjs';
 import { vacancyContextTexts } from './vacancy-context.mjs';
@@ -379,7 +380,8 @@ export function isFormLeftDuringWait(error, url) {
 }
 
 /** Observe a manual review without touching fields or running autofill again. */
-export async function waitForManualResponse({ commander, formUrl = commander.getUrl(), isPageClosed = () => false }) {
+export async function waitForManualResponse({ commander, formUrl = commander.getUrl(), isPageClosed = () => false,
+  skipQuestionnaire = async () => false }) {
   try {
     while (!isPageClosed() && commander.getUrl() === formUrl) {
       const limit = await readApplicationLimit(commander);
@@ -388,6 +390,7 @@ export async function waitForManualResponse({ commander, formUrl = commander.get
       const submitted = await isResponseSubmitted(commander);
       if (commander.getUrl() !== formUrl) return 'left';
       if (submitted) return 'submitted';
+      if (await skipQuestionnaire()) return 'questionnaire_paused';
       if ((await commander.wait({ ms: 1000, reason: 'your review and manual submission (answers continue to be saved)' }))?.aborted) return 'interrupted';
     }
   } catch (error) {
@@ -461,6 +464,8 @@ export async function handleVacancyResponsePage({
   const notifyForReview = () => alertUntilDone(commander, { isDone: () => isResponseSubmitted(commander) });
   const checkLimit = () => prepareApplicationLimit({ commander, vacancyId,
     saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) });
+  const skipForNow = () => skipQuestionnaireForNow({ commander, vacancyId,
+    saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }), leave: returnToList });
 
   try {
     console.log('Detected vacancy_response page, handling application form...');
@@ -490,6 +495,7 @@ export async function handleVacancyResponsePage({
       await returnToList();
       return;
     }
+    if (await skipForNow()) return { status: 'questionnaire_paused' };
     if (needsReview) {
       await saveQAPairs({ commander, addOrUpdateQA, strict: true });
       console.log(`🛑 Vacancy ${vacancyId} had a submission error; keeping its answers open for manual review.`);
@@ -636,11 +642,13 @@ export async function handleVacancyResponsePage({
         return { status: 'awaiting_user' };
       }
       do {
-        const { choice, deferred } = await askUnlessDeferred(deferredQuestions,
+        const result = await questionnairePrompt(() => askUnlessDeferred(deferredQuestions,
           () => listOpenQuestions({ evaluate: commander.evaluate }),
           () => askUser('Answer the open question(s) in the browser (the answers are saved to qa.lino)', {
             skip: deferredQuestions ? DEFER_CHOICE : undefined,
-          }));
+          })));
+        if (await skipForNow()) return { status: 'questionnaire_paused' };
+        const { choice, deferred } = result;
         if (deferred) {
           return deferVacancy(deferred);
         }
@@ -668,12 +676,14 @@ export async function handleVacancyResponsePage({
     }
     const questionsBeforeDecision = await extractPageQuestions({ evaluate: commander.evaluate });
     const questionKeys = (items) => JSON.stringify(items.map(({ selector, question, type }) => [selector, question, type]));
-    const decision = await decideSend({
+    const decide = () => decideSend({
       hasQuestions: hasTestQuestions,
       autoSend,
       autoSubmit: autoSubmitEnabled,
       skip: 'skip this vacancy (kept in skipped-vacancies.lino)',
     });
+    const decision = hasTestQuestions ? await questionnairePrompt(decide) : await decide();
+    if (questionnaireMode.enabled && await skipForNow()) return { status: 'questionnaire_paused' };
     if (decision === 'wait') {
       console.log('Please review the answers and submit the form manually when ready');
       notifyForReview();

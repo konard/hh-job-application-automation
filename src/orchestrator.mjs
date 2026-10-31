@@ -34,6 +34,7 @@ import { createApplicationResumeSelector } from './application-resume.mjs';
 import { completeApplicationDraft } from './application-drafts.mjs';
 import { prepareApplicationLimit, waitForApplicationLimit } from './application-limits.mjs';
 import { silenceAlertsUntil } from './notify.mjs';
+import { questionnaireMode, skipQuestionnaireForNow } from './questionnaire-mode.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -176,6 +177,7 @@ export function createOrchestrator({
         return false;
       }
       sentVacancyIds.add(vacancyId);
+      questionnaireMode.forget(vacancyId);
       submissionRetries.forget(vacancyId);
       await completeApplicationDraft(vacancyId);
       await vacancyInsights?.applied(vacancyId).catch((error) => console.log(`⚠️  Could not update private vacancy cache: ${error.message}`));
@@ -279,7 +281,8 @@ export function createOrchestrator({
     }
     // Preview during the pause, before reading the vacancy or opening an application.
     // A five-hour retry which will be due takes priority over a new search card.
-    if (!submissionRetries.ids().some((id) => submissionRetries.get(id).until <= nextApplicationAt)) {
+    if (!(!questionnaireMode.enabled && questionnaireMode.ids().length) &&
+        !submissionRetries.ids().some((id) => submissionRetries.get(id).until <= nextApplicationAt)) {
       plannedVacancy = await previewNextVacancy({ commander });
     }
     const ms = nextApplicationAt - Date.now();
@@ -352,7 +355,11 @@ export function createOrchestrator({
     }
     if (result?.status !== 'awaiting_user' || commander.getUrl() !== formUrl) return;
     console.log('⏸️  Waiting for your review and manual Send; answers continue to be saved.');
-    const outcome = await waitForManualResponse({ commander, formUrl, isPageClosed: getPageClosedByUser });
+    const outcome = await waitForManualResponse({ commander, formUrl, isPageClosed: getPageClosedByUser,
+      skipQuestionnaire: () => skipQuestionnaireForNow({ commander,
+        vacancyId: extractVacancyIdFromResponseUrl(formUrl),
+        saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA: qaDB.addOrUpdateQA, strict: true }),
+        leave: () => commander.goto({ url: lastSearchPageUrl, waitForStableUrlBefore: false }) }) });
     if (outcome === 'interrupted') {
       handledResponseUrl = null;
       return;
@@ -570,29 +577,45 @@ export function createOrchestrator({
           continue;
         }
 
-        const retry = URL_PATTERNS.searchVacancy.test(commander.getUrl()) ? submissionRetries.takeDue() : null;
+        const onSearch = URL_PATTERNS.searchVacancy.test(commander.getUrl());
+        const submissionRetry = onSearch ? submissionRetries.takeDue() : null;
+        const questionnaireRetry = onSearch && !submissionRetry ? questionnaireMode.takeNext() : null;
+        if (questionnaireRetry) {
+          // Resuming the session mode never overrides separately saved exclusions/questions.
+          const blocked = new Set([
+            ...await deferredQuestions?.pendingVacancyIds(await qaDB.readQADatabase()) ?? [],
+            ...await vacancyFilters?.filteredVacancyIds() ?? [],
+            ...await skippedVacancies?.skippedVacancyIds({ ignoreQuestionnaires: argv.ignoreVacanciesWithQuestionnaire }) ?? [],
+          ]);
+          if (blocked.has(questionnaireRetry.vacancyId)) continue;
+        }
+        const retry = submissionRetry ?? questionnaireRetry;
+        const requeue = () => questionnaireRetry
+          ? questionnaireMode.remember(retry.vacancyId, retry) : submissionRetries.restore([retry]);
         let result;
         if (retry) {
-          console.log(`🔁 Retrying vacancy ${retry.vacancyId}: its five-hour submission cooldown has expired`);
+          console.log(questionnaireRetry
+            ? `📝 Returning to questionnaire ${retry.vacancyId}: no-questions mode is off`
+            : `🔁 Retrying vacancy ${retry.vacancyId}: its five-hour submission cooldown has expired`);
           if (vacancyInsights && (vacancyInsights.enabled || argv.applyFromVacancyPage) &&
               !await vacancyInsights.visit({ commander, vacancyId: retry.vacancyId, returnUrl: lastSearchPageUrl,
                 stayOnVacancy: argv.applyFromVacancyPage, previewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000 })) {
-            submissionRetries.defer(retry.vacancyId, retry);
+            if (questionnaireRetry) requeue(); else submissionRetries.defer(retry.vacancyId, retry);
             continue;
           }
           if (vacancyInsights && argv.applyFromVacancyPage && extractVacancyId(commander.getUrl()) !== retry.vacancyId) {
-            submissionRetries.restore([retry]);
+            requeue();
             continue;
           }
           // Force the same handler/fallback path as a newly opened full application form.
           handledResponseUrl = null;
-          retryingVacancyId = retry.vacancyId;
+          retryingVacancyId = submissionRetry ? retry.vacancyId : null;
           try {
             await commander.goto({ url: retry.url, waitForStableUrlBefore: false });
           } catch (error) {
             retryingVacancyId = null;
-            submissionRetries.defer(retry.vacancyId, retry);
-            console.log(`⚠️  Retry navigation failed for vacancy ${retry.vacancyId}; deferred for another five hours: ${error.message}`);
+            if (questionnaireRetry) requeue(); else submissionRetries.defer(retry.vacancyId, retry);
+            console.log(`⚠️  Retry navigation failed for vacancy ${retry.vacancyId}; ${questionnaireRetry ? 'kept in the RAM questionnaire queue' : 'deferred for another five hours'}: ${error.message}`);
             continue;
           }
           result = { status: 'vacancy_response_detected', vacancyId: retry.vacancyId };

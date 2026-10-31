@@ -22,6 +22,7 @@ import { attachLetter, cardAfterClick } from './letter-attach.mjs';
 import { askUser, decideSend, isInteractive, waitForUser } from './confirmations.mjs';
 import { COVER_LETTER_TEXTS } from './hh-words.mjs';
 import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
+import { questionnaireMode, questionnairePrompt, skipQuestionnaireForNow } from './questionnaire-mode.mjs';
 export { isPassingError } from './submission-retries.mjs';
 
 /**
@@ -53,6 +54,13 @@ async function skipModal({ commander, reason }) {
   return { success: false, reason };
 }
 
+const leaveQuestionnairePopup = async (commander) => {
+  const url = commander.getUrl();
+  if (!await closeModalIfPresent({ commander }) && commander.getUrl() === url) {
+    await commander.goto({ url, waitForStableUrlBefore: false });
+  }
+};
+
 /** The popup result when hh.ru has replaced it with the full application form */
 const FULL_FORM_OPENED = { success: false, reason: 'full_form_opened' };
 
@@ -80,6 +88,11 @@ async function waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQ
       const limit = await prepareApplicationLimit({ commander, vacancyId,
         saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }) });
       if (limit) return { success: false, reason: 'limit_reached', limit };
+      if (await skipQuestionnaireForNow({ commander, vacancyId,
+        saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }),
+        leave: () => leaveQuestionnairePopup(commander) })) {
+        return { success: false, reason: 'questionnaire_paused' };
+      }
       if (addOrUpdateQA) {
         await saveMarkedQAPairs({ commander, addOrUpdateQA });
       }
@@ -141,6 +154,10 @@ export async function processModalApplication({
     await noteSkip(skippedVacancies, vacancyId, { reason, title });
     return skipModal({ commander, reason });
   };
+  const skipForNow = () => skipQuestionnaireForNow({ commander, vacancyId,
+    saveAnswers: () => saveQAPairs({ commander, addOrUpdateQA, strict: true }),
+    leave: () => leaveQuestionnairePopup(commander) });
+  if (await skipForNow()) return { success: false, reason: 'questionnaire_paused' };
 
   // Before anything is typed into the popup
   const filterMatch = await vacancyFilters?.match({
@@ -283,10 +300,12 @@ export async function processModalApplication({
     }
   }
   while (open > 0) {
-    const { choice, deferred } = await askUnlessDeferred(deferredQuestions, listOpen,
+    const result = await questionnairePrompt(() => askUnlessDeferred(deferredQuestions, listOpen,
       () => askUser(`Answer the ${open} open question(s) in the application popup (the answers are saved to qa.lino)`, {
         skip: deferredQuestions ? DEFER_CHOICE : undefined,
-      }));
+      })));
+    if (await skipForNow()) return { success: false, reason: 'questionnaire_paused' };
+    const { choice, deferred } = result;
     await saveTyped();
     if (deferred) {
       return deferModal(deferred);
@@ -328,7 +347,9 @@ export async function processModalApplication({
   if (autoSend) {
     console.log('✅ Every answer is the saved answer of the very same question - sending without asking');
   }
-  const decision = await decideSend({ hasQuestions, autoSend, autoSubmit, skip: 'skip this vacancy' });
+  const decide = () => decideSend({ hasQuestions, autoSend, autoSubmit, skip: 'skip this vacancy' });
+  const decision = hasQuestions ? await questionnairePrompt(decide) : await decide();
+  if (await skipForNow()) return { success: false, reason: 'questionnaire_paused' };
   if (decision === 'wait') {
     console.log('Not every answer is the saved answer of the very same question, so the popup is not sent unattended');
     return waitForPopupInBrowser({ commander, vacancyId, title, addOrUpdateQA, skippedVacancies });
@@ -484,7 +505,7 @@ function scanApplyButtons({ commander, selector, targetVacancyId = null }) {
         vacancyId: unprocessed[0]?.vacancyId ?? null,
       };
     },
-    args: [selector, [...new Set([...processedVacancyIds, ...submissionRetries.ids()])], targetVacancyId],
+    args: [selector, [...new Set([...processedVacancyIds, ...submissionRetries.ids(), ...questionnaireMode.ids()])], targetVacancyId],
     defaultValue: { totalButtons: 0, unprocessedCount: 0, buttonIndex: -1, vacancyId: null },
     operationName: 'find unprocessed vacancy button',
     silent: true,
@@ -499,7 +520,8 @@ async function findVacancyButton({ commander, targetVacancyId = null }) {
   const selector = SELECTORS.vacancyListApply;
   // Keep the previewed vacancy even if the cards reorder during the pause. A removed,
   // processed or deferred card must fall back to the next eligible one.
-  if (targetVacancyId && !processedVacancyIds.has(targetVacancyId) && !submissionRetries.get(targetVacancyId)) {
+  if (targetVacancyId && !processedVacancyIds.has(targetVacancyId) && !submissionRetries.get(targetVacancyId) &&
+    !questionnaireMode.ids().includes(targetVacancyId)) {
     const scan = await scanApplyButtons({ commander, selector, targetVacancyId });
     if (scan.navigationError) return { selector: null, status: 'navigation_detected' };
     if (scan.value.buttonIndex >= 0) return { selector, buttonIndex: scan.value.buttonIndex, vacancyId: targetVacancyId };
@@ -1065,7 +1087,8 @@ let blankReloads = 0;
  * Stops waiting immediately if navigation is detected (commander.wait is abortable). A page that
  * stays blank is reloaded.
  */
-export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser, blankReload = BLANK_RELOAD, retryDue = () => Boolean(submissionRetries.nextDue()) }) {
+export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser, blankReload = BLANK_RELOAD,
+  retryDue = () => Boolean(submissionRetries.nextDue()) || (!questionnaireMode.enabled && questionnaireMode.ids().length > 0) }) {
   console.log('💡 No more apply buttons on this page.');
 
   const paginationResult = await findAndClickNextPage({ commander });

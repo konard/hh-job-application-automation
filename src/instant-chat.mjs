@@ -27,6 +27,7 @@ import { learnChatQuestions } from './chat-learning.mjs';
 import { answerWasRepeated, chooseChatOption, requiresChatOption } from './chat-options.mjs';
 import { readChatChoiceControls, readQuickReplies, clearAutomaticChatDraft, prefillSavedChatAnswer } from './chat-choice-controls.mjs';
 import { revealChatMessage } from './chat-scroll.mjs';
+import { questionnaireMode } from './questionnaire-mode.mjs';
 export { perfectOption } from './chat-options.mjs';
 export { readQuickReplies } from './chat-choice-controls.mjs';
 export { revealChatMessage as scrollToLastMessage } from './chat-scroll.mjs';
@@ -172,7 +173,7 @@ export function createInstantChat({
         await sleep(2000);
         const chat = await readChatIn(frame).catch(() => null);
         // Answered, or nothing can be answered any more
-        if (answeredAfter(chat, messageId) || chat?.turnedOff) {
+        if (questionnaireMode.enabled || answeredAfter(chat, messageId) || chat?.turnedOff) {
           done = true;
           withdrawPrompt();
         }
@@ -190,6 +191,11 @@ export function createInstantChat({
     let quietSince = Date.now();
     let waitMs = firstMessageMs;
     for (;;) {
+      if (questionnaireMode.enabled) {
+        log('💬 No-questions mode: the recruiter chat is left for later; applications continue.');
+        await closePanel();
+        return false;
+      }
       const chat = await readChatIn(frame).catch(() => null);
       // Closed by the user, or another chat opened in it
       const chatVacancy = extractVacancyId(chat?.vacancyUrl ?? '');
@@ -299,6 +305,10 @@ export function createInstantChat({
   }
 
   return async function answerInstantChat(vacancyId) {
+    if (questionnaireMode.enabled) {
+      await closePanel();
+      return;
+    }
     const frame = await waitForChat(vacancyId, 10000);
     if (!frame) {
       log('💬 hh.ru opened no chat panel for this application');

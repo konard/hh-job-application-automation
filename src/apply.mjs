@@ -41,6 +41,7 @@ import { vacancyContextTexts } from './vacancy-context.mjs';
 import { createResumeAliasUpdater } from './resume-aliases.mjs';
 import { submissionRetries } from './submission-retries.mjs';
 import { watchVacancyFeedback } from './vacancy-feedback.mjs';
+import { questionnaireMode } from './questionnaire-mode.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'), { resolveVariants: true });
 
@@ -77,9 +78,12 @@ async function shutdown(reason, exitCode = 0) {
 
 process.on('SIGINT', () => shutdown('Received SIGINT'));
 process.on('SIGTERM', () => shutdown('Received SIGTERM'));
+process.on('SIGUSR1', () => questionnaireMode.setEnabled(true));
+process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
 
 (async () => {
   const argv = createConfig();
+  questionnaireMode.setEnabled(!argv.questions);
   process.env.ANSWER_FINAL_PERIOD = argv.answerFinalPeriod;
   // Also pass the CLI preference to chat/form workers that post their own alerts.
   process.env.NOTIFY_SOUND = String(argv.notificationSound);
