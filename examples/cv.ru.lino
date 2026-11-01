@@ -134,7 +134,7 @@ resume
       start 2020-07
       end 2022-08
       description
-        'Разработка и поддержка шеринговой платформы для автомобилей и квартир ShakeApp.'
+        'Разработка и поддержка ShakeApp — C2C-маркетплейса для аренды автомобилей и квартир. Платформа связывала частных владельцев автомобилей с людьми, которым нужно было арендовать машину у другого пользователя.'
         ' '
         'Использовавшиеся навыки:'
         'Android, Android Studio, Apache Cordova, Capacitor, CSS, Docker, draw.io, Git, GitLab, GitLab CI/CD, Grafana, GraphQL, Hasura, Hasura Storage, HTML, iOS, JavaScript (JS), Kubernetes (k8s), minio, Next.js, PostgreSQL (Postgre SQL, Postgres), Prometheus, React (React.js, ReactJS), Selectel Cloud, SQL, TypeScript (TS), Visual Studio Code, Xcode'
