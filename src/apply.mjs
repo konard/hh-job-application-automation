@@ -115,7 +115,10 @@ process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
   }
   // Answers and the cover letter use {{telegram}}-style placeholders for data/contacts.lino
   await qaDatabase.backfillQuestionAnswers();
-  const contacts = await loadContacts(path.join(process.cwd(), 'data', 'contacts.lino'));
+  let salaryRates = {};
+  const contacts = await loadContacts(path.join(process.cwd(), 'data', 'contacts.lino'), {
+    onRates: value => { salaryRates = value.rubPer ?? {}; },
+  });
   const chatHistory = createChatHistory();
   const chatQa = withContacts(withChatHistoryAnswers(qaDatabase, { history: chatHistory, contacts }), contacts);
   const { readQADatabase, addOrUpdateQA, addQAIfMissing } = chatQa;
@@ -214,6 +217,7 @@ process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
     argv,
     qaDB: { readQADatabase, addOrUpdateQA },
     contacts,
+    salaryRates,
     deferredQuestions,
     vacancyFilters,
     skippedVacancies,

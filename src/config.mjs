@@ -53,6 +53,11 @@ export function createConfig() {
           description: 'Vacancy search URL (default: suggested vacancies for the Russian CV, or the latest CV if unavailable)',
           default: getenv('START_URL', ''),
         })
+        .option('salary-ladder', {
+          type: 'boolean',
+          description: 'Matching search: start at the target salary, lower by 50000 RUB after exhausting each tier, keep unspecified pay; exclude caps below half target',
+          default: getenv('SALARY_LADDER', true),
+        })
         .option('manual-login', {
           type: 'boolean',
           description: 'Do not import logins from other browsers; wait for a manual login instead',

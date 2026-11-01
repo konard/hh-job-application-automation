@@ -145,6 +145,7 @@ describe('A list page that never loads', () => {
       goto: async ({ url }) => visits.push(url),
       findByText: async () => 'a',
       count: async () => (blank ? 0 : 1),
+      safeEvaluate: async () => ({ value: { unprocessedCount: blank ? 0 : 1 } }),
     };
     const result = await waitForButtonsAfterNavigation({ commander, pageClosedByUser: () => false, blankReload: { first: 20, most: 100 } });
     assert.equal(result.status, 'navigation_detected');

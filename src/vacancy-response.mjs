@@ -418,6 +418,8 @@ export async function handleVacancyResponsePage({
   MESSAGE,
   selectApplicationResume = null,
   readVacancy = async () => null,
+  collectVacancy = null,
+  salaryLadder = null,
   readQADatabase,
   addOrUpdateQA,
   contacts = {},
@@ -503,9 +505,35 @@ export async function handleVacancyResponsePage({
       return { status: 'awaiting_user' };
     }
     if (await draftsAwaitReview()) return { status: 'awaiting_user' };
+    let vacancy = await readVacancy(vacancyId);
+    if (!vacancy?.description && collectVacancy) {
+      // An independently opened form may have bypassed the search route. Preserve its fields,
+      // visibly collect the vacancy, then restore the same form before any CV decision or Send.
+      await saveQAPairs({ commander, addOrUpdateQA, strict: true });
+      await saveApplicationDraft({ commander, vacancyId, error: failedDraft?.error ??
+        { code: 'context_refresh', text: 'Collect full vacancy context before applying' }, requiresReview: Boolean(needsReview) });
+      const originalUrl = commander.getUrl();
+      vacancy = await collectVacancy(vacancyId, originalUrl);
+      if (commander.getUrl() !== originalUrl) return { status: 'interrupted' };
+      // This navigation is ours: restore the freshly captured owner values over server defaults.
+      await restoreApplicationDraft({ commander, draft: await readApplicationDraft(vacancyId), overwrite: true });
+      if (!vacancy?.description) {
+        console.log(`🛑 Vacancy ${vacancyId}: full context could not be collected; saved form remains for review.`);
+        notifyForReview();
+        return { status: 'awaiting_user' };
+      }
+    }
     const form = await readFormForFilters(commander);
     title = form.vacancy;
-    const vacancy = await readVacancy(vacancyId);
+    const salaryDecision = salaryLadder?.check(vacancyId, vacancy?.salary);
+    if (salaryDecision && salaryDecision.action !== 'apply') {
+      // Directly reopened forms and retries receive the same salary policy; save before leaving.
+      await saveQAPairs({ commander, addOrUpdateQA, strict: true });
+      await saveApplicationDraft({ commander, vacancyId, error: failedDraft?.error ??
+        { code: `salary_${salaryDecision.action}`, text: salaryDecision.reason }, requiresReview: Boolean(needsReview) });
+      await returnToList();
+      return { status: `salary_${salaryDecision.action}` };
+    }
     if (vacancy?.description) console.log(`📚 Vacancy ${vacancyId} context: collected description (${vacancy.description.length} characters), ${vacancy.skills?.length ?? 0} listed skill(s)`);
     const description = vacancy?.description || vacancyFilters?.description?.(vacancyId) || '';
     // What the salary answers' currency is told by: the card, the description and the form's text

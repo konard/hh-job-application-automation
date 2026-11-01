@@ -45,6 +45,32 @@ their existing behavior. Sound settings remain independent.
 Verification: `tests/questionnaire-mode.test.mjs`, `tests/browser/questionnaire-mode.mjs`, and
 the existing application-flow/popup regressions.
 
+## Salary ordering of matching vacancies
+
+Default on (`--no-salary-ladder` opts out). If no minimum is set, use exactly `salary_net_rub` in
+RUB and restart pagination. Preserve an existing minimum/currency and the remaining search filters.
+Include jobs without salary by clearing both the legacy salary-only flag and salary-only labels.
+Exhaust every page in the current salary tier before lowering by 50,000 RUB or its FX equivalent;
+keep matching-search relevance order within the tier. A blank/loading page must not advance a tier.
+
+A finite advertised maximum strictly below 50% of the user's target is excluded in every automatic
+submission path. A minimum-only amount below the current tier is deferred in RAM until its tier;
+it is not a permanent exclusion. Unknown salary, unrecognized currency or non-monthly fees that
+cannot be converted safely remain eligible. Known hourly/annual amounts use monthly equivalents.
+Use explicit USD/EUR targets where configured, and cached Central Bank rates for other currencies.
+Compare advertised amounts without inventing gross/net conversion. Search-filter FX steps use
+the same rates already loaded for salary answers.
+
+Apply the policy before list/popup submissions and again on full forms, including direct opens and
+retries. Preserve QA and a private recovery copy before leaving a form. Directly opened forms with
+missing cached context first save their inputs, visibly collect/cache the full vacancy, then restore
+the form. Failed collection holds the form for review. All lower-tier deferrals and processed-ID
+releases remain session-only and never write to questionnaire/permanent skip stores.
+
+Verification: `tests/salary-ladder.test.mjs`, `tests/browser/salary-ladder.mjs`, pagination regressions.
+HH's [official search documentation](https://api.hh.ru/openapi/en/redoc) confirms that salary filtering
+normally includes unspecified pay and that salary-only flags/labels exclude it.
+
 ## The user's words
 
 1. «Set by default, that we auto fill the vacancy form with questions and auto submit it only if

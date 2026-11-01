@@ -469,6 +469,10 @@ export function markVacancyAsProcessed(vacancyId) {
   processedVacancyIds.add(vacancyId);
 }
 
+export function releaseSalaryDeferredVacancy(vacancyId) {
+  processedVacancyIds.delete(vacancyId);
+}
+
 /**
  * Scan the "Откликнуться" (Apply) buttons, found by their data-qa (the same in every language),
  * and find the first one whose vacancy was not processed yet
@@ -592,6 +596,7 @@ async function readVacancyCard({ commander, selector, buttonIndex }) {
       return {
         lines: card?.innerText.split('\n').map((line) => line.trim()).filter(Boolean) ?? [],
         title: [title, employer].filter(Boolean).join(' | '),
+        salary: text(card?.querySelector('[data-qa="vacancy-salary"], [data-qa="vacancy-serp__vacancy-compensation"]')),
       };
     },
     args: [selector, buttonIndex, SELECTORS.vacancyCardTitle, SELECTORS.vacancyCardEmployer],
@@ -833,6 +838,7 @@ export async function findAndProcessVacancyButton({
   vacancyFilters = null,
   skippedVacancies = null,
   vacancyInsights = null,
+  salaryLadder = null,
   applyFromVacancyPage = false,
   vacancyPreviewMs = 0,
   verbose = false,
@@ -861,7 +867,7 @@ export async function findAndProcessVacancyButton({
     log.debug(() => `🔍 Marked vacancy ID ${vacancyId} as processed (total: ${processedVacancyIds.size})`);
   }
 
-  const { lines: cardLines, title } = await readVacancyCard({ commander, selector, buttonIndex });
+  const { lines: cardLines, title, salary: cardSalary } = await readVacancyCard({ commander, selector, buttonIndex });
   await showPlannedVacancy({ commander, selector, buttonIndex, vacancyId, title });
   const card = cardLines.join('\n');
   let details = null;
@@ -880,6 +886,11 @@ export async function findAndProcessVacancyButton({
       // makes HH.ru remove its card from recommendations. Only a card click needs its new index.
       if (buttonIndex < 0 && !selectApplicationResume) return { status: 'vacancy_not_listed', vacancyId, descriptionRead: true };
     }
+  }
+  const salaryDecision = salaryLadder?.check(vacancyId, details?.salary ?? cardSalary);
+  if (salaryDecision && salaryDecision.action !== 'apply') {
+    if (stayOnVacancy) await commander.goto({ url: currentPageUrl, waitForStableUrlBefore: false, waitForNetworkIdle: false });
+    return { status: `salary_${salaryDecision.action}`, vacancyId, descriptionRead: Boolean(details) };
   }
   // The description only when the card does not settle the filters (one request, see readVacancyDescription)
   const descriptionRead = Boolean(details) || Boolean(vacancyFilters && vacancyId && await vacancyFilters.needsDescription?.(card));
@@ -1088,6 +1099,7 @@ let blankReloads = 0;
  * stays blank is reloaded.
  */
 export async function waitForButtonsAfterNavigation({ commander, pageClosedByUser, blankReload = BLANK_RELOAD,
+  onExhausted = async () => false,
   retryDue = () => Boolean(submissionRetries.nextDue()) || (!questionnaireMode.enabled && questionnaireMode.ids().length > 0) }) {
   console.log('💡 No more apply buttons on this page.');
 
@@ -1096,6 +1108,9 @@ export async function waitForButtonsAfterNavigation({ commander, pageClosedByUse
     await commander.wait({ ms: 2000, reason: 'waiting for next page to start loading' });
     return { status: 'navigation_detected' };
   }
+
+  // A transient blank/loading page has not exhausted a salary tier.
+  if (!await commander.evaluate({ fn: readPageBlank }) && await onExhausted()) return { status: 'navigation_detected' };
 
   if (paginationResult.found) {
     console.log('💡 All pages have been processed!');
@@ -1138,9 +1153,11 @@ export async function waitForButtonsAfterNavigation({ commander, pageClosedByUse
 
     // Same URL, check if buttons appeared (e.g., dynamic content loaded)
     try {
-      const buttonCount = await commander.count({ selector: SELECTORS.vacancyListApply });
+      const scan = await scanApplyButtons({ commander, selector: SELECTORS.vacancyListApply });
+      if (scan.navigationError) return { status: 'navigation_detected' };
+      const buttonCount = scan.value.unprocessedCount;
       if (buttonCount > 0) {
-        console.log(`✅ Detected ${buttonCount} button(s) appeared on same page! Continuing automation...`);
+        console.log(`✅ Detected ${buttonCount} unprocessed button(s) on this page. Continuing automation...`);
         return { status: 'buttons_found' };
       }
     } catch (error) {

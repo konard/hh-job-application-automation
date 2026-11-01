@@ -1,5 +1,9 @@
 # Requirements
 
+Latest delivery audit: [2026-11-01](audit-2026-11-01.md), including the optional RAM questionnaire
+mode, bilingual CV maintenance, industry selection and salary ladder. Historical statuses below
+retain their original audit dates.
+
 Every requirement the user gave in the working session of 2026-10-08 … 2026-10-10, in one list, so
 that its delivery can be tracked. Each row quotes the user's own words (in the original language,
 trimmed to the relevant sentence), restates the requirement precisely, says how to check it, and

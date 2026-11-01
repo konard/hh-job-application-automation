@@ -19,6 +19,7 @@
     "answer-chats": "bun src/answer-chats.mjs",
     "backfill-questionnaires": "bun src/backfill-questionnaires.mjs",
     "experience": "bun src/experience-sync.mjs",
+    "industries": "bun src/hh-industries.mjs",
     "cv": "bun src/cv-sync.mjs",
     "test-assignment": "bun src/test-assignment.mjs",
     "contacts-migrate": "bun src/contacts-migrate.mjs",

@@ -1,6 +1,7 @@
 /** Reusable HH.ru workplace editing, language copies and observation. Never saves a workplace. */
 import { companySimilarity, parseMonthYear, withStack } from './experience.mjs';
 import { normalizeText } from './cv.mjs';
+import { selectHhIndustryReferences } from './hh-industries.mjs';
 import {
   discardHhExperience, fillHhExperience, hhCvFormOpen, hhExperienceResumes,
   openHhExperienceForm, setHhExperienceResumes,
@@ -24,7 +25,8 @@ export function readHhWorkplace({ includeAbout = false } = {}) {
   }
   const month = (part) => field(`[data-qa="resume-editor-experience-${part}-month-input"] [data-qa="trigger-values-wrapper"]`)?.textContent.trim() ?? '';
   const industry = [...document.querySelectorAll('[data-qa="trigger-root"]')].find((element) => /field of activity|сфера деятельности/i.test(element.textContent));
-  const industryText = industry?.textContent.replace(/^(?:Company's field of activity|Сфера деятельности компании|Сфера деятельности)/i, '')
+  const industryValues = industry?.querySelector('[data-qa="trigger-values-wrapper"]');
+  const industryText = (industryValues?.textContent ?? industry?.textContent)?.replace(/^(?:Company's field of activity|Сфера деятельности компании|Сфера деятельности)/i, '')
     .replace(/(?:and more|и ещ[её])\s*\d+\s*$/i, '').trim() ?? '';
   return {
     url: window.location.href,
@@ -177,6 +179,10 @@ export async function setHhExperienceArea(page, area) {
 }
 
 export async function setHhExperienceIndustries(page, industries) {
+  const selections = Array.isArray(industries) ? industries : [industries];
+  if (selections.every(item => typeof item === 'object' || /^\d+\.\d+$/.test(item) || item.includes(' > '))) {
+    return selectHhIndustryReferences(page, selections);
+  }
   const trigger = page.locator('[data-qa="trigger-root"]').filter({ hasText: /field of activity|сфера деятельности/i }).first();
   await trigger.click();
   const dialog = page.getByRole('dialog');

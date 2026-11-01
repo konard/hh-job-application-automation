@@ -942,8 +942,12 @@ a native click before verifying the opened record's identity.
 
 `edit` accepts JSON with `kind` (`add`, `update`, `copy`, `detach`, `about`), `target` (company, title and
 description to distinguish language copies), and `fields`. Fields can include `company`, `title`,
-`description`, `start`/`end` (`YYYY-MM`), `current`, `area`, `website`, and `industries` (whole labels
-as an array; commas within an industry name are preserved). This is the same reusable workflow
+`description`, `start`/`end` (`YYYY-MM`), `current`, `area`, `website`, and `industries` (whole labels,
+stable IDs such as `[{"id":"7.541"},{"id":"49.404"}]`, or full parent/leaf paths; commas within
+an industry name are preserved). `bun run industries -- --locale EN --json` exports the complete
+official industry tree, including choices outside the virtualized selector's visible branches.
+Localized dictionaries are cached privately under `~/.hh-automation/dictionaries`.
+This is the same reusable workflow
 used by `.lino` import. An `about` change uses `fields.about` and optionally `target.about` to reject
 stale plans. The owner saves the About dialog too; edits made before Save are retained and verified.
 Title and «Навыки» differences remain listed for separate editing.
@@ -1017,6 +1021,18 @@ Browser workflow checks use an isolated fixture, never a real account:
 - **Chat panel**: hh.ru opens the employer chat after an application; the run closes it. When the
   employer turns the conversation off («Работодатель отключил переписку по данной вакансии») while
   the run waits for your answer there, the panel is closed and the run goes on.
+
+### Salary Ordering of Matching Vacancies
+
+Matching searches start at the configured `salary_net_rub` target when no salary filter is set.
+After all pages at that level are exhausted, the salary ladder lowers the floor by 50,000 RUB
+(or the equivalent in the selected filter currency) and starts from the first page. Existing
+salary filters are respected. Vacancies without salary remain eligible at every level, and
+processed vacancies are not applied to again. An advertised upper bound below half the configured
+target in that currency is excluded. A low minimum without an upper bound is deferred to its
+salary tier, rather than excluded. These deferrals are session-only, separate from questionnaire
+skips. `--no-salary-ladder` restores the previous search behavior. Amounts are compared as
+advertised; the ladder does not guess tax treatment or convert unknown project/shift fees to monthly pay.
 
 ### Ignore Questionnaire Vacancies
 

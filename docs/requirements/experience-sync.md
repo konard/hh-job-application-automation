@@ -24,6 +24,20 @@ opt-in. Applications and the in-memory no-questions queue continue independently
 Verification: `tests/cv-technologies.test.mjs`, `tests/cv-alias-sync.test.mjs` and the real-browser
 CV editor regressions.
 
+Company activity selection uses the complete official HH `/industries` dictionary in RU and EN,
+cached in the local application directory. Read all groups/leaves independently of DOM virtualization;
+resolve full IDs, exact leaf names or parent/leaf paths; reject ambiguous names and unselectable groups.
+Select and verify each leaf by its stable UI ID. Only the industry's local dialog Save is automatic;
+the workplace's final Save remains the owner's. Verification: `tests/hh-industries.test.mjs`,
+`tests/browser/hh-industries.mjs`; live directory: 30 groups and 296 leaves per language.
+
+Abracar/ShakeApp's description must explain its C2C rental marketplace and private-owner car rental
+model in both languages. Selected activities: Internet Company (`7.541`) and Car Hire (`49.404`).
+Explicit owner-requested edits use the private CV edit queue, prioritized before ordinary alias
+maintenance and consumed only after a verified Save, including adoption of an existing draft after
+restart. The English draft is prepared; its Save precedes preparation of the Russian counterpart.
+Verification: `tests/cv-edit-queue.test.mjs`, `tests/cv-alias-sync.test.mjs`, CV editor browser fixture.
+
 1. «We also need to develop ability to export both linked in and hh.ru working experince and display
    differences, that needs to be synced.»
 2. «We also need support auto sync with automatic translation support.»

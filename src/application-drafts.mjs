@@ -73,11 +73,15 @@ export async function restoreApplicationDraft({ commander, draft, overwrite = fa
         (!field.tag || e.tagName.toLowerCase() === field.tag) && (!field.qa || e.getAttribute('data-qa') === field.qa));
       for (const element of elements) {
         if ('checked' in field) {
-          if (!field.checked || element.value !== field.value) continue;
+          if (element.value !== field.value) continue;
+          if (overwrite && element.type === 'checkbox' && element.checked !== field.checked) {
+            element.click(); restored++; continue;
+          }
+          if (!field.checked || element.checked) continue;
           if (!overwrite && elements.some((e) => e.checked)) continue;
           element.click();
         } else {
-          if (!field.value || (!overwrite && element.value)) continue;
+          if ((!overwrite && (!field.value || element.value)) || field.value === undefined) continue;
           const prototype = element.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype
             : element.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
           Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, field.value);

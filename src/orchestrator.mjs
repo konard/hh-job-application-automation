@@ -13,6 +13,8 @@ import {
   findAndProcessVacancyButton,
   previewNextVacancy,
   waitForButtonsAfterNavigation,
+  releaseSalaryDeferredVacancy,
+  markVacancyAsProcessed,
 } from './vacancies.mjs';
 import { handleVacancyResponsePage, saveQAPairs, waitForManualResponse } from './vacancy-response.mjs';
 import { checkAndRedirectIfNeeded } from './page-handlers.mjs';
@@ -35,6 +37,7 @@ import { completeApplicationDraft } from './application-drafts.mjs';
 import { prepareApplicationLimit, waitForApplicationLimit } from './application-limits.mjs';
 import { silenceAlertsUntil } from './notify.mjs';
 import { questionnaireMode, skipQuestionnaireForNow } from './questionnaire-mode.mjs';
+import { createSalaryLadder } from './salary-ladder.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -54,7 +57,7 @@ const PAGE_READY_TIMEOUT = 120000;
  * @returns {Object} Orchestrator with start method
  */
 export function createOrchestrator({
-  commander, page, argv, qaDB, contacts = {}, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, vacancyInsights = null, onPageClosed,
+  commander, page, argv, qaDB, contacts = {}, salaryRates = {}, deferredQuestions = null, vacancyFilters = null, skippedVacancies = null, vacancyInsights = null, onPageClosed,
   getEvents = readEvents,
   onApplicationSent = async () => {},
   answerInstantChat = async () => {},
@@ -76,6 +79,9 @@ export function createOrchestrator({
   let isOnVacancyPageFromResponse = false;
   // The last search page (may include pagination) to return to after an application
   let lastSearchPageUrl = START_URL;
+  const salaryLadder = createSalaryLadder({ contacts, rubPer: salaryRates,
+    enabled: argv.salaryLadder !== false, release: releaseSalaryDeferredVacancy, hold: markVacancyAsProcessed });
+  if (salaryLadder.enabled) console.log(`💰 Salary ladder enabled: target ${salaryLadder.floorRub} RUB; steps 50000 RUB; unspecified pay included; caps below half target excluded.`);
 
   const getPageClosedByUser = () => pageClosedByUser;
   const waitForPageReady = (reason) => commander.waitForPageReady({ timeout: PAGE_READY_TIMEOUT, reason });
@@ -327,6 +333,14 @@ export function createOrchestrator({
       MESSAGE,
       selectApplicationResume,
       readVacancy: vacancyInsights?.read,
+      collectVacancy: vacancyInsights && (vacancyInsights.enabled || argv.applyFromVacancyPage)
+        ? async (vacancyId, returnUrl) => {
+          const vacancy = await vacancyInsights.visit({ commander, vacancyId, returnUrl, stayOnVacancy: true,
+            previewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000 });
+          if (vacancy && extractVacancyId(commander.getUrl()) === vacancyId) await commander.goto({ url: returnUrl, waitForStableUrlBefore: false });
+          return vacancy;
+        } : null,
+      salaryLadder,
       readQADatabase: qaDB.readQADatabase,
       addOrUpdateQA: qaDB.addOrUpdateQA,
       contacts,
@@ -401,7 +415,15 @@ export function createOrchestrator({
     case 'no_buttons_found': {
       // Waiting for a list is no work on a vacancy
       workStartedAt = null;
-      const waitResult = await waitForButtonsAfterNavigation({ commander, pageClosedByUser: getPageClosedByUser });
+      const waitResult = await waitForButtonsAfterNavigation({ commander, pageClosedByUser: getPageClosedByUser,
+        onExhausted: async () => {
+          const url = salaryLadder.advance(commander.getUrl());
+          if (!url) return false;
+          START_URL = url;
+          lastSearchPageUrl = url;
+          await commander.goto({ url, waitForStableUrlBefore: false });
+          return true;
+        } });
       if (waitResult.status === 'navigation_detected') {
         console.log('Navigation detected, waiting for new page to be fully loaded...');
         await waitForPageReady('after navigation in button wait');
@@ -459,7 +481,7 @@ export function createOrchestrator({
       // Resolving a full form's return search only fetches the CV list; it never leaves the form.
       const initialUrl = commander.getUrl();
       const preparedStart = URL_PATTERNS.vacancyResponse.test(initialUrl) ? await resolveApplicationStart(commander, START_URL) : null;
-      if (preparedStart) lastSearchPageUrl = preparedStart.startUrl;
+      if (preparedStart) lastSearchPageUrl = salaryLadder.prepare(preparedStart.startUrl);
       const failedApplicationOpen = await deferVisibleSubmissionError();
 
       const start = preparedStart ?? (failedApplicationOpen && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())
@@ -467,7 +489,7 @@ export function createOrchestrator({
           ? commander.getUrl() : 'https://hh.ru/search/vacancy?from=resumelist'), preserveCurrentForm: true }
         : await resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL));
       if (failedApplicationOpen) start.preserveCurrentForm = commander.getUrl() === initialUrl;
-      START_URL = start.startUrl;
+      START_URL = start.startUrl ? salaryLadder.prepare(start.startUrl) : null;
       if (!START_URL) {
         throw new Error('No resume found on hh.ru - create one or pass --url');
       }
@@ -578,6 +600,14 @@ export function createOrchestrator({
         }
 
         const onSearch = URL_PATTERNS.searchVacancy.test(commander.getUrl());
+        if (onSearch) {
+          const url = salaryLadder.prepare(commander.getUrl());
+          if (url !== commander.getUrl()) {
+            lastSearchPageUrl = url;
+            await commander.goto({ url, waitForStableUrlBefore: false });
+            continue;
+          }
+        }
         const submissionRetry = onSearch ? submissionRetries.takeDue() : null;
         const questionnaireRetry = onSearch && !submissionRetry ? questionnaireMode.takeNext() : null;
         if (questionnaireRetry) {
@@ -634,6 +664,7 @@ export function createOrchestrator({
           vacancyFilters,
           skippedVacancies,
           vacancyInsights,
+          salaryLadder,
           applyFromVacancyPage: argv.applyFromVacancyPage,
           vacancyPreviewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000,
           verbose: argv.verbose,

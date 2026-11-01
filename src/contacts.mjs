@@ -24,7 +24,7 @@ export const cutLink = (value) => typeof value === 'string' && /^(?:https?|ftp|m
  * @param {string} filePath - data/contacts.lino
  * @returns {Promise<Object<string, string|string[]>>}
  */
-export async function loadContacts(filePath, { rates = exchangeRates, companyTaxesFile = COMPANY_TAXES_FILE } = {}) {
+export async function loadContacts(filePath, { rates = exchangeRates, companyTaxesFile = COMPANY_TAXES_FILE, onRates = () => {} } = {}) {
   const entries = await createQADatabase(filePath).readQADatabase();
   const contacts = Object.fromEntries([...entries].map(([key, value]) => [key, Array.isArray(value) ? value : String(value)]));
   // A link not in quotes is cut at its colon («https»): left out, or every «https» in an answer
@@ -40,6 +40,7 @@ export async function loadContacts(filePath, { rates = exchangeRates, companyTax
   const [netRub, netUsd, netEur] = [amount('salary_net_rub'), amount('salary_net_usd'), amount('salary_net_eur')];
   if (netRub > 0 || netUsd > 0 || netEur > 0) {
     const { usd, eur, rubPer } = netUsd > 0 || netEur > 0 ? await rates() : {};
+    onRates({ usd, eur, rubPer });
     // A contract in dollars or euros pays the user's company: its taxes are in the gross
     const company = parseCompanyTaxes(await createQADatabase(companyTaxesFile).readQADatabase().catch(() => new Map()));
     if ((netUsd > 0 && !usd) || (netEur > 0 && !eur)) {

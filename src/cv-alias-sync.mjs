@@ -15,6 +15,17 @@ import { loadTechnologyAliases, observedTechnologyNames } from './vacancy-analys
 import { createVacancyCache } from './vacancy-cache.mjs';
 import { openSlot } from './browser-slots.mjs';
 import { seedHhSession } from './login.mjs';
+import { createCvEditQueue } from './cv-edit-queue.mjs';
+import { parseMonthYear } from './experience.mjs';
+import { alertUser } from './notify.mjs';
+
+/** Called only after a passive Save has been verified against fresh exports. */
+export function requestedEditsForSavedForm(form, requests) {
+  const start = parseMonthYear(`${form.startMonth} ${form.startYear}`);
+  const end = form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`);
+  return requests.filter(change => form.resumes?.some(r => r.checked && r.hash === change.resumeHash) &&
+    form.company === change.target.company && start === change.target.start && end === change.target.end);
+}
 
 async function writeJson(file, value) {
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -24,22 +35,26 @@ async function writeJson(file, value) {
 }
 
 /** Re-export and replan after each reviewed step, retaining edits the owner made at Save. */
-export async function syncCvAliases({ readResumes, readObserved, catalog, review, onPlan = async () => {} }) {
+export async function syncCvAliases({ readResumes, readObserved, catalog, review, onPlan = async () => {},
+  readRequests = async () => [], onRequestedSaved = async () => {} }) {
   let saved = 0;
   for (;;) {
     const resumes = await readResumes();
     const observed = await readObserved();
     const plan = planCvTechnologySync(resumes, catalog, { observed });
+    const requests = await readRequests();
+    plan.changes = [...requests, ...plan.changes];
     await onPlan(plan);
     if (plan.unmatched.length) throw new Error('CV positions cannot be paired unambiguously; alias review paused');
     if (!plan.changes.length) return { saved, resumes, observed };
     const steps = await reviewCvSequence([plan.changes[0]], review);
+    if (requests[0]) await onRequestedSaved(requests[0]);
     saved += steps.length;
   }
 }
 
 /** Adopt an existing owner draft by observation only; do not overwrite or navigate it. */
-export async function waitForExistingAliasDraft(page, { readResumes, writeSnapshots }) {
+export async function waitForExistingAliasDraft(page, { readResumes, writeSnapshots, port = 9352 }) {
   let resolve;
   const saved = new Promise(done => { resolve = done; });
   const stop = await observeHhCvSaves(page, { onSaved: async (form) => {
@@ -49,7 +64,8 @@ export async function waitForExistingAliasDraft(page, { readResumes, writeSnapsh
     resolve(form);
     return true;
   } });
-  try { return await saved; } finally { stop(); }
+  const endAlert = alertUser({ port });
+  try { return await saved; } finally { endAlert(); stop(); }
 }
 
 export async function seedAliasSession(page, { fromPort = 9322, readForm = readHhCvForm, seed = seedHhSession } = {}) {
@@ -102,6 +118,7 @@ async function main(args) {
     const page = session.page;
     await seedAliasSession(page, { fromPort: options.fromPort });
     const catalog = await loadTechnologyAliases();
+    const editQueue = createCvEditQueue();
     const readResumes = () => exportSavedCvs({ port: options.port });
     const readObserved = async () => observedTechnologyNames(await createVacancyCache().all(), catalog);
     const writeSnapshots = async (resumes) => {
@@ -112,17 +129,20 @@ async function main(args) {
       observed ??= await readObserved();
       const examples = (await fs.readdir('examples')).filter(file => /^cv\..*\.lino$/.test(file)).sort();
       const contents = await Promise.all(examples.map(file => fs.readFile(path.join('examples', file), 'utf8')));
-      return createHash('sha256').update(JSON.stringify(observed.map(({ canonical, spelling }) => [canonical, spelling]).sort()) + contents.join('\n')).digest('hex');
+      return createHash('sha256').update(JSON.stringify(observed.map(({ canonical, spelling }) => [canonical, spelling]).sort()) +
+        contents.join('\n') + JSON.stringify(await editQueue.pending())).digest('hex');
     };
     let checked = null;
     for (;;) {
       if (await readHhCvForm(page)) {
         await writeState('awaiting_existing_user_save');
-        await waitForExistingAliasDraft(page, { readResumes, writeSnapshots });
+        const savedForm = await waitForExistingAliasDraft(page, { readResumes, writeSnapshots, port: options.port });
+        for (const request of requestedEditsForSavedForm(savedForm, await editQueue.pending())) await editQueue.complete(request.requestId);
         checked = null;
       }
       if (await signature() !== checked) {
         const result = await syncCvAliases({ readResumes, readObserved, catalog,
+          readRequests: () => editQueue.pending(), onRequestedSaved: change => editQueue.complete(change.requestId),
           onPlan: async (plan) => {
             await writeJson(stateFile.replace(/\.json$/, '.plan.json'), plan);
             await writeState(plan.changes.length ? 'awaiting_user_save' : 'up_to_date', {

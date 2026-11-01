@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { syncCvAliases, seedAliasSession, ensureCvAliasSync } from '../src/cv-alias-sync.mjs';
+import { syncCvAliases, seedAliasSession, ensureCvAliasSync, requestedEditsForSavedForm } from '../src/cv-alias-sync.mjs';
 
 const makeResumes = () => ['ru', 'en'].map(language => ({ hash: language, cv: {
   language, about: `${language} biography.\n\n${language === 'ru' ? 'Технические навыки\nБазы данных' : 'Technical Skills\nDatabases'}:\nPostgreSQL`,
@@ -13,6 +13,32 @@ const makeResumes = () => ['ru', 'en'].map(language => ({ hash: language, cv: {
 const catalog = new Map([['PostgreSQL', ['PostgreSQL', 'Postgres', 'Postgre SQL']]]);
 
 describe('reviewed alias updates across all CVs', () => {
+  test('after restart only a matching verified workplace Save consumes the owner request', () => {
+    const requests = [{ resumeHash: 'ru', target: { company: 'Example', start: '2020-07', end: '2022-08' } }];
+    const form = { company: 'Example', startMonth: 'Июль', startYear: '2020', endMonth: 'Август', endYear: '2022',
+      resumes: [{ hash: 'ru', checked: true }] };
+    expect(requestedEditsForSavedForm(form, requests)).toEqual(requests);
+    expect(requestedEditsForSavedForm({ ...form, startYear: '2021' }, requests)).toEqual([]);
+    expect(requestedEditsForSavedForm({ ...form, resumes: [{ hash: 'en', checked: true }] }, requests)).toEqual([]);
+  });
+  test('requested narrative edits precede aliases and are acknowledged only after verified Save', async () => {
+    const resumes = makeResumes();
+    const change = { resumeHash: 'ru', kind: 'update', requestId: 'c2c', target: resumes[0].cv.jobs[0],
+      fields: { description: 'C2C marketplace.\n\nTools:\nPostgreSQL' } };
+    let pending = true;
+    const options = { catalog, readResumes: async () => resumes, readObserved: async () => [],
+      readRequests: async () => pending ? [change] : [], onRequestedSaved: async () => { pending = false; } };
+    await expect(syncCvAliases({ ...options, review: async () => ({ saved: false }) })).rejects.toThrow('not saved');
+    expect(pending).toBe(true);
+    const seen = [];
+    await syncCvAliases({ ...options, review: async next => {
+      seen.push(next.requestId);
+      resumes[0].cv.jobs[0].description = next.fields.description;
+      return { saved: true };
+    } });
+    expect(seen).toEqual(['c2c']);
+    expect(pending).toBe(false);
+  });
   test('an existing draft is protected before session seeding could navigate it away', async () => {
     let seeded = false;
     expect(await seedAliasSession({}, { readForm: async () => ({ kind: 'about', about: 'Owner draft' }),
