@@ -27,6 +27,7 @@ export function saveFormAnswers({ commander, addOrUpdateQA }) {
   // Read every second, written once an answer stops changing: the last read is written when
   // the form is sent, since by then the page is gone (a save after it lost the last words typed)
   let lastRead = null;
+  let reading = false;
   let previous = '';
   const save = async (pairs, reason) => {
     const count = pairs ? await savePairs(pairs, addOrUpdateQA) : 0;
@@ -35,16 +36,20 @@ export function saveFormAnswers({ commander, addOrUpdateQA }) {
     }
   };
   const interval = setInterval(async () => {
-    const pairs = await readQAPairs({ commander }).catch(() => null);
-    if (!pairs) {
-      return;
-    }
-    const now = JSON.stringify(pairs);
-    lastRead = pairs;
-    if (now === previous) {
-      await save(pairs, '(auto-save)').catch(() => {});
-    }
-    previous = now;
+    if (reading) return;
+    reading = true;
+    try {
+      const pairs = await readQAPairs({ commander }).catch(() => null);
+      if (!pairs) {
+        return;
+      }
+      const now = JSON.stringify(pairs);
+      lastRead = pairs;
+      if (now === previous) {
+        await save(pairs, '(auto-save)').catch(() => {});
+      }
+      previous = now;
+    } finally { reading = false; }
   }, 1000);
   return async () => {
     clearInterval(interval);

@@ -9,7 +9,7 @@
  */
 
 /** Seen timing out on every hh.ru page */
-export const KNOWN_HANGING_HOSTS = ['rap.skcrtxr.com', 'redirect-frontend.weborama-tech.ru', 'widget-api.uxfeedback.ru'];
+export const KNOWN_HANGING_HOSTS = ['rap.skcrtxr.com', 'redirect-frontend.weborama-tech.ru', 'cr-frontend.weborama-tech.ru', 'widget-api.uxfeedback.ru'];
 
 /** hh.ru's own hosts are never blocked */
 const OWN_HOST = /(^|\.)(hh\.ru|hhcdn\.ru)$/i;

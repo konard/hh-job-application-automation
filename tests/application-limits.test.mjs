@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { applicationStateReadError, isDailyApplicationLimit, prepareApplicationLimit, waitForApplicationLimit } from '../src/application-limits.mjs';
+import { applicationStateReadError, isDailyApplicationLimit, prepareApplicationLimit, waitForApplicationLimit, createDailyLimitPriority } from '../src/application-limits.mjs';
 import { createSubmissionRetries, deferFailedSubmission } from '../src/submission-retries.mjs';
 import { LIMIT_COOLDOWN_MS, limitHeldUntil } from '../src/pacing.mjs';
 import { waitForManualResponse } from '../src/vacancy-response.mjs';
@@ -24,6 +24,54 @@ function fixture() {
 }
 
 describe('account-wide application limits', () => {
+  test('a recorded active hold survives a hidden banner/restart without affecting login or extending expiry', async () => {
+    let time = 1000, saves = 0, silenced = 0;
+    const events = [{ type: 'limit_reached', at: new Date(time).toISOString(), until: 61000 }];
+    const commander = { getUrl: () => url, safeEvaluate: async () => ({ value: { hasForm: false } }) };
+    const hooks = createDailyLimitPriority({ prepare: async () => null, getEvents: () => events, now: () => time,
+      saveAnswers: async () => { saves++; }, silence: () => { silenced++; }, log: () => {} });
+    expect(await hooks.onDailyLimit(commander)).toMatchObject({ status: 'daily_limit', until: 61000, visible: false });
+    expect(saves).toBe(1);
+    expect(silenced).toBe(1);
+    expect(await hooks.onDailyLimit({ ...commander, getUrl: () => 'https://hh.ru/account/login' })).toBeNull();
+    time = 61001;
+    expect(await hooks.onDailyLimit(commander)).toBeNull();
+    expect(events).toHaveLength(1);
+  });
+
+  test('the application loop reevaluates an interrupted action instead of dying or counting it as sent', async () => {
+    let waits = 0;
+    const commander = { getUrl: () => 'https://hh.ru/search/vacancy?resume=ru',
+      shouldAbort: () => false, safeEvaluate: async ({ defaultValue }) => ({ value: defaultValue }),
+      wait: async () => {
+        if (++waits === 1) throw Object.assign(new Error('Account pause interrupted the action'), { code: 'DAILY_APPLICATION_LIMIT_INTERRUPTED' });
+        throw new Error('Finished observing resumed loop');
+      } };
+    const worker = createOrchestrator({ commander, page: {}, argv: { jobApplicationInterval: 60, browserPort: 9573 },
+      qaDB: { addOrUpdateQA: async () => {} }, getEvents: () => [{ type: 'limit_reached', until: Date.now() + 60000 }] });
+    await expect(worker.runMainLoop()).rejects.toThrow('Finished observing resumed loop');
+    expect(waits).toBe(2);
+  });
+  test('CAPTCHA priority saves before dismissal, silences alerts and shares one account hold', async () => {
+    const f = fixture();
+    const safe = f.commander.safeEvaluate;
+    let dismissed = false, waited = 0, finish;
+    f.commander.safeEvaluate = async options => options.operationName === 'dismiss captcha for daily application limit'
+      ? (f.actions.push(['dismiss']), { value: { captchaCloseRequested: !dismissed && (dismissed = true) } }) : safe(options);
+    const hooks = createDailyLimitPriority({ prepare: args => prepareApplicationLimit({ ...f.options, ...args }),
+      saveAnswers: async raw => { expect(raw).toBe(f.commander); f.actions.push(['answers']); },
+      silence: () => f.actions.push(['silence']), record: () => {}, log: () => {},
+      wait: async () => { waited++; await new Promise(resolve => { finish = resolve; }); },
+    });
+    const limit = await hooks.onDailyLimit(f.commander);
+    expect(f.actions.map(([name]) => name)).toEqual(['answers', 'draft', 'event', 'silence', 'dismiss']);
+    const first = hooks.waitForDailyLimit(f.commander, limit);
+    const second = hooks.waitForDailyLimit(f.commander, limit);
+    expect(first).toBe(second);
+    expect(waited).toBe(1);
+    finish(); await first;
+    expect(await hooks.onDailyLimit({ getUrl: () => 'https://example.test/' })).toBeNull();
+  });
   test('uses the canonical code and Russian/English errors, without treating other limits as the daily limit', () => {
     for (const error of [
       { code: 'negotiations-limit-exceeded', text: 'Localized text can change' },

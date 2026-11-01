@@ -38,6 +38,7 @@ import { prepareApplicationLimit, waitForApplicationLimit } from './application-
 import { silenceAlertsUntil } from './notify.mjs';
 import { questionnaireMode, skipQuestionnaireForNow } from './questionnaire-mode.mjs';
 import { createSalaryLadder } from './salary-ladder.mjs';
+import { isDailyLimitInterrupted } from './captcha.mjs';
 
 const PAGE_READY_TIMEOUT = 120000;
 
@@ -130,6 +131,19 @@ export function createOrchestrator({
   let followUp = null;
   let plannedVacancy = null;
   let dailyLimitRecovery = null;
+
+  async function retryAfterDailyLimit(task) {
+    for (;;) {
+      try { return await task(); }
+      catch (error) {
+        if (!isDailyLimitInterrupted(error)) throw error;
+        handledResponseUrl = null;
+        workStartedAt = null;
+        plannedVacancy = null;
+        console.log('♻️  Daily-limit pause finished; reevaluating the preserved page.');
+      }
+    }
+  }
 
   async function recoverDailyLimit(limit) {
     nextApplicationAt = Math.max(nextApplicationAt, limit.until);
@@ -308,7 +322,12 @@ export function createOrchestrator({
     }
     handledResponseUrl = commander.getUrl();
     const retryId = retryingVacancyId;
-    const operation = runVacancyResponseHandler().finally(() => {
+    const operation = runVacancyResponseHandler().catch(error => {
+      if (!isDailyLimitInterrupted(error)) throw error;
+      handledResponseUrl = null;
+      workStartedAt = null;
+      console.log('♻️  Daily-limit pause finished; the application will be checked again before sending.');
+    }).finally(() => {
       // An earlier form may finish after the next one's handler has started.
       if (responseHandling === operation) responseHandling = null;
       if (retryingVacancyId === retryId) retryingVacancyId = null;
@@ -469,7 +488,7 @@ export function createOrchestrator({
         onPageClosed();
       });
 
-      await ensureLoggedIn({ commander, page, argv, isPageClosed: getPageClosedByUser });
+      await retryAfterDailyLimit(() => ensureLoggedIn({ commander, page, argv, isPageClosed: getPageClosedByUser }));
       if (pageClosedByUser) {
         return;
       }
@@ -480,14 +499,14 @@ export function createOrchestrator({
       // Capture an existing failed form before resume selection navigates away from it.
       // Resolving a full form's return search only fetches the CV list; it never leaves the form.
       const initialUrl = commander.getUrl();
-      const preparedStart = URL_PATTERNS.vacancyResponse.test(initialUrl) ? await resolveApplicationStart(commander, START_URL) : null;
+      const preparedStart = URL_PATTERNS.vacancyResponse.test(initialUrl) ? await retryAfterDailyLimit(() => resolveApplicationStart(commander, START_URL)) : null;
       if (preparedStart) lastSearchPageUrl = salaryLadder.prepare(preparedStart.startUrl);
-      const failedApplicationOpen = await deferVisibleSubmissionError();
+      const failedApplicationOpen = await retryAfterDailyLimit(() => deferVisibleSubmissionError());
 
       const start = preparedStart ?? (failedApplicationOpen && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())
         ? { startUrl: START_URL || (URL_PATTERNS.searchVacancy.test(commander.getUrl())
           ? commander.getUrl() : 'https://hh.ru/search/vacancy?from=resumelist'), preserveCurrentForm: true }
-        : await resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL));
+        : await retryAfterDailyLimit(() => resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL)));
       if (failedApplicationOpen) start.preserveCurrentForm = commander.getUrl() === initialUrl;
       START_URL = start.startUrl ? salaryLadder.prepare(start.startUrl) : null;
       if (!START_URL) {
@@ -497,9 +516,9 @@ export function createOrchestrator({
       if (start.preserveCurrentForm) {
         console.log('📄 Resuming the open application; entered answers are preserved.');
       } else if (commander.getUrl() !== START_URL) {
-        await commander.goto({ url: START_URL, waitForStableUrlBefore: false });
+        await retryAfterDailyLimit(() => commander.goto({ url: START_URL, waitForStableUrlBefore: false }));
       }
-      await dismissOverlays(commander);
+      await retryAfterDailyLimit(() => dismissOverlays(commander));
 
       // Declarative page handling (vacancy_response, vacancy and search pages)
       const cleanupTriggers = registerPageTriggers({
@@ -544,160 +563,168 @@ export function createOrchestrator({
      */
     async runMainLoop() {
       while (!pageClosedByUser) {
-        nextApplicationAt = Math.max(nextApplicationAt, limitHeldUntil(getEvents()));
-        if (stopError) {
-          throw stopError;
-        }
-        if (followUp) {
-          await followUp;
-          continue;
-        }
-        // A form opened on startup or by its page trigger has the same passive review wait.
-        // Do not restart work timing or revisit fields while that handler is still active.
-        if (responseHandling && handledResponseUrl === commander.getUrl()) {
-          await responseHandling;
-          continue;
-        }
-        // Ensure page is fully loaded
-        if (commander.navigationManager?.isNavigating() || commander.shouldAbort()) {
-          log.debug(() => 'Page is loading, waiting for it to be fully ready...');
-          await waitForPageReady('ensuring page is ready before automation');
-          log.debug(() => `Page ready: ${commander.getUrl()}`);
-          continue;
-        }
-        if (URL_PATTERNS.vacancyResponse.test(commander.getUrl()) && handledResponseUrl !== commander.getUrl()) {
-          const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
-          try { await vacancyResponseHandler(); } finally { await stopSaving(); }
-          continue;
-        }
-
-        // Generic errors are saved and skipped in RAM. Other errors keep their form open.
-        if (await deferVisibleSubmissionError()) {
-          await commander.wait({ ms: 1000, reason: 'submission error handling' });
-          continue;
-        }
-
-        // Safety net: redirect back after an application sent from a vacancy page
-        if (await checkAndRedirectIfNeeded({
-          commander, isOnVacancyPageFromResponse, returnUrl: lastSearchPageUrl, onApplicationSent: afterApplicationSent,
-          onUnavailable: (vacancyId) => noteSkip(skippedVacancies, vacancyId, { reason: 'vacancy_unavailable', url: commander.getUrl() }),
-        })) {
-          isOnVacancyPageFromResponse = false;
-          await waitForPageReady('after redirect');
-          continue;
-        }
-
-        if (Date.now() < nextApplicationAt) {
-          await waitForApplicationSlot();
-          continue;
-        }
-
-        workStartedAt ??= Date.now();
-        await commander.wait({ ms: 500, reason: 'settle before processing vacancy buttons' });
-        await dismissOverlays(commander);
-        if (commander.shouldAbort()) {
-          continue;
-        }
-
-        const onSearch = URL_PATTERNS.searchVacancy.test(commander.getUrl());
-        if (onSearch) {
-          const url = salaryLadder.prepare(commander.getUrl());
-          if (url !== commander.getUrl()) {
-            lastSearchPageUrl = url;
-            await commander.goto({ url, waitForStableUrlBefore: false });
+        try {
+          nextApplicationAt = Math.max(nextApplicationAt, limitHeldUntil(getEvents()));
+          if (stopError) {
+            throw stopError;
+          }
+          if (followUp) {
+            await followUp;
             continue;
           }
-        }
-        const submissionRetry = onSearch ? submissionRetries.takeDue() : null;
-        const questionnaireRetry = onSearch && !submissionRetry ? questionnaireMode.takeNext() : null;
-        if (questionnaireRetry) {
+          // A form opened on startup or by its page trigger has the same passive review wait.
+          // Do not restart work timing or revisit fields while that handler is still active.
+          if (responseHandling && handledResponseUrl === commander.getUrl()) {
+            await responseHandling;
+            continue;
+          }
+          // Ensure page is fully loaded
+          if (commander.navigationManager?.isNavigating() || commander.shouldAbort()) {
+            log.debug(() => 'Page is loading, waiting for it to be fully ready...');
+            await waitForPageReady('ensuring page is ready before automation');
+            log.debug(() => `Page ready: ${commander.getUrl()}`);
+            continue;
+          }
+          if (URL_PATTERNS.vacancyResponse.test(commander.getUrl()) && handledResponseUrl !== commander.getUrl()) {
+            const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
+            try { await vacancyResponseHandler(); } finally { await stopSaving(); }
+            continue;
+          }
+
+          // Generic errors are saved and skipped in RAM. Other errors keep their form open.
+          if (await deferVisibleSubmissionError()) {
+            await commander.wait({ ms: 1000, reason: 'submission error handling' });
+            continue;
+          }
+
+          // Safety net: redirect back after an application sent from a vacancy page
+          if (await checkAndRedirectIfNeeded({
+            commander, isOnVacancyPageFromResponse, returnUrl: lastSearchPageUrl, onApplicationSent: afterApplicationSent,
+            onUnavailable: (vacancyId) => noteSkip(skippedVacancies, vacancyId, { reason: 'vacancy_unavailable', url: commander.getUrl() }),
+          })) {
+            isOnVacancyPageFromResponse = false;
+            await waitForPageReady('after redirect');
+            continue;
+          }
+
+          if (Date.now() < nextApplicationAt) {
+            await waitForApplicationSlot();
+            continue;
+          }
+
+          workStartedAt ??= Date.now();
+          await commander.wait({ ms: 500, reason: 'settle before processing vacancy buttons' });
+          await dismissOverlays(commander);
+          if (commander.shouldAbort()) {
+            continue;
+          }
+
+          const onSearch = URL_PATTERNS.searchVacancy.test(commander.getUrl());
+          if (onSearch) {
+            const url = salaryLadder.prepare(commander.getUrl());
+            if (url !== commander.getUrl()) {
+              lastSearchPageUrl = url;
+              await commander.goto({ url, waitForStableUrlBefore: false });
+              continue;
+            }
+          }
+          const submissionRetry = onSearch ? submissionRetries.takeDue() : null;
+          const questionnaireRetry = onSearch && !submissionRetry ? questionnaireMode.takeNext() : null;
+          if (questionnaireRetry) {
           // Resuming the session mode never overrides separately saved exclusions/questions.
-          const blocked = new Set([
-            ...await deferredQuestions?.pendingVacancyIds(await qaDB.readQADatabase()) ?? [],
-            ...await vacancyFilters?.filteredVacancyIds() ?? [],
-            ...await skippedVacancies?.skippedVacancyIds({ ignoreQuestionnaires: argv.ignoreVacanciesWithQuestionnaire }) ?? [],
-          ]);
-          if (blocked.has(questionnaireRetry.vacancyId)) continue;
-        }
-        const retry = submissionRetry ?? questionnaireRetry;
-        const requeue = () => questionnaireRetry
-          ? questionnaireMode.remember(retry.vacancyId, retry) : submissionRetries.restore([retry]);
-        let result;
-        if (retry) {
-          console.log(questionnaireRetry
-            ? `📝 Returning to questionnaire ${retry.vacancyId}: no-questions mode is off`
-            : `🔁 Retrying vacancy ${retry.vacancyId}: its five-hour submission cooldown has expired`);
-          if (vacancyInsights && (vacancyInsights.enabled || argv.applyFromVacancyPage) &&
+            const blocked = new Set([
+              ...await deferredQuestions?.pendingVacancyIds(await qaDB.readQADatabase()) ?? [],
+              ...await vacancyFilters?.filteredVacancyIds() ?? [],
+              ...await skippedVacancies?.skippedVacancyIds({ ignoreQuestionnaires: argv.ignoreVacanciesWithQuestionnaire }) ?? [],
+            ]);
+            if (blocked.has(questionnaireRetry.vacancyId)) continue;
+          }
+          const retry = submissionRetry ?? questionnaireRetry;
+          const requeue = () => questionnaireRetry
+            ? questionnaireMode.remember(retry.vacancyId, retry) : submissionRetries.restore([retry]);
+          let result;
+          if (retry) {
+            console.log(questionnaireRetry
+              ? `📝 Returning to questionnaire ${retry.vacancyId}: no-questions mode is off`
+              : `🔁 Retrying vacancy ${retry.vacancyId}: its five-hour submission cooldown has expired`);
+            if (vacancyInsights && (vacancyInsights.enabled || argv.applyFromVacancyPage) &&
               !await vacancyInsights.visit({ commander, vacancyId: retry.vacancyId, returnUrl: lastSearchPageUrl,
                 stayOnVacancy: argv.applyFromVacancyPage, previewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000 })) {
-            if (questionnaireRetry) requeue(); else submissionRetries.defer(retry.vacancyId, retry);
-            continue;
-          }
-          if (vacancyInsights && argv.applyFromVacancyPage && extractVacancyId(commander.getUrl()) !== retry.vacancyId) {
-            requeue();
-            continue;
-          }
-          // Force the same handler/fallback path as a newly opened full application form.
-          handledResponseUrl = null;
-          retryingVacancyId = submissionRetry ? retry.vacancyId : null;
-          try {
-            await commander.goto({ url: retry.url, waitForStableUrlBefore: false });
-          } catch (error) {
-            retryingVacancyId = null;
-            if (questionnaireRetry) requeue(); else submissionRetries.defer(retry.vacancyId, retry);
-            console.log(`⚠️  Retry navigation failed for vacancy ${retry.vacancyId}; ${questionnaireRetry ? 'kept in the RAM questionnaire queue' : 'deferred for another five hours'}: ${error.message}`);
-            continue;
-          }
-          result = { status: 'vacancy_response_detected', vacancyId: retry.vacancyId };
-        } else result = await findAndProcessVacancyButton({
-          commander,
-          targetVacancyId: plannedVacancy?.url === commander.getUrl() ? plannedVacancy.vacancyId : null,
-          MESSAGE,
-          selectApplicationResume,
-          ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
-          deferredQuestions,
-          readQADatabase: qaDB.readQADatabase,
-          addOrUpdateQA: qaDB.addOrUpdateQA,
-          autoSendExact: argv.autoSendExactAnswers,
-          autoSubmit: argv.autoSubmitVacancyResponseForm,
-          onMissingAnswers: argv.onMissingAnswers,
-          vacancyFilters,
-          skippedVacancies,
-          vacancyInsights,
-          salaryLadder,
-          applyFromVacancyPage: argv.applyFromVacancyPage,
-          vacancyPreviewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000,
-          verbose: argv.verbose,
-          waitForUrlCondition,
-          START_URL,
-          pageClosedByUser: getPageClosedByUser,
-        });
-        plannedVacancy = null;
+              if (questionnaireRetry) requeue(); else submissionRetries.defer(retry.vacancyId, retry);
+              continue;
+            }
+            if (vacancyInsights && argv.applyFromVacancyPage && extractVacancyId(commander.getUrl()) !== retry.vacancyId) {
+              requeue();
+              continue;
+            }
+            // Force the same handler/fallback path as a newly opened full application form.
+            handledResponseUrl = null;
+            retryingVacancyId = submissionRetry ? retry.vacancyId : null;
+            try {
+              await commander.goto({ url: retry.url, waitForStableUrlBefore: false });
+            } catch (error) {
+              retryingVacancyId = null;
+              if (questionnaireRetry) requeue(); else submissionRetries.defer(retry.vacancyId, retry);
+              console.log(`⚠️  Retry navigation failed for vacancy ${retry.vacancyId}; ${questionnaireRetry ? 'kept in the RAM questionnaire queue' : 'deferred for another five hours'}: ${error.message}`);
+              continue;
+            }
+            result = { status: 'vacancy_response_detected', vacancyId: retry.vacancyId };
+          } else result = await findAndProcessVacancyButton({
+            commander,
+            targetVacancyId: plannedVacancy?.url === commander.getUrl() ? plannedVacancy.vacancyId : null,
+            MESSAGE,
+            selectApplicationResume,
+            ignoreVacanciesWithQuestionnaire: argv.ignoreVacanciesWithQuestionnaire,
+            deferredQuestions,
+            readQADatabase: qaDB.readQADatabase,
+            addOrUpdateQA: qaDB.addOrUpdateQA,
+            autoSendExact: argv.autoSendExactAnswers,
+            autoSubmit: argv.autoSubmitVacancyResponseForm,
+            onMissingAnswers: argv.onMissingAnswers,
+            vacancyFilters,
+            skippedVacancies,
+            vacancyInsights,
+            salaryLadder,
+            applyFromVacancyPage: argv.applyFromVacancyPage,
+            vacancyPreviewMs: Math.max(0, argv.vacancyPreviewSeconds ?? 3) * 1000,
+            verbose: argv.verbose,
+            waitForUrlCondition,
+            START_URL,
+            pageClosedByUser: getPageClosedByUser,
+          });
+          plannedVacancy = null;
 
-        if (result.status === 'vacancy_response_detected') {
+          if (result.status === 'vacancy_response_detected') {
           // Start immediately, or join the trigger's existing handler. No fixed wait for a
           // network-idle trigger to pick up a form whose DOM is already ready.
-          const formUrl = commander.getUrl();
-          if (responseHandling && handledResponseUrl === formUrl) {
-            await responseHandling;
-          } else if (handledResponseUrl !== formUrl && URL_PATTERNS.vacancyResponse.test(formUrl)) {
+            const formUrl = commander.getUrl();
+            if (responseHandling && handledResponseUrl === formUrl) {
+              await responseHandling;
+            } else if (handledResponseUrl !== formUrl && URL_PATTERNS.vacancyResponse.test(formUrl)) {
             // What the user types is saved as the page trigger would
-            const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
-            try { await vacancyResponseHandler(); }
-            catch (error) { console.error('Error in vacancy response handler:', error.message); }
-            finally { await stopSaving(); }
+              const stopSaving = saveFormAnswers({ commander, addOrUpdateQA: qaDB.addOrUpdateQA });
+              try { await vacancyResponseHandler(); }
+              catch (error) { console.error('Error in vacancy response handler:', error.message); }
+              finally { await stopSaving(); }
+            }
+            // Sent in the browser: hh.ru opened its vacancy page, which the safety net checks and leaves
+            const formVacancyId = extractVacancyIdFromResponseUrl(formUrl);
+            if (formVacancyId && extractVacancyId(commander.getUrl()) === formVacancyId) {
+              isOnVacancyPageFromResponse = true;
+            }
           }
-          // Sent in the browser: hh.ru opened its vacancy page, which the safety net checks and leaves
-          const formVacancyId = extractVacancyIdFromResponseUrl(formUrl);
-          if (formVacancyId && extractVacancyId(commander.getUrl()) === formVacancyId) {
-            isOnVacancyPageFromResponse = true;
+          if (openedVacancy(result) && result.status !== 'success') {
+            scheduleNextApplication(`Vacancy ${result.vacancyId ?? ''} opened (${result.status}${result.reason ? `: ${result.reason}` : ''})`);
           }
-        }
-        if (openedVacancy(result) && result.status !== 'success') {
-          scheduleNextApplication(`Vacancy ${result.vacancyId ?? ''} opened (${result.status}${result.reason ? `: ${result.reason}` : ''})`);
-        }
-        if (!await handleResult(result)) {
-          return;
+          if (!await handleResult(result)) {
+            return;
+          }
+        } catch (error) {
+          if (!isDailyLimitInterrupted(error)) throw error;
+          handledResponseUrl = null;
+          workStartedAt = null;
+          plannedVacancy = null;
+          console.log('♻️  Daily-limit pause finished; continuing from the preserved page.');
         }
       }
     },

@@ -1,6 +1,8 @@
 /**
  * Captcha guard: when hh.ru shows a captcha, the automation does nothing on the page
- * (no clicks, typing or navigation) until the user has solved it in the browser.
+ * (no clicks, typing or navigation) until the user has solved it in the browser. A confirmed
+ * application-account limit takes priority: its handler saves the form and dismisses the
+ * unusable dialog, then holds submissions without CAPTCHA assistance or attention alerts.
  *
  * Detection only reads the DOM (no input events, no requests to hh.ru). The only thing done
  * meanwhile is the optional captcha prefill (captcha-solver.mjs): Haiku's reading may be sent
@@ -91,7 +93,9 @@ export async function isCaptchaShown(commander) {
   return false;
 }
 
-let waiting = null;
+const waiting = new WeakMap();
+
+export const isDailyLimitInterrupted = error => error?.code === 'DAILY_APPLICATION_LIMIT_INTERRUPTED';
 
 /**
  * Wait, touching nothing, until no captcha is shown. Concurrent callers share one wait.
@@ -101,13 +105,17 @@ let waiting = null;
  * @param {Function} [options.onCaptcha] - Called with the commander and this captcha's state
  *   object (the same one until the captcha is gone) on each check that shows a
  *   captcha, without waiting for it (the answer prefill)
- * @returns {Promise<boolean>} True when a captcha was shown and has been solved
+ * @returns {Promise<boolean|Object>} True when the captcha cleared; a daily-limit result interrupts the queued action
  */
 export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha, alert = alertUser,
+  onDailyLimit,
   alertDelayMs = CAPTCHA_ALERT_MS, now = Date.now, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
-  waiting ??= (async () => {
+  if (waiting.has(commander)) return waiting.get(commander);
+  const operation = (async () => {
+    const initialLimit = await onDailyLimit?.(commander);
+    if (initialLimit) return initialLimit;
     if (!await isCaptchaShown(commander)) {
-      return false;
+      return await onDailyLimit?.(commander) ?? false;
     }
     const episode = {};
     console.log('🛑 hh.ru shows a captcha. Solve it in the browser; the automation touches nothing until it is gone.');
@@ -122,6 +130,12 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha, alert
     let endAlert = null;
     try {
       while (await isCaptchaShown(commander)) {
+        const limit = await onDailyLimit?.(commander);
+        if (limit) {
+          episode.cancelled = true;
+          recordEvent('captcha', { ms: now() - started, ai: false, ...where, solved: false, shown: true, reason: 'daily_limit' });
+          return limit;
+        }
         if (!endAlert && settled && !background && now() - started >= alertDelayMs) endAlert = alert();
         if (onCaptcha && !background) {
           settled = false;
@@ -129,19 +143,26 @@ export function waitWhileCaptcha(commander, { pollMs = POLL_MS, onCaptcha, alert
             .catch((error) => console.log(`⚠️  Background CAPTCHA step failed; manual input is required: ${error.message.split('\n')[0]}`))
             .finally(() => { settled = true; background = null; });
         }
-        await pause(pollMs);
+        await pause(onDailyLimit ? Math.min(pollMs, 1000) : pollMs);
       }
     } finally {
       endAlert?.();
+    }
+    const finalLimit = await onDailyLimit?.(commander);
+    if (finalLimit) {
+      episode.cancelled = true;
+      recordEvent('captcha', { ms: now() - started, ai: false, ...where, solved: false, shown: true, reason: 'daily_limit' });
+      return finalLimit;
     }
     console.log(`✅ Captcha solved after ${Math.round((now() - started) / 1000)} s, continuing`);
     // Solved by AI: its reading was sent and hh.ru showed no new picture after it
     recordEvent('captcha', { ms: now() - started, ai: Boolean(episode.sent && !episode.reported), ...where, solved: true, shown: true });
     return true;
   })().finally(() => {
-    waiting = null;
+    waiting.delete(commander);
   });
-  return waiting;
+  waiting.set(commander, operation);
+  return operation;
 }
 
 /**
@@ -174,7 +195,16 @@ export function withCaptchaGuard(commander, options = {}) {
         return value;
       }
       return async (...args) => {
-        if (await waitWhileCaptcha(target, options)) {
+        const result = await waitWhileCaptcha(target, options);
+        if (result?.status === 'daily_limit') {
+          await options.waitForDailyLimit?.(target, result);
+          // The queued action belongs to the refused form. A fresh handler must re-evaluate it.
+          const error = new Error('Daily application limit interrupted the queued page action');
+          error.code = 'DAILY_APPLICATION_LIMIT_INTERRUPTED';
+          error.expectedNavigation = true;
+          throw error;
+        }
+        if (result) {
           log.debug(() => `Captcha solved before ${key}`);
         }
         return value.apply(target, args);

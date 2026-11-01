@@ -17,6 +17,8 @@ import { createQADatabase } from './qa-database.mjs';
 import { enableDebugLevel } from './logging.mjs';
 import { createConfig, getUserDataDir } from './config.mjs';
 import { createOrchestrator } from './orchestrator.mjs';
+import { createDailyLimitPriority } from './application-limits.mjs';
+import { saveQAPairs } from './vacancy-response.mjs';
 import { markVacancyAsProcessed } from './vacancies.mjs';
 import { connectOrLaunchBrowser } from './browser-session.mjs';
 import { recordBrowserLifecycle } from './browser-lifecycle.mjs';
@@ -209,6 +211,8 @@ process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
     // Nothing touches the page while hh.ru shows a captcha, except its answer: Haiku's reading is sent
     // once (--captcha-auto-send), after that it is only prefilled and the user sends it
     commander: withConfirmations(withCaptchaGuard(commander, {
+      ...createDailyLimitPriority({ port: argv.browserPort,
+        saveAnswers: raw => saveQAPairs({ commander: raw, addOrUpdateQA, strict: true }) }),
       onCaptcha: argv.captchaPrefill
         ? createCaptchaPrefill({ page: session.page, sendOnce: argv.captchaAutoSend })
         : undefined,

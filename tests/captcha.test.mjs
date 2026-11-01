@@ -4,6 +4,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   CAPTCHA_SELECTORS, CAPTCHA_TEXTS, captchaPlace, isCaptchaShown, pageShowsCaptcha, waitWhileCaptcha, withCaptchaGuard,
+  isDailyLimitInterrupted,
 } from '../src/captcha.mjs';
 
 /** Minimal document: body text plus elements by selector, each visible or not */
@@ -69,6 +70,46 @@ function fakeCommander({ checks = 0, url = 'https://hh.ru/search/vacancy' } = {}
 }
 
 describe('captcha guard', () => {
+  test('a disappearing CAPTCHA with a simultaneous refusal is not reported as solved', async () => {
+    const commander = fakeCommander({ checks: 1 });
+    let checks = 0;
+    const limit = { status: 'daily_limit', until: 10000 };
+    const result = await waitWhileCaptcha(commander, { onDailyLimit: async () => ++checks >= 2 ? limit : null });
+    assert.equal(result, limit);
+  });
+  test('daily limits cancel queued actions before CAPTCHA assistance or attention notifications', async () => {
+    const commander = fakeCommander({ checks: 100 });
+    let assisted = 0, alerts = 0, held = 0;
+    const limit = { status: 'daily_limit', until: 10000 };
+    const guarded = withCaptchaGuard(commander, {
+      onDailyLimit: async () => limit,
+      waitForDailyLimit: async () => { held++; },
+      onCaptcha: async () => { assisted++; }, alert: () => { alerts++; return () => {}; },
+    });
+    let error;
+    try { await guarded.clickButton({ selector: 'button[type=submit]' }); } catch (caught) { error = caught; }
+    assert.equal(isDailyLimitInterrupted(error), true);
+    assert.equal(error.expectedNavigation, true);
+    assert.equal(held, 1);
+    assert.equal(assisted, 0);
+    assert.equal(alerts, 0);
+    assert.deepEqual(commander.calls, []);
+  });
+
+  test('a daily limit appearing during a CAPTCHA wait ends its notification without reporting a solve', async () => {
+    const commander = fakeCommander({ checks: 100 });
+    let checks = 0, closedAlerts = 0, pauses = 0;
+    const limit = { status: 'daily_limit', until: 10000 };
+    const result = await waitWhileCaptcha(commander, { alertDelayMs: 0,
+      onDailyLimit: async () => ++checks >= 3 ? limit : null,
+      alert: () => () => { closedAlerts++; },
+      pause: async ms => { assert.ok(ms <= 1000); pauses++; },
+    });
+    assert.equal(result, limit);
+    assert.equal(closedAlerts, 1);
+    assert.equal(pauses, 1);
+    assert.deepEqual(commander.calls, []);
+  });
   test('attention notifications wait for background work to settle and only appear if manual input remains', async () => {
     let shown = true, time = 0, ticks = 0, alerts = 0, working = true;
     let finish;

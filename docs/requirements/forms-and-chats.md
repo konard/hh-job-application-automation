@@ -23,8 +23,24 @@ deadline. Refresh and restore the failed application after expiry; a fresh serve
 another pause. Never count the refusal as success, a skipped vacancy or a generic five-hour RAM
 retry. Hidden stale banners, unrelated rate limits and character-count validation do not qualify.
 
+A daily refusal takes priority even when HH simultaneously displays a CAPTCHA. Inspect account
+errors through the unwrapped commander, before the CAPTCHA guard can block those reads. Save
+answers and the full form first, use the CAPTCHA dialog's native Close control, cancel existing
+application attention reminders, and hold until the original account deadline. Never read, fill,
+renew or submit the challenge on this path. Closing it is not a solve or successful application.
+Cancel the queued pre-pause action and re-evaluate the current page after expiry.
+
+During the hold, save subsequent user edits and dismiss a delayed/remounted CAPTCHA as well.
+A recorded unexpired account pause remains authoritative if its banner disappears or the worker
+restarts. That fallback applies only to application/search/vacancy pages; it must not dismiss an
+unrelated login CAPTCHA. Hidden/transparent banners without a recorded active pause, unrelated
+limits and ambiguous close controls do not authorize dismissal. Keep actionable chat/CV alerts
+independent. Autosaving permits only one pending page read, avoiding accumulated waits.
+
 Verification: `tests/application-limits.test.mjs`, `tests/browser/application-limits.mjs`,
 `tests/popup-application.test.mjs`, `tests/pacing.test.mjs` and `tests/notify.test.mjs`.
+Overlap verification: `tests/captcha.test.mjs`, `tests/application-limits.test.mjs` and
+`tests/browser/limit-captcha-priority.mjs` (including a CAPTCHA-answer getter that throws on reads).
 
 ## Optional no-questions mode
 
