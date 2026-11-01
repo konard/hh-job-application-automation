@@ -230,4 +230,5 @@ resume
       description
         "Supporting and developing additions and extensions for the store's website, automated data import through Excel into the database."
         ' '
-        'Skills used: MySQL, HTML, CSS, JavaScript, PHP, Excel, Lua.'
+        'Skills used:'
+        'CSS, Excel, HTML, JavaScript (JS), Lua, MySQL, PHP'
