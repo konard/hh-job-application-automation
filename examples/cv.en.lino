@@ -159,7 +159,7 @@ resume
         'Developing demonstration projects.'
         ' '
         'Skills, technologies, and tools:'
-        'Rust, C# (.NET Core, .NET Framework), C/C++, JavaScript, HTML, CSS, Visual Studio, Visual Studio Code, Rider, Git, GitHub, NuGet, PVS-Studio, ASP.NET MVC, SQLite, jQuery, OBS-Studio, Unix shell, Python, TeX, DocFX, Travis CI, GitHub Actions'
+        'ASP.NET MVC, C/C++, C# (.NET Core, .NET Framework), CSS, DocFX, Git, GitHub, GitHub Actions, HTML, JavaScript (JS), jQuery, NuGet, OBS-Studio, PVS-Studio, Python, Rider, Rust, SQLite, TeX, Travis CI, Unix shell, Visual Studio, Visual Studio Code'
     job
       company 'ELAR JSC'
       position 'Programmer'
