@@ -4,7 +4,7 @@
 import { describe, test, assert } from 'test-anywhere';
 import {
   formLinks, isPattern, isRejection, knownReply, learnedPairs, learnPatterns, matchesPattern, pendingMessages, PATTERN_PREFIX,
-  NO_REPLY, REJECTION_KEY, isAcknowledgement, isConversationFinished, isSupportChat, questionCore, summaryPairs, templateCore, templateReplyFromPreview, withLearnedPatterns,
+  NO_REPLY, REJECTION_KEY, asksSomething, isAcknowledgement, isConversationFinished, isSupportChat, questionCore, summaryPairs, templateCore, templateReplyFromPreview, withLearnedPatterns,
 } from '../src/chat-answers.mjs';
 
 const templates = new Map([
@@ -14,6 +14,18 @@ const templates = new Map([
 const qaMap = new Map([['Есть ли у вас опыт работы с моделями компьютерного зрения?', 'Да, Tesseract и vision-модели.']]);
 
 describe('chat answers', () => {
+  test('informal factual requests need answers without question marks; announcements do not', () => {
+    for (const text of ['Укажи, пожалуйста, свои зарплатные ожидания (в месяц, на руки)',
+      'Напиши свой Telegram', 'Поделись своим опытом', 'Расскажи про проекты',
+      'Приведи пример', 'Спасибо за отклик! Подскажи свои зарплатные ожидания']) {
+      assert.equal(asksSomething(text), true);
+    }
+    for (const text of ['Мы укажем условия позже.', 'Я напишу зарплатные ожидания позже.',
+      'Спасибо, сообщим позже.', 'Мы рассмотрим резюме и свяжемся с вами.']) {
+      assert.equal(asksSomething(text), false);
+    }
+    assert.equal(isAcknowledgement('Спасибо за отклик! Мы рассмотрим резюме. Укажи свои зарплатные ожидания.'), false);
+  });
   test('a completed recruiter-bot notice cannot reuse a late follow-up as a template answer', () => {
     const text = 'Спасибо! На этом работа ИИ-помощника завершена. Ваши данные уже есть у представителя работодателя, и если они подойдут под требования вакансии, он продолжит обсуждение лично.';
     const late = 'Дополню свой предыдущий ответ про опыт работы.';

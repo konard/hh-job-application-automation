@@ -2,9 +2,9 @@
 import { ANSWER_SEPARATOR } from './answer-variants.mjs';
 
 const instruction = /^(?:отвечайте|ответы учитываются|если текст будет|пожалуйста,?\s+отнеситесь|answer (?:each|in detail))(?=\s|$|[.,])/iu;
-const contactRequest = /(?:укажите|напишите|provide|share).*(?:telegram|телеграм|e-?mail|почт|способ связи|contact)/iu;
-const asking = /\?|^(?:расскажите|опишите|укажите|поделитесь|describe|explain|provide|tell us)(?=\s|$|:)/iu;
-const followup = /^(?:если\s+(?:да|нет)|if\s+(?:so|yes|not)|почему|why\b|(?:поделитесь|приведите)\s+пример|расскажите\s+подробнее|give\s+(?:an?\s+)?examples?|explain\s+in\s+detail)/iu;
+const contactRequest = /(?:укажи(?:те)?|напиши(?:те)?|provide|share).*(?:telegram|телеграм|e-?mail|почт|способ связи|contact)/iu;
+const asking = /\?|^(?:расскажи(?:те)?|опиши(?:те)?|укажи(?:те)?|подел(?:ись|итесь)|describe|explain|provide|tell us)(?=\s|$|[:,])/iu;
+const followup = /^(?:если\s+(?:да|нет)|if\s+(?:so|yes|not)|почему|why\b|(?:подел(?:ись|итесь)|приведи(?:те)?)\s+пример|расскажи(?:те)?\s+подробнее|give\s+(?:an?\s+)?examples?|explain\s+in\s+detail)/iu;
 const key = (text) => text.toLowerCase().replace(/\s+/gu, ' ').trim();
 
 /** Numbered sections outside fenced code. Nested lists and nonsequential numbers are ambiguous. */

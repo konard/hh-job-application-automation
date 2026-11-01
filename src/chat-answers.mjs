@@ -429,7 +429,8 @@ const sameText = (a, b) => !isPattern(b) && normalizeQuestion(a) === normalizeQu
 export const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /\?\s/.test(text);
 
 /** A request for the user's facts without a question mark: «Расскажите о вашем опыте с Kafka.», «Проживаете в РФ» */
-const REQUEST = /(?:^|[.!:,]\s*)(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите|напишите|укажите|сообщите)(?!\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\p{L})|(?:^|[.!:,]\s*)(?:please\s+)?(?:tell|describe|share|specify|provide|indicate|state|enter|select|choose|list|confirm|send|reply|give|let us know)\b/iu;
+const FACT_REQUEST = /расскажи(?:те)?|опиши(?:те)?|подел(?:ись|итесь)|уточни(?:те)?|приведи(?:те)?|перечисли(?:те)?|назови(?:те)?|подскажи(?:те)?|напиши(?:те)?|укажи(?:те)?|сообщи(?:те)?|напомни(?:те)?/iu;
+const REQUEST = new RegExp(`(?:^|[.!:,]\\s*)(?:${FACT_REQUEST.source})(?!\\p{L})|^(?:проживаете|находитесь|работаете|готовы|есть ли|имеется|был ли|была ли|были ли)(?!\\p{L})|(?:^|[.!:,]\\s*)(?:please\\s+)?(?:tell|describe|share|specify|provide|indicate|state|enter|select|choose|list|confirm|send|reply|give|let us know)\\b`, 'iu');
 
 /** Words of a pattern itself, its gaps aside */
 const patternOwnWords = (pattern) => pattern.replace(PATTERN_PREFIX, '').split(' ').filter((token) => token && token !== GAP).length;
@@ -451,7 +452,7 @@ const addsAsking = (core, template) => {
 };
 
 /** A request for the user's facts anywhere in a text */
-const ASKS_FOR = /(?<!\p{L})(?:расскажите|опишите|поделитесь|уточните|приведите|перечислите|назовите|подскажите|напомните)(?!\p{L})/iu;
+const ASKS_FOR = new RegExp(`(?<!\\p{L})(?:${FACT_REQUEST.source})(?!\\p{L})`, 'iu');
 
 /** The words of a message a pattern may say all of, whatever its own length */
 const PATTERN_MESSAGE_WORDS = 40;
@@ -544,7 +545,7 @@ function savedThanks(templates, english = false) {
 /** Whether a message asks the user something: a question, or a request for facts about them */
 export const asksSomething = (text) => isQuestion(text) || REQUEST.test(String(text).trim());
 
-const DETAILS_REQUEST = /(?<!\p{L})(?:расскажите|опишите|поделитесь|приведите)(?!\p{L})|\b(?:describe|explain|tell us|tell me|share|give examples?)\b/iu;
+const DETAILS_REQUEST = /(?<!\p{L})(?:расскажи(?:те)?|опиши(?:те)?|подел(?:ись|итесь)|приведи(?:те)?)(?!\p{L})|\b(?:describe|explain|tell us|tell me|share|give examples?)\b/iu;
 const BARE_YES = /^(?:да|yes|ага|угу|конечно)[.!\s]*$/iu;
 
 /**
@@ -608,10 +609,12 @@ export function knownReply(message, { templates, qaMap, byPattern = null }) {
   if (thanks) {
     return { answer: thanks, noReply: false, perfect: true, source: 'chat-templates.lino: an acknowledgement of the application', matched: core };
   }
-  if (reply) {
+  const asking = asksSomething(core) || asksSomething(questionCore(core));
+  // A valid salary draft answers the appended question before a partial acknowledgement match.
+  if (reply && !(byPattern && !reply.perfect && asking)) {
     return reply;
   }
-  if (asksSomething(core) || asksSomething(questionCore(core))) {
+  if (asking) {
     // A salary question not saved word for word: its answer by pattern (salary-questions.mjs), to prefill
     if (byPattern) {
       return { answer: answerText(byPattern), perfect: false, source: 'salary question by pattern', matched: message.text };

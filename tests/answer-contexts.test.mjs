@@ -118,6 +118,27 @@ describe('Context-aware answers everywhere', () => {
     assert.equal(reply.perfect, false);
     assert.equal(reply.source, 'salary question by pattern');
   });
+  test('informal salary requests without a question mark get currency-aware drafts for review', async () => {
+    const saved = withContacts({ readQADatabase: async () => new Map([['Ваша вилка ЗП?', 'От {{salary_net}} в месяц на руки.']]) }, values);
+    const sources = { readTemplates: async () => new Map(), readQADatabase: saved.readQADatabase, contexts };
+    for (const text of ['Укажи, пожалуйста, свои зарплатные ожидания (в месяц, на руки)',
+      'Напиши свои зарплатные ожидания', 'Подскажи, пожалуйста, свои ожидания по зарплате',
+      'Укажите, пожалуйста, свои зарплатные ожидания (в месяц, на руки)']) {
+      const reply = await knownReplyInContexts({ title: 'Робот-рекрутер', text }, { ...sources, known: [] });
+      assert.equal(reply?.answer, 'От 450 000 ₽ в месяц на руки.');
+      assert.equal(reply?.perfect, false);
+      assert.equal(reply?.source, 'salary question by pattern');
+    }
+    const usd = await knownReplyInContexts({ title: 'Робот-рекрутер', text: 'Укажи зарплатные ожидания в USD (в месяц, на руки)' }, sources);
+    assert.equal(usd?.answer, 'От $6 000 в месяц на руки.');
+    const acknowledgement = 'Мы рассмотрим ваше резюме и свяжемся с вами.';
+    const appended = await knownReplyInContexts({ title: '', text: `${acknowledgement} Укажи свои зарплатные ожидания (в месяц, на руки)` },
+      { ...sources, readTemplates: async () => new Map([[acknowledgement, 'Здравствуйте, благодарю, ожидаю.']]) });
+    assert.equal(appended?.answer, 'От 450 000 ₽ в месяц на руки.');
+    assert.equal(appended?.perfect, false);
+    const multiple = await knownReplyInContexts({ title: 'Робот-рекрутер', text: 'Укажи, пожалуйста, зарплатные ожидания\nРасскажи, пожалуйста, про опыт с неизвестным инструментом' }, sources);
+    assert.equal(multiple, null);
+  });
 
   test('forms prefilled in slots take the answers of each question\'s contexts', async () => {
     const inContexts = answersInContexts(qa.readQADatabase, contexts);

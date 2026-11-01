@@ -89,6 +89,15 @@ normally includes unspecified pay and that salary-only flags/labels exclude it.
 
 ## The user's words
 
+Informal recruiter requests without question marks (for example, «Укажи, пожалуйста, свои
+зарплатные ожидания (в месяц, на руки)») must trigger automatic prefilling from the saved target.
+Recognize both informal and formal imperatives, preserve currency/net/month context, and keep an
+inferred salary answer as a review-only draft. Generic HH suggestions must not block free text;
+strict bot choices still use their actual controls. Do not replace an existing owner draft.
+Multiple informal requests must remain separate so a salary answer cannot silently omit a second
+question. Verification: `tests/answer-contexts.test.mjs`, `tests/chat-answers.test.mjs`,
+`tests/multi-question.test.mjs`; live salary draft prepared without sending.
+
 1. «Set by default, that we auto fill the vacancy form with questions and auto submit it only if
    all questions match exactly, overwise autofill and wait, and for captcha we try to submit haiku
    version once, if works - ok, if not - wait for me, so there is less cases which need me.»

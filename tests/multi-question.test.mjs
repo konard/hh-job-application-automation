@@ -30,6 +30,13 @@ const fixture = async (run) => {
 };
 
 describe('multiple questions shared by forms and chats', () => {
+  test('informal requests stay separate, while a request for an example stays with its question', () => {
+    const salary = 'Укажи, пожалуйста, зарплатные ожидания';
+    const experience = 'Расскажи, пожалуйста, про опыт с React Native';
+    const example = 'Приведи пример';
+    assert.deepEqual(splitQuestions(`${salary}\n${experience}\n${example}`).map(p => p.text), [salary, `${experience} ${example}`]);
+    assert.equal(salaryQuestion(`${salary}\n${experience}`), null);
+  });
   test('retains a numbered question with conditional follow-ups and separates trailing instructions/contact', () => {
     const text = `Пожалуйста, ответьте своими словами.\n\n${block}\n\nОтвечайте подробно и по существу.\n\nЕсли текст будет похож на сгенерированный ИИ, ответ не будет принят.\n\nОтветы учитываются при рассмотрении кандидатуры.\n\nДля дополнительной связи укажите ваш username в Telegram (@username).`;
     assert.deepEqual(splitQuestions(text).map(({ text }) => text), [...questions, 'Для дополнительной связи укажите ваш username в Telegram (@username).']);
