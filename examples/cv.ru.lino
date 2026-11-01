@@ -181,7 +181,8 @@ resume
       description
         'Разработка системы Производственный Контроль для ОАО «НК «Роснефть».'
         ' '
-        'Использовавшиеся навыки: Subversion, MS SQL, MSSQL CE, SQLite, VistaDB, InfoPath, Visual Studio, C#, WPF, Telerik, Stimulsoft.'
+        'Использовавшиеся навыки:'
+        'C#, InfoPath, Microsoft SQL Server (MS SQL, MSSQL), MS SQL CE, SQLite, Stimulsoft, Subversion, Telerik, VistaDB, Visual Studio, WPF'
     job
       company 'ООО «Пегас»'
       position 'Программист-разработчик'
