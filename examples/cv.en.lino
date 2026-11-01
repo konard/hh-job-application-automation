@@ -88,7 +88,9 @@ resume
         ' '
         'Led a team of five senior developers.'
         ' '
-        "Developed and maintained Kaiten.ru, a business process management system: added new features, fixed bugs and improved internal developer tooling. Contributed to Kaiten's iOS and Android applications and billing system."
+        "Developed and maintained Kaiten.ru, a business process management system: added new features, fixed bugs and improved internal developer tooling. Contributed to Kaiten's iOS and Android applications."
+        ' '
+        "Contributed to the development of Kaiten's own billing system: fixed bugs, added filters, expanded exports with additional fields and implemented other features."
         ' '
         'Contributed to the add-ons subsystem and developed the Yandex.Disk add-on.'
         "Contributed to Convertinator, including converting ClickUp data into Kaiten's universal import format."
