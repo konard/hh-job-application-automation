@@ -217,7 +217,8 @@ resume
       description
         'Организация совместной разработки, разработка дополнений и расширений ядра игрового сервера, разработка расширений для защиты системы от злоумышленников, помощь в разработке новой версии сайта, разработка скриптов квестов для игроков.'
         ' '
-        'Использовавшиеся навыки: Subversion, MySQL, Visual Studio, C/C++, IDA, PHP, HTML, CSS, JavaScript, MVC, Lua.'
+        'Использовавшиеся навыки:'
+        'C/C++, CSS, HTML, IDA, JavaScript (JS), Lua, MVC, MySQL, PHP, Subversion, Visual Studio'
     job
       company 'Интернет магазин подарков «ArtBridge»'
       position 'Веб-программист'
