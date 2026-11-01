@@ -24,6 +24,24 @@ opt-in. Applications and the in-memory no-questions queue continue independently
 Verification: `tests/cv-technologies.test.mjs`, `tests/cv-alias-sync.test.mjs` and the real-browser
 CV editor regressions.
 
+Both saved CVs must be exported to the repository in Links Notation, with matching import support.
+Include every workplace's city, company website and full industry IDs/labels alongside dates,
+descriptions, About and technology inventories. Preserve archived URL paths. Industry comparison
+uses stable IDs across localized labels; older files without metadata leave those fields unchanged.
+Employer renames update the existing job, preserving all metadata even when HH initially hides it
+for a linked employer. Verify saved city and website against fresh exports; only confirmed user
+Saves enter public snapshots. City aliases resolve by HH area ID across RU/EN dictionaries
+(18,526 areas per language in the live check); a translated label must not cause a false Save
+failure or select a different region. Saved activities are also verified by their exact ID set.
+Verification: `tests/cv.test.mjs`, `tests/hh-cv-editor.test.mjs`, `tests/hh-areas.test.mjs`,
+`tests/browser/cv-lino-metadata.mjs`, `tests/browser/hh-cv-editor.mjs`.
+
+English employer names, roles and narrative text must be English, including Evirma LLC and the
+English wording of ELAR's Interaction Management System. Keep the Russian counterparts unchanged.
+The passport spelling is Konstantin Diachenko. HH's personal name is shared across all CVs, so
+language-specific name changes cannot be applied through workplace import; report name differences
+for separate profile review. Existing English cover letters use that passport spelling.
+
 Company activity selection uses the complete official HH `/industries` dictionary in RU and EN,
 cached in the local application directory. Read all groups/leaves independently of DOM virtualization;
 resolve full IDs, exact leaf names or parent/leaf paths; reject ambiguous names and unselectable groups.

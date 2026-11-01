@@ -20,6 +20,9 @@ describe('reviewed alias updates across all CVs', () => {
     expect(requestedEditsForSavedForm(form, requests)).toEqual(requests);
     expect(requestedEditsForSavedForm({ ...form, startYear: '2021' }, requests)).toEqual([]);
     expect(requestedEditsForSavedForm({ ...form, resumes: [{ hash: 'en', checked: true }] }, requests)).toEqual([]);
+    const rename = [{ ...requests[0], fields: { company: 'Example LLC' } }];
+    expect(requestedEditsForSavedForm({ ...form, company: 'Example LLC' }, rename)).toEqual(rename);
+    expect(requestedEditsForSavedForm(form, rename)).toEqual([]);
   });
   test('requested narrative edits precede aliases and are acknowledged only after verified Save', async () => {
     const resumes = makeResumes();

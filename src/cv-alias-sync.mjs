@@ -10,7 +10,7 @@ import { withFileLock } from './helpers/mutex.mjs';
 import { exportSavedCvs, writeCvSnapshots, publishCvSnapshots } from './cv-store.mjs';
 import { planCvTechnologySync } from './cv-technologies.mjs';
 import { reviewCvSequence, reviewHhCvChange } from './cv-review.mjs';
-import { readHhCvForm, observeHhCvSaves, verifyHhSavedForm } from './hh-cv-editor.mjs';
+import { readHhCvForm, observeHhCvSaves, verifyHhSavedCvForm } from './hh-cv-editor.mjs';
 import { loadTechnologyAliases, observedTechnologyNames } from './vacancy-analysis.mjs';
 import { createVacancyCache } from './vacancy-cache.mjs';
 import { openSlot } from './browser-slots.mjs';
@@ -24,7 +24,7 @@ export function requestedEditsForSavedForm(form, requests) {
   const start = parseMonthYear(`${form.startMonth} ${form.startYear}`);
   const end = form.current ? null : parseMonthYear(`${form.endMonth} ${form.endYear}`);
   return requests.filter(change => form.resumes?.some(r => r.checked && r.hash === change.resumeHash) &&
-    form.company === change.target.company && start === change.target.start && end === change.target.end);
+    form.company === (change.fields?.company ?? change.target.company) && start === change.target.start && end === change.target.end);
 }
 
 async function writeJson(file, value) {
@@ -59,7 +59,7 @@ export async function waitForExistingAliasDraft(page, { readResumes, writeSnapsh
   const saved = new Promise(done => { resolve = done; });
   const stop = await observeHhCvSaves(page, { onSaved: async (form) => {
     const resumes = await readResumes();
-    if (!verifyHhSavedForm(form, resumes)) return false;
+    if (!await verifyHhSavedCvForm(form, resumes)) return false;
     await writeSnapshots(resumes);
     resolve(form);
     return true;

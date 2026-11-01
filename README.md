@@ -54,7 +54,7 @@ github.com/link-foundation
 For quick communication, I suggest using my Telegram: @drakonard (+7 958 200-05-67).
 
 Kind regards,
-Konstantin Dyachenko
+Konstantin Diachenko
 ```
 
 ## Configuration
@@ -914,6 +914,16 @@ per line (`' '` is an empty line), dates as `2026-05` or `present`. The Russian 
 files have the same layout, so they compare line by line:
 [examples/cv.ru.lino](examples/cv.ru.lino), [examples/cv.en.lino](examples/cv.en.lino).
 Contacts, salary and birth date are never written: the export stops when a text holds one.
+Each workplace also includes `area`, `website` as displayed by HH, and `industries` with the
+stable HH `id`, localized `name` and `parent`. Archived company websites retain their full paths.
+Import compares industry IDs rather than translated captions, and can update employer names,
+cities, websites and activities. Older files without these fields preserve the saved metadata.
+If HH hides metadata for a linked employer, the app exports a fresh baseline before exposing
+and restoring the native controls, so an employer rename cannot clear the other fields.
+HH shares the personal name between all CVs; an imported name difference is reported for
+separate profile review, never silently applied to both languages.
+City labels and activity captions are resolved through HH's localized dictionaries and stable IDs,
+so an English editor can import and verify Russian CV metadata without false mismatches.
 
 `import` reads the resume again and goes to the one with the file's title (else the only one in
 its language, or `--resume`). Each changed or new job and the About text is prefilled in the hh.ru slot (port 9351)

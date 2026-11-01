@@ -77,13 +77,16 @@ export function resumeToCv(resume) {
     about: normalizeText(String(resume.about ?? '').trim().replace(ABOUT_HEADING, '')),
     jobs: (resume.jobs ?? []).map((job) => {
       const { start, end, current } = parsePeriod(job.period);
-      return {
+      const result = {
         company: String(job.company ?? '').trim(),
         position: String(job.position ?? '').trim(),
         start,
         end: current ? null : end,
         description: normalizeText(job.description),
       };
+      for (const key of ['area', 'website']) if (job[key] !== undefined) result[key] = String(job[key]).trim();
+      if (job.industries !== undefined) result.industries = job.industries.map(item => ({ id: item.id, name: item.name, parent: item.parent }));
+      return result;
     }),
   };
 }
@@ -112,6 +115,14 @@ export function formatCvLino(cv) {
       lines.push(`      start ${job.start}`);
     }
     lines.push(`      end ${job.end ?? 'present'}`);
+    for (const key of ['area', 'website']) if (job[key] !== undefined) lines.push(`      ${key} ${quoteLino(job[key])}`);
+    if (job.industries !== undefined) {
+      lines.push('      industries');
+      for (const industry of job.industries) {
+        lines.push('        industry');
+        for (const key of ['id', 'name', 'parent']) lines.push(`          ${key} ${quoteLino(industry[key] ?? '')}`);
+      }
+    }
     if (job.description) {
       lines.push('      description', ...textLines(job.description, '        '));
     }
@@ -151,6 +162,18 @@ export function parseCvLino(text) {
           const fieldValue = rest.join(' ').trim();
           if (name === 'description') {
             job.description = blockText(field);
+          } else if (['area', 'website'].includes(name)) {
+            job[name] = fieldValue;
+          } else if (name === 'industries') {
+            job.industries = (field.children ?? []).map(industry => {
+              const value = { id: '', name: '', parent: '' };
+              for (const entry of industry.children ?? []) {
+                const [key, ...rest] = idsOf(entry);
+                if (key in value) value[key] = rest.join(' ').trim();
+              }
+              if (!/^\d+\.\d+$/.test(value.id)) throw new Error('A CV industry requires a full HH industry ID');
+              return value;
+            });
           } else if (name === 'end') {
             job.end = /^(present|now|настоящее время)$/i.test(fieldValue) || !fieldValue ? null : fieldValue;
           } else if (name in job) {
@@ -167,6 +190,8 @@ export function parseCvLino(text) {
 }
 
 const sameText = (a, b) => normalizeText(a) === normalizeText(b);
+// HH's downloadable CV omits the employer website's scheme and sometimes its trailing slash.
+export const normalizeCompanyWebsite = value => String(value ?? '').trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
 const listDiff = (from, to) => {
   const has = new Set(to.map((item) => item.toLowerCase()));
   return from.filter((item) => !has.has(item.toLowerCase()));
@@ -210,6 +235,15 @@ export function planCvImport(current, wanted, { detachExtra = false } = {}) {
   const changes = [];
   for (const pair of pairs) {
     const fields = {};
+    if (pair.current.company !== pair.wanted.company) fields.company = pair.wanted.company;
+    for (const key of ['area', 'website']) {
+      const normalize = key === 'website' ? normalizeCompanyWebsite : value => value;
+      if (pair.wanted[key] !== undefined && normalize(pair.current[key]) !== normalize(pair.wanted[key])) fields[key] = pair.wanted[key];
+    }
+    if (pair.wanted.industries !== undefined &&
+        JSON.stringify((pair.current.industries ?? []).map(i => i.id).sort()) !== JSON.stringify(pair.wanted.industries.map(i => i.id).sort())) {
+      fields.industries = pair.wanted.industries;
+    }
     if (pair.current.position !== pair.wanted.position) {
       fields.title = pair.wanted.position;
     }
@@ -230,7 +264,8 @@ export function planCvImport(current, wanted, { detachExtra = false } = {}) {
       kind: 'add',
       target: null,
       source: job,
-      fields: { company: job.company, title: job.position, start: job.start, end: job.end, current: !job.end, description: job.description },
+      fields: { company: job.company, title: job.position, start: job.start, end: job.end, current: !job.end, description: job.description,
+        ...Object.fromEntries(['area', 'website', 'industries'].filter(key => job[key] !== undefined).map(key => [key, job[key]])) },
       notes: [],
     });
   }
@@ -241,6 +276,9 @@ export function planCvImport(current, wanted, { detachExtra = false } = {}) {
   const notes = detachExtra ? [] : removed.map((job) => `${job.company} (${job.position}) is on hh.ru but not in the file: remove it there yourself if it should go`);
   if (wanted.title && current.title !== wanted.title) {
     notes.push(`The resume's title on hh.ru is «${current.title}», the file has «${wanted.title}»: change it in the resume's «Желаемая должность»`);
+  }
+  if (wanted.name && current.name !== wanted.name) {
+    notes.push(`The profile name on hh.ru is «${current.name}», the file has «${wanted.name}»: review the shared profile name separately`);
   }
   const missingSkills = listDiff(wanted.skills, current.skills);
   const extraSkills = listDiff(current.skills, wanted.skills);
@@ -266,6 +304,11 @@ export function formatCvChange(change) {
   const job = change.kind === 'add' ? change.fields : change.target;
   const lines = [`${change.kind === 'detach' ? '↪️  Deselect from this resume' : change.kind === 'add' ? '➕ New job' : '✏️  Update'}: ${job.company} (${job.title})`];
   const { fields } = change;
+  if (fields.company && change.kind === 'update') {
+    lines.push(`   company: «${change.target.company}» → «${fields.company}»`);
+  }
+  for (const key of ['area', 'website']) if (fields[key] !== undefined) lines.push(`   ${key}: «${fields[key]}»`);
+  if (fields.industries) lines.push(`   industries: ${fields.industries.map(item => typeof item === 'string' ? item : item.id).join(', ')}`);
   if (fields.title && change.kind === 'update') {
     lines.push(`   position: «${change.target.title}» → «${fields.title}»`);
   }
@@ -307,4 +350,9 @@ const PRIVATE = [
  * @param {string} text
  * @returns {string[]}
  */
-export const privateDetails = (text) => PRIVATE.filter(([, pattern]) => pattern.test(String(text))).map(([kind]) => kind);
+export const privateDetails = text => PRIVATE.filter(([kind, pattern]) => {
+  // Wayback's 14-digit archive timestamp is part of an employer URL, not a phone number.
+  const candidate = kind === 'a phone number' ? String(text).replace(/\b(?:https?:\/\/)?web\.archive\.org\/web\/\d{14}(?:[a-z_]+)?\//gi,
+    'web.archive.org/web/<timestamp>/') : String(text);
+  return pattern.test(candidate);
+}).map(([kind]) => kind);

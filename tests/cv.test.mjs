@@ -23,6 +23,16 @@ const RESUME = {
 };
 
 describe('CV files', () => {
+  test('workplace metadata survives Links Notation input/output with localized industry names', () => {
+    const cv = resumeToCv({ ...RESUME, jobs: [{ ...RESUME.jobs[0], area: 'Москва', website: 'example.test/path?x=1',
+      industries: [{ id: '7.541', name: 'Интернет-компания (поисковики, платежные системы)', parent: 'ИТ' }] }] });
+    const text = formatCvLino(cv);
+    assert.ok(text.includes("      website 'example.test/path?x=1'"));
+    assert.ok(text.includes("          id '7.541'"));
+    assert.deepEqual(parseCvLino(text), cv);
+    assert.deepEqual(planCvImport(cv, parseCvLino(text)), { changes: [], notes: [] });
+    assert.throws(() => parseCvLino(text.replace("id '7.541'", "id 'gaming'")), /full HH industry ID/);
+  });
   test('reads hh.ru\'s export: dates as YYYY-MM, the «Обо мне» heading dropped, spacing kept as one empty line', () => {
     const cv = resumeToCv(RESUME);
     assert.equal(cv.language, 'ru');
@@ -66,6 +76,33 @@ describe('CV files', () => {
 
 describe('planCvImport', () => {
   const current = resumeToCv(RESUME);
+  test('an English employer rename updates the matched job instead of adding a duplicate', () => {
+    const wanted = parseCvLino(formatCvLino(current));
+    wanted.jobs[0].company = 'Evirma LLC';
+    const plan = planCvImport(current, wanted);
+    assert.equal(plan.changes.length, 1);
+    assert.equal(plan.changes[0].kind, 'update');
+    assert.equal(plan.changes[0].fields.company, 'Evirma LLC');
+    wanted.name = 'Example Person';
+    assert.ok(planCvImport(current, wanted).notes.some(note => note.includes('shared profile name')));
+  });
+  test('metadata changes use the shared workplace editor; older files retain unspecified metadata', () => {
+    const old = resumeToCv({ ...RESUME, jobs: [{ ...RESUME.jobs[0], area: 'Москва', website: 'old.test',
+      industries: [{ id: '49.406', name: 'Игорный бизнес', parent: 'Услуги' }] }] });
+    const wanted = parseCvLino(formatCvLino(old));
+    wanted.jobs[0].industries = [{ id: '7.540', name: 'Разработка программного обеспечения', parent: 'ИТ' }];
+    wanted.jobs[0].website = 'new.test';
+    const plan = planCvImport(old, wanted);
+    assert.equal(plan.changes.length, 1);
+    assert.deepEqual(plan.changes[0].fields, { website: 'new.test', industries: wanted.jobs[0].industries });
+    const legacy = parseCvLino(formatCvLino(old));
+    for (const key of ['area', 'website', 'industries']) delete legacy.jobs[0][key];
+    assert.deepEqual(planCvImport(old, legacy), { changes: [], notes: [] });
+    const renamed = parseCvLino(formatCvLino(old));
+    renamed.jobs[0].industries[0].name = 'Gambling';
+    renamed.jobs[0].website = 'https://old.test/';
+    assert.deepEqual(planCvImport(old, renamed), { changes: [], notes: [] });
+  });
 
   test('nothing to change for the same CV', () => {
     assert.deepEqual(planCvImport(current, parseCvLino(formatCvLino(current))), { changes: [], notes: [] });
@@ -130,5 +167,8 @@ describe('pickResumeFor and privateDetails', () => {
     assert.deepEqual(privateDetails(formatCvLino(resumeToCv(RESUME))), []);
     assert.deepEqual(privateDetails('Пишите: me@example.com, +7 (999) 123-45-67, t.me/me'), ['an email address', 'a phone number', 'a Telegram link']);
     assert.deepEqual(privateDetails('Желаемая зарплата 450 000 ₽'), ['a salary']);
+    assert.deepEqual(privateDetails('web.archive.org/web/20190626105802/asgardro.com'), []);
+    assert.deepEqual(privateDetails('web.archive.org/web/20190626105802/example.com/+79991234567'), ['a phone number']);
+    assert.deepEqual(privateDetails('web.archive.org/web/20190626105802/t.me/person'), ['a Telegram link']);
   });
 });

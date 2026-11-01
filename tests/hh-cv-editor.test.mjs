@@ -38,6 +38,15 @@ describe('HH.ru CV save verification', () => {
     assert.equal(verifyHhSavedForm(form, [resumes[0]]), false);
     assert.equal(verifyHhSavedForm(form, [resumes[0], { hash: 'ru', cv: { jobs: [job] } }]), false);
   });
+  test('metadata is verified against the saved export, allowing HH to omit the website scheme', () => {
+    const fullJob = { ...job, area: 'Moscow', website: 'example.test/path' };
+    const fullForm = { ...form, metadataEditable: true, area: 'Moscow', website: 'https://example.test/path' };
+    const saved = [{ hash: 'en', cv: { jobs: [fullJob] } }, resumes[1]];
+    assert.equal(verifyHhSavedForm(fullForm, saved), true);
+    assert.equal(verifyHhSavedForm({ ...fullForm, area: 'India' }, saved), false);
+    assert.equal(verifyHhSavedForm({ ...fullForm, website: 'other.test' }, saved), false);
+    assert.equal(verifyHhSavedForm({ ...fullForm, metadataEditable: false, area: '', website: '' }, saved), true);
+  });
   test('a deselection is checked against the export, not treated as deletion', () => {
     const detached = { ...form, resumes: [{ hash: 'en', checked: false }, { hash: 'ru', checked: true }] };
     assert.equal(verifyHhSavedForm(detached, [{ hash: 'en', cv: { jobs: [] } }, { hash: 'ru', cv: { jobs: [job] } }]), true);

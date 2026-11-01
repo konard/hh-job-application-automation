@@ -20,6 +20,9 @@ import { collectStack, formatStackMarkdown } from './resume-stack.mjs';
 import { SELECTORS } from './hh-selectors.mjs';
 import { tracingEnabled } from './browser-slots.mjs';
 import { createTracing } from './tracing.mjs';
+import { readResumeExportDom, attachIndustryIds } from './resume-export-dom.mjs';
+import { loadHhIndustryTree } from './hh-industries.mjs';
+import { resumeLanguage } from './cv.mjs';
 
 const FORMATS = ['pdf', 'doc', 'rtf', 'txt'];
 /** hh.ru's "doc" export is the same RTF file as "rtf", so it is only downloaded on request */
@@ -93,30 +96,7 @@ async function readRunningBrowserCookies(port) {
  * @param {import('playwright').Page} page - Page showing the export
  */
 function readResumeExport(page) {
-  return page.evaluate(() => {
-    const text = (element) => element?.innerText.trim() ?? '';
-    // Its labels follow hh.ru's language: Russian or English
-    const skillGroup = (...names) => [...document.querySelectorAll('.resume-skils')]
-      .find((group) => names.includes(text(group.querySelector('.bloko-form-hint'))));
-    return {
-      name: text(document.querySelector('.resume__title')),
-      title: text(document.querySelector('.resume__position')),
-      updated: document.body.innerText.match(/(?:Резюме обновлено|Resume updated|Updated)[^\n]*/)?.[0].trim() ?? '',
-      keySkills: [...(skillGroup('Навыки', 'Skills', 'Key skills')?.querySelectorAll('.resume-skils__item span') ?? [])]
-        .map((span) => text(span).replace(/;$/, '').trim())
-        .filter(Boolean),
-      jobs: [...document.querySelectorAll('.resume-experience')].map((job) => {
-        const position = job.querySelector('.resume-experience__position');
-        return {
-          company: text(job.querySelector('.resume-experience__company')),
-          position: text(position),
-          period: text(job.querySelector('.bloko-form-hint')).replace(/\s+/g, ' '),
-          description: [...job.querySelectorAll('.resume-experience__position ~ p')].map(text).join('\n'),
-        };
-      }),
-      about: text(skillGroup('Обо мне', 'About me', 'About')),
-    };
-  });
+  return page.evaluate(readResumeExportDom);
 }
 
 async function main() {
@@ -200,7 +180,10 @@ async function exportResume(page, hash, formats, out) {
 
   const html = await fs.readFile(saved.txt, 'utf8');
   await page.setContent(html, { waitUntil: 'domcontentloaded' });
-  const resume = { hash, url: `https://hh.ru/resume/${hash}`, ...(await readResumeExport(page)) };
+  const content = await readResumeExport(page);
+  const locale = resumeLanguage(content).toUpperCase();
+  const resume = { hash, url: `https://hh.ru/resume/${hash}`,
+    ...attachIndustryIds(content, await loadHhIndustryTree({ locale })) };
   const plainText = await page.evaluate(() => document.body.innerText);
 
   const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-' });

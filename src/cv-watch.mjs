@@ -2,7 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
-import { observeHhCvSaves, readHhCvForm, verifyHhSavedForm } from './hh-cv-editor.mjs';
+import { observeHhCvSaves, readHhCvForm, verifyHhSavedCvForm } from './hh-cv-editor.mjs';
 import { exportSavedCvs, publishCvSnapshots, writeCvSnapshots } from './cv-store.mjs';
 import { alertUntilDone } from './notify.mjs';
 
@@ -34,7 +34,7 @@ export async function runCvWatch({ hhPort = 9351, out = 'examples', publish = fa
     onSaved: async (form) => {
       queue = queue.catch(() => {}).then(async () => {
         const resumes = await snapshot();
-        const verified = verifyHhSavedForm(form, resumes);
+        const verified = await verifyHhSavedCvForm(form, resumes);
         if (!verified) {
           console.log('CV changed on the page, but this Save could not be confirmed in the export; snapshots reflect saved data only.');
           return false;

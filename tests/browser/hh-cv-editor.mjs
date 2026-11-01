@@ -3,10 +3,11 @@
  */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm, readHhCvForm, verifyHhSavedForm, discardUnchangedHhAbout } from '../../src/hh-cv-editor.mjs';
+import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm, readHhCvForm, verifyHhSavedForm, discardUnchangedHhAbout, setHhExperienceArea, fillHhExperienceMetadata } from '../../src/hh-cv-editor.mjs';
 import { chooseHhMonth, clickHhExperienceEdit, openHhExperienceForm, discardHhExperience } from '../../src/experience-sites.mjs';
 import { applyResumeAliases } from '../../src/resume-aliases.mjs';
 import { seedAliasSession, waitForExistingAliasDraft } from '../../src/cv-alias-sync.mjs';
+import { hhAreaNames } from '../../src/hh-areas.mjs';
 
 function fixture() {
   const source = { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.',
@@ -116,7 +117,11 @@ function fixture() {
       option.setAttribute('role', 'option');
       option.textContent = 'Voronezh';
       option.onclick = () => {
-        main.querySelector('[data-qa=resume-editor-experience-area-input] span').textContent = 'Voronezh';
+        const field = main.querySelector('[data-qa=resume-editor-experience-area-input]');
+        const value = field.querySelector('span');
+        if (value) value.textContent = 'Voronezh';
+        const selectedInput = field.querySelector('input');
+        if (selectedInput) selectedInput.value = 'Voronezh';
         option.remove(); input.remove();
       };
       main.append(option);
@@ -183,6 +188,27 @@ try {
   assert.deepEqual(addNotes, []);
   assert.equal(new URL(page.url()).pathname, '/profile/edit/experience');
   assert.equal((await readHhExperienceForm(page)).company, '');
+  assert.equal(await page.evaluate(() => window.saveCount), 0);
+  // HH also exposes the selected city through an input without a values-wrapper.
+  await page.evaluate(() => {
+    const area = document.querySelector('[data-qa=resume-editor-experience-area-input]');
+    area.innerHTML = 'City or region<input value="Moscow" style="display:none">';
+  });
+  assert.equal((await readHhExperienceForm(page)).area, 'Moscow');
+  await setHhExperienceArea(page, 'Voronezh');
+  assert.equal((await readHhExperienceForm(page)).area, 'Voronezh');
+  await setHhExperienceArea(page, 'Voronezh');
+  assert.equal(await page.getByRole('option').count(), 0);
+  await setHhExperienceArea(page, 'Воронеж', { areaNames: hhAreaNames([
+    [{ id: '26', name: 'Воронеж', areas: [] }], [{ id: '26', name: 'Voronezh', areas: [] }],
+  ]) });
+  assert.equal((await readHhExperienceForm(page)).area, 'Voronezh');
+  assert.equal(await page.getByRole('option').count(), 0);
+  assert.equal(await page.evaluate(() => window.saveCount), 0);
+  // Linked employers can hide metadata. A partial update must never expose blank fields.
+  await page.evaluate(() => document.querySelector('[data-qa=resume-editor-experience-area-input]').remove());
+  await assert.rejects(() => fillHhExperienceMetadata(page, { area: 'Moscow' }), /complete saved baseline/);
+  assert.equal(await page.locator('input[name=company]').inputValue(), '');
   assert.equal(await page.evaluate(() => window.saveCount), 0);
   await page.goto('https://hh.ru/resume/older-hidden');
   assert.deepEqual(await openHhExperienceForm(page, { resumeHash: 'older-hidden', job: {

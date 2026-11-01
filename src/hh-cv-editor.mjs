@@ -1,7 +1,8 @@
 /** Reusable HH.ru workplace editing, language copies and observation. Never saves a workplace. */
 import { companySimilarity, parseMonthYear, withStack } from './experience.mjs';
-import { normalizeText } from './cv.mjs';
-import { selectHhIndustryReferences } from './hh-industries.mjs';
+import { normalizeCompanyWebsite, normalizeText } from './cv.mjs';
+import { industryNamesInText, loadHhIndustryTree, resolveIndustry, selectHhIndustryReferences } from './hh-industries.mjs';
+import { loadHhAreaNames } from './hh-areas.mjs';
 import {
   discardHhExperience, fillHhExperience, hhCvFormOpen, hhExperienceResumes,
   openHhExperienceForm, setHhExperienceResumes,
@@ -24,6 +25,7 @@ export function readHhWorkplace({ includeAbout = false } = {}) {
     return null;
   }
   const month = (part) => field(`[data-qa="resume-editor-experience-${part}-month-input"] [data-qa="trigger-values-wrapper"]`)?.textContent.trim() ?? '';
+  const area = field('[data-qa="resume-editor-experience-area-input"]');
   const industry = [...document.querySelectorAll('[data-qa="trigger-root"]')].find((element) => /field of activity|сфера деятельности/i.test(element.textContent));
   const industryValues = industry?.querySelector('[data-qa="trigger-values-wrapper"]');
   const industryText = (industryValues?.textContent ?? industry?.textContent)?.replace(/^(?:Company's field of activity|Сфера деятельности компании|Сфера деятельности)/i, '')
@@ -35,7 +37,9 @@ export function readHhWorkplace({ includeAbout = false } = {}) {
     startMonth: month('start'), startYear: value('[data-qa="resume-editor-experience-start-year-input"]'),
     endMonth: month('end'), endYear: value('[data-qa="resume-editor-experience-end-year-input"]'),
     current: Boolean(field('[data-qa="resume-editor-experience-present-checkbox"]')?.checked),
-    area: field('[data-qa="resume-editor-experience-area-input"] [data-qa="trigger-values-wrapper"]')?.textContent.trim() ?? '',
+    metadataEditable: Boolean(area),
+    metadataLocale: document.documentElement.lang,
+    area: (area?.querySelector('[data-qa="trigger-values-wrapper"]')?.textContent ?? area?.querySelector('input')?.value ?? '').trim(),
     website: value('[data-qa="resume-editor-experience-company-url-input"]'),
     industryText,
     resumes: [...document.querySelectorAll('[data-qa^="profile-resumes-list-checkbox-"]')].map((element) => ({
@@ -164,11 +168,17 @@ export function industryPrefix(text, candidates) {
     .sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
-export async function setHhExperienceArea(page, area) {
-  const trigger = page.locator('[data-qa="resume-editor-experience-area-input"]');
-  if (await trigger.locator('[data-qa="trigger-values-wrapper"]').textContent().catch(() => '') === area) {
-    return;
+export async function setHhExperienceArea(page, area, { areaNames } = {}) {
+  const locale = await page.locator('html').getAttribute('lang');
+  if (area && (/^en/i.test(locale) ? /[а-яё]/i.test(area) : !/[а-яё]/i.test(area))) {
+    areaNames ??= await loadHhAreaNames();
+    area = areaNames.localize(area, /^en/i.test(locale) ? 1 : 0);
   }
+  const trigger = page.locator('[data-qa="resume-editor-experience-area-input"]');
+  await trigger.waitFor({ state: 'visible', timeout: 10000 });
+  if ((await readHhExperienceForm(page)).area === area) return;
+  if (!area) throw new Error('hh.ru: the city selector requires a city or region; no empty selection was applied');
+  await trigger.scrollIntoViewIfNeeded();
   await trigger.click();
   // The area's searchable input is labelled in the current UI language.
   const areaInput = page.locator('input[role="combobox"][aria-label="City or region"]:visible, input[role="combobox"][aria-label="Город или регион"]:visible');
@@ -221,11 +231,26 @@ export async function setHhExperienceIndustries(page, industries) {
 
 /** Apply metadata when provided; empty values stay empty. All controls affect the draft only. */
 export async function fillHhExperienceMetadata(page, fields) {
+  if (!['area', 'website', 'industries', 'industryText'].some(key => fields[key] !== undefined)) return;
+  if (!await page.locator('[data-qa="resume-editor-experience-area-input"]').count()) {
+    // HH hides metadata for a linked employer. Editing its text exposes empty custom fields.
+    // Require a complete saved baseline so exposing them cannot erase unrelated metadata.
+    if (fields.area === undefined || fields.website === undefined || fields.industries === undefined) {
+      throw new Error('hh.ru: hidden employer metadata requires a complete saved baseline');
+    }
+    const company = page.locator('input[name="company"]');
+    const name = await company.inputValue();
+    await company.press('End');
+    await company.press('Space');
+    await company.press('Backspace');
+    await company.blur();
+    if (await company.inputValue() !== name) throw new Error('hh.ru: company changed while exposing metadata; draft left open');
+  }
   // Company entry mounts the remaining metadata controls asynchronously.
   if (fields.website !== undefined) {
     await page.locator('[data-qa="resume-editor-experience-company-url-input"]').fill(fields.website);
   }
-  if (fields.area) {
+  if (fields.area !== undefined) {
     await setHhExperienceArea(page, fields.area);
   }
   if (fields.industries !== undefined || fields.industryText) {
@@ -237,7 +262,7 @@ export async function fillHhExperienceMetadata(page, fields) {
  * An update to a shared record becomes a language-specific copy. The old record is deselected
  * in a separate reviewed step. Existing open forms are never navigated away from.
  */
-export async function prepareHhCvChange(page, change, { resumeHash, port = 9351 } = {}) {
+export async function prepareHhCvChange(page, change, { resumeHash, port = 9351, readSavedResumes } = {}) {
   if (change.kind === 'about') {
     const existing = await readHhCvForm(page);
     if (existing?.kind === 'about' && existing.resumeHash === resumeHash && existing.about === change.fields.about) {
@@ -266,7 +291,23 @@ export async function prepareHhCvChange(page, change, { resumeHash, port = 9351 
     return { kind: 'detach', before, draft: await readHhExperienceForm(page), followup, notes };
   }
   const shared = before.resumes.some((resume) => resume.checked && resume.hash !== resumeHash);
-  if (change.kind === 'copy' || (change.kind === 'update' && shared)) {
+  const copy = change.kind === 'copy' || (change.kind === 'update' && shared);
+  const metadataChange = ['area', 'website', 'industries', 'industryText'].some(key => fields[key] !== undefined);
+  if (change.kind !== 'add' && ((before.metadataEditable === false && (copy || metadataChange)) || fields.company !== undefined)) {
+    // Export in another headless browser; never navigate or overwrite this editor to read metadata.
+    const resumes = readSavedResumes ? await readSavedResumes() : await (await import('./cv-store.mjs')).exportSavedCvs({ port });
+    const cv = resumes.find(resume => resume.hash === resumeHash)?.cv;
+    const matches = cv?.jobs.filter(job => job.company === before.company && job.position === before.title &&
+      job.start === before.start && job.end === before.end && normalizeText(job.description) === normalizeText(before.description)) ?? [];
+    if (matches.length !== 1 || ['area', 'website', 'industries'].some(key => matches[0][key] === undefined)) {
+      throw new Error('hh.ru: no unique saved workplace metadata; draft left untouched');
+    }
+    if (JSON.stringify(await readHhExperienceForm(page)) !== JSON.stringify(before)) {
+      throw new Error('hh.ru: draft changed during metadata export; user edits left untouched');
+    }
+    fields = { area: matches[0].area, website: matches[0].website, industries: matches[0].industries, ...fields };
+  }
+  if (copy) {
     fields = { ...before, ...fields };
     const entryId = before.url.match(/\/experience\/(\d+)/)?.[1];
     followup = { kind: 'detach', target: { company: before.company, title: before.title, description: before.description, ...(entryId ? { entryId } : {}) }, fields: {} };
@@ -326,7 +367,7 @@ export function installHhCvObserver({ readSource, binding }) {
 }
 
 /** Check an attempted save against exports, including dates and deselected resumes. */
-export function verifyHhSavedForm(form, resumes) {
+export function verifyHhSavedForm(form, resumes, { areaIdentity = normalizeText, industryIds } = {}) {
   if (form.kind === 'about') {
     const cv = resumes.find((resume) => resume.hash === form.resumeHash)?.cv;
     return Boolean(cv && exportText(cv.about) === exportText(form.about));
@@ -343,8 +384,34 @@ export function verifyHhSavedForm(form, resumes) {
     }
     const exists = cv.jobs.some((job) => job.company === form.company && job.position === form.title &&
       job.start === start && job.end === end && normalizeText(job.description) === normalizeText(form.description));
-    return exists === checked;
+    if (exists !== checked || !checked) return exists === checked;
+    return cv.jobs.some(job => job.company === form.company && job.position === form.title &&
+      job.start === start && job.end === end && normalizeText(job.description) === normalizeText(form.description) &&
+      (form.metadataEditable === false || (
+        (form.area === undefined || job.area === undefined || areaIdentity(job.area) === areaIdentity(form.area)) &&
+        (form.website === undefined || job.website === undefined || normalizeCompanyWebsite(job.website) === normalizeCompanyWebsite(form.website)) &&
+        (industryIds === undefined || job.industries === undefined ||
+          JSON.stringify(job.industries.map(i => i.id).sort()) === JSON.stringify([...industryIds].sort())))));
   });
+}
+
+/** Native UI labels and saved CV labels can use different languages for the same area ID. */
+export async function verifyHhSavedCvForm(form, resumes, { readAreaNames = loadHhAreaNames, readIndustryTree = loadHhIndustryTree } = {}) {
+  const options = {};
+  if (!verifyHhSavedForm(form, resumes)) {
+    if (form.kind === 'about' || form.metadataEditable === false || !form.area ||
+      !verifyHhSavedForm({ ...form, area: undefined }, resumes)) return false;
+    options.areaIdentity = (await readAreaNames()).identity;
+    if (!verifyHhSavedForm(form, resumes, options)) return false;
+  }
+  if (form.kind !== 'about' && form.metadataEditable !== false && form.industryText !== undefined) {
+    if (!form.industryText) options.industryIds = [];
+    else {
+      const tree = await readIndustryTree({ locale: form.metadataLocale ?? (/[а-яё]/i.test(form.industryText) ? 'RU' : 'EN') });
+      options.industryIds = industryNamesInText(form.industryText, tree).map(name => resolveIndustry(name, tree).id);
+    }
+  }
+  return verifyHhSavedForm(form, resumes, options);
 }
 
 /** Passive save monitoring. A save is reported only after the form closes, never for Cancel. */

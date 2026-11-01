@@ -2,7 +2,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { exportSavedCvs, writeCvSnapshots, publishCvSnapshots } from './cv-store.mjs';
-import { prepareHhCvChange, observeHhCvSaves, verifyHhSavedForm, readHhCvForm } from './hh-cv-editor.mjs';
+import { prepareHhCvChange, observeHhCvSaves, verifyHhSavedCvForm, readHhCvForm } from './hh-cv-editor.mjs';
 import { normalizeText } from './cv.mjs';
 import { alertUser } from './notify.mjs';
 
@@ -53,7 +53,7 @@ async function recoverAboutSave(page, change, argv, resumeHash, directory) {
 
 async function afterSave(argv, form) {
   const resumes = await exportSavedCvs({ port: argv.hhPort });
-  const verified = verifyHhSavedForm(form, resumes);
+  const verified = await verifyHhSavedCvForm(form, resumes);
   if (!verified) {
     console.log('↪️  Save not confirmed by the export; the CV change remains pending.');
     return false;
