@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 import { prepareHhCvChange, observeHhCvSaves, readHhExperienceForm, readHhCvForm, verifyHhSavedForm, discardUnchangedHhAbout } from '../../src/hh-cv-editor.mjs';
 import { chooseHhMonth, clickHhExperienceEdit, openHhExperienceForm, discardHhExperience } from '../../src/experience-sites.mjs';
 import { applyResumeAliases } from '../../src/resume-aliases.mjs';
+import { seedAliasSession, waitForExistingAliasDraft } from '../../src/cv-alias-sync.mjs';
 
 function fixture() {
   const source = { company: 'Example', title: 'AI Tech Lead', description: 'Исходное описание.',
@@ -322,6 +323,26 @@ try {
   assert.equal(saveAttempts, 1);
   assert.equal(verificationAttempts, 2);
   stopRetry();
+  await page.locator('[data-qa=resume-edit-button-about]').click();
+  await page.waitForFunction(() => {
+    const field = document.querySelector('[data-qa=resume-editor-about]');
+    return field && Object.keys(field).some(key => key.startsWith('__reactProps$') && field[key].onChange);
+  });
+  let seeded = false;
+  assert.equal(await seedAliasSession(page, { seed: async () => { seeded = true; return true; } }), false);
+  assert.equal(seeded, false, 'A pending owner draft must never be navigated away for session seeding');
+  const bindings = await page.evaluate(() => Object.keys(window.__hhCvObservers ?? {}));
+  let snapshot;
+  const adopted = waitForExistingAliasDraft(page, {
+    readResumes: async () => [{ hash: 'en', cv: { about: await page.evaluate(() => window.aboutText) } }],
+    writeSnapshots: async resumes => { snapshot = resumes; },
+  });
+  await page.waitForFunction(previous => Object.keys(window.__hhCvObservers ?? {}).some(key => !previous.includes(key)), bindings);
+  await page.locator('[data-qa=resume-editor-about]').press('ControlOrMeta+A');
+  await page.locator('[data-qa=resume-editor-about]').pressSequentially('Owner final edits to an adopted draft.');
+  await page.locator('[data-qa=resume-partial-edit-save]').click();
+  assert.equal((await adopted).about, 'Owner final edits to an adopted draft.');
+  assert.equal(snapshot[0].cv.about, 'Owner final edits to an adopted draft.');
   console.log('Browser checks passed: shared copy, metadata, language selection, draft protection, dates, exact user-save capture and deselection without deletion.');
 } finally {
   await browser.close();

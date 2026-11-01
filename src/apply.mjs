@@ -84,6 +84,12 @@ process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
 (async () => {
   const argv = createConfig();
   questionnaireMode.setEnabled(!argv.questions);
+  if (process.env.HH_QUESTIONNAIRE_MODE_HANDOFF) {
+    const handoff = process.env.HH_QUESTIONNAIRE_MODE_HANDOFF;
+    delete process.env.HH_QUESTIONNAIRE_MODE_HANDOFF;
+    questionnaireMode.restore(JSON.parse(handoff));
+    console.log(`♻️  Preserved ${questionnaireMode.ids().length} RAM questionnaire(s) during controlled code reload`);
+  }
   process.env.ANSWER_FINAL_PERIOD = argv.answerFinalPeriod;
   // Also pass the CLI preference to chat/form workers that post their own alerts.
   process.env.NOTIFY_SOUND = String(argv.notificationSound);

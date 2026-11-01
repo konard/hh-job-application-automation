@@ -299,17 +299,21 @@ The complete original text remains available for later analysis.
 Known equivalent names are listed in `data/technology-aliases.lino`. For example, Golang can match
 Go and Postgres can match PostgreSQL. Related technologies and versions are kept distinct: knowing
 Angular does not establish AngularJS experience, and .NET does not establish .NET Core experience.
-When a vacancy uses a verified equivalent spelling absent from the résumé, the About draft uses
-the canonical brand name with observed alternatives in parentheses, such as `Go (Golang)`.
-The private vacancy cache supplies the evidence; case-only variants, known typos and spellings
-already present elsewhere in that CV are omitted. Legacy name-variant sections are removed.
+Verified equivalent spellings are maintained in both CVs' About inventories and every relevant
+position's technology list, using the canonical brand with observed alternatives in parentheses,
+such as `Go (Golang)`. Each field is checked independently; an alias in another job or language
+does not suppress it here. The private vacancy cache supplies the evidence; duplicate variants,
+known typos and aliases already in the same label are omitted. Legacy name-variant sections are removed.
 Each technical category is sorted alphabetically. `k8s` stays lowercase; `npm (JS/TS)` and
 `Nginx Proxy Manager (NPM)` remain distinct. Bare uppercase `NPM` in vacancies is reported as
 ambiguous rather than silently assigned to either product.
-The update is prepared in its own browser slot (9352); the owner presses final Save.
-Existing prose is retained; no missing technology is added as experience. The original text and
-changes are backed up under private `data/resume/alias-updates/`, and the local résumé export is
-updated after the site confirms the save. An already-open edit draft is left for the user.
+One reviewed update at a time is prepared in its own browser slot (9352); the owner presses final
+Save. The app then exports both saved CVs and replans before preparing the next field, retaining
+owner edits. Original prose is preserved; no missing technology is added as experience. The private
+plan and reviewer status are under `logs/experience/alias-sync-9352.*`; sanitized `.lino` snapshots
+are refreshed after verified saves. Existing drafts are observed without overwriting them.
+The reviewer watches the vacancy cache for new spellings and remains separate from applications
+and their RAM questionnaire queue. Only one reviewer owns the slot across app restarts.
 
 ```bash
 bun run vacancy-stats                     # ranked technologies, spellings, gaps and requirements
@@ -963,9 +967,10 @@ Full private exports remain gitignored; existing PDFs and backups are kept durin
 `technologies` reads all saved CVs and audits raw position lists before deduplication. It consolidates
 the existing About inventories and technologies evidenced in jobs into matching bilingual inventories,
 retaining the biography and personal text. Equivalent names are grouped, distinct products and versions
-stay separate, and vacancy-observed valid spellings absent elsewhere in the CV go inline in parentheses.
+stay separate, and vacancy-observed valid spellings go inline in each relevant field's parentheses.
 No separate alias block is generated. Job-specific
-lists stay under their jobs; only duplicates and differences from the uniquely matched counterpart are
+lists stay under their jobs and receive the same verified aliases, canonical branding, alphabetical
+ordering and deduplication as About. Differences from a uniquely matched counterpart are also
 proposed for review. Ambiguous employer matches block the review instead of silently skipping a job.
 Drafts and `changes.json` default to gitignored `data/resume/technology-plan/`; `--out` overrides this.
 `--review` prepares each About/position change in turn, waits for the owner's verified Save, and runs a

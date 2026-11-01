@@ -54,7 +54,7 @@ export function createVacancyInsights({ enabled = true, collect = true, compare 
             const aliases = withResumeVocabulary(await loadTechnologyAliases(), resume);
             const comparison = compareVacancyToResume(vacancy, resume, aliases);
             if (compare) log(formatVacancyMatch(vacancy, comparison));
-            if (update && comparison.aliases.length && updateAliases) await updateAliases({ resume, aliases: comparison.aliases, vacancyId });
+            if (update && updateAliases) await updateAliases({ resume, aliases: comparison.aliases, vacancyId });
           }
         }
         if (stayOnVacancy && commander.getUrl().split('?')[0] === url) {

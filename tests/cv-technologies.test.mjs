@@ -43,13 +43,39 @@ describe('bilingual About technology consolidation', () => {
     assert.deepEqual(second.proposals.map((item) => item.missing), [[], []]);
     assert.deepEqual(second.proposals.map((item) => item.missingAliases), [[], []]);
   });
-  test('unobserved variants and aliases already present in a job are not added to About', () => {
+  test('an alias in a position no longer suppresses the same verified alias in either About field', () => {
     const current = JSON.parse(JSON.stringify(cvs));
     current[0].jobs[0].description += '\n\nPostgres is used here.';
     const result = auditCvTechnologies(current, aliases, { observed });
-    assert.ok(!result.proposals[0].about.includes('PostgreSQL (Postgres)'));
+    assert.ok(result.proposals[0].about.includes('PostgreSQL (Postgres)'));
     assert.ok(result.proposals[1].about.includes('PostgreSQL (Postgres)'));
     assert.ok(!auditCvTechnologies(cvs, aliases).proposals[0].about.includes('(Postgres)'));
+  });
+  test('both About fields and each relevant position get aliases, without duplicating them or altering narratives', () => {
+    const resumes = ['ru', 'en'].map((language) => ({ hash: language, cv: {
+      language, about: `${language} biography.\n\n${language === 'ru' ? 'Технические навыки\nБазы данных' : 'Technical Skills\nDatabases'}:\nPostgreSQL`,
+      jobs: [
+        { company: 'A', position: 'Developer', start: '2020-01', end: '2022-01', description: 'Keep my prose.\n\nTools:\nPostgreSQL, Git, Postgres' },
+        { company: 'B', position: 'Lead', start: '2022-01', end: null, description: 'Keep this prose too.\n\nTools:\nPostgreSQL (Postgres), Git' },
+      ],
+    } }));
+    const catalog = new Map([['PostgreSQL', ['PostgreSQL', 'Postgres', 'Postgre SQL']]]);
+    const names = [...observed, { canonical: 'PostgreSQL', spelling: 'Postgre SQL', vacancies: 1 }];
+    const plan = planCvTechnologySync(resumes, catalog, { observed: names });
+    assert.equal(plan.changes.filter(c => c.kind === 'about').length, 2);
+    assert.equal(plan.changes.filter(c => c.kind === 'update').length, 4);
+    for (const change of plan.changes) {
+      const cv = resumes.find(r => r.hash === change.resumeHash).cv;
+      const value = change.fields.about ?? change.fields.description;
+      assert.ok(value.includes('PostgreSQL (Postgre SQL, Postgres)'));
+      if (change.kind === 'about') cv.about = value;
+      else {
+        assert.ok(value.startsWith('Keep '));
+        cv.jobs.find(j => j.company === change.target.company).description = value;
+      }
+    }
+    assert.deepEqual(planCvTechnologySync(resumes, catalog, { observed: names }).changes, []);
+    assert.equal(verifyCvTechnologyCoverage(resumes, catalog, { observed: names }).complete, true);
   });
   test('related frameworks and recorded versions are not collapsed as spelling aliases', () => {
     const normalize = createTechnologyNormalizer(aliases);

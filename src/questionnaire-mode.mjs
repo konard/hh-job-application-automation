@@ -24,6 +24,17 @@ export function createQuestionnaireMode({ enabled = false, log = console.log } =
           : `https://hh.ru/applicant/vacancy_response?vacancyId=${id}&startedWithQuestion=false` });
     },
     ids: () => [...waiting.keys()],
+    snapshot: () => ({ enabled, entries: [...waiting.values()] }),
+    restore(snapshot) {
+      if (typeof snapshot?.enabled !== 'boolean' || !Array.isArray(snapshot.entries) ||
+          snapshot.entries.some(entry => !/^\d+$/.test(String(entry.vacancyId)) ||
+            !/^https:\/\/hh\.ru\/applicant\/vacancy_response\?/.test(entry.url))) {
+        throw new Error('Invalid questionnaire-mode handoff');
+      }
+      waiting.clear();
+      for (const entry of snapshot.entries) this.remember(entry.vacancyId, entry);
+      this.setEnabled(snapshot.enabled);
+    },
     takeNext() {
       if (enabled) return null;
       const entry = waiting.values().next().value ?? null;

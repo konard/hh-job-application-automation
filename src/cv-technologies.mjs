@@ -98,6 +98,30 @@ export function createTechnologyNormalizer(catalog = new Map()) {
   };
 }
 
+/** Canonical brand plus verified inline aliases, scoped to this list rather than the whole CV. */
+export function technologyDisplayLabel(term, language, catalog = new Map(), { observed = [], existing = [] } = {}) {
+  const normalize = createTechnologyNormalizer(catalog);
+  const item = normalize(term);
+  const preferred = DISPLAY[item.canonical] ?? item.canonical;
+  const display = typeof preferred === 'string' ? preferred : preferred[language];
+  const inline = [term, ...existing].flatMap((value) => {
+    const match = String(value).match(/^(.*?)\s+\(([^()]*)\)$/);
+    if (!match || normalize(match[1]).id !== item.id) return [];
+    const names = splitList(match[2]);
+    return names.every((name) => normalize(name).id === item.id)
+      ? names.map((spelling) => ({ canonical: item.canonical, spelling })) : [];
+  });
+  const variants = new Map();
+  for (const variant of [...inline, ...observed]) {
+    if (normalize(variant.canonical).id !== item.id || normalize(variant.spelling).id !== item.id ||
+        INVALID_ALIASES.has(key(variant.spelling)) || containsTechnologySpelling(display, variant.spelling)) continue;
+    const spelling = item.id === 'kubernetes' && key(variant.spelling) === 'k8s' ? 'k8s' : variant.spelling;
+    if (!variants.has(key(spelling))) variants.set(key(spelling), spelling);
+  }
+  const names = [...variants.values()].sort((a, b) => compareTechnologyNames(a, b, language));
+  return `${display}${item.detail ? ` ${item.detail}` : ''}${names.length ? ` (${names.join(', ')})` : ''}`;
+}
+
 function components(term) {
   if (/^C\s*\/\s*C\+\+$/i.test(term)) return ['C', 'C++'];
   const group = term.match(/^C#\s*\(([^)]*)\)$/i);
@@ -176,43 +200,30 @@ export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [], i
   if (registry.has(key('Silverlight'))) registry.get(key('Silverlight')).category = 'technologies';
   const proposals = cvs.map((cv, index) => {
     const categories = {};
+    const original = inventories[index];
+    const existing = Object.values(original.categories).flat();
     for (const item of registry.values()) {
-      const preferred = DISPLAY[item.canonical] ?? item.canonical;
-      const display = typeof preferred === 'string' ? preferred : preferred[cv.language];
-      const label = `${display}${item.detail ? ` ${item.detail}` : ''}`;
+      const label = technologyDisplayLabel(`${item.canonical}${item.detail ? ` ${item.detail}` : ''}`, cv.language,
+        catalog, { observed, existing });
       (categories[item.category] ??= []).push(label);
     }
-    const original = inventories[index];
     const aboutIds = new Set(Object.values(original.categories).flat().flatMap(components).map((term) => normalize(term).id));
-    const body = [cv.title, ...(cv.skills ?? []), original.intro, ...Object.values(categories).flat(),
-      ...cv.jobs.flatMap((job) => [job.position, job.description])].filter(Boolean).join('\n');
-    const originalBody = [cv.title, ...(cv.skills ?? []), original.intro, ...Object.values(original.categories).flat(),
-      ...cv.jobs.flatMap((job) => [job.position, job.description])].filter(Boolean).join('\n');
-    const aliases = new Map();
+    const body = Object.values(categories).flat().join('\n');
     const addedAliases = [];
     for (const item of observed) {
       const canonical = normalize(item.canonical);
-      const equivalent = normalize(item.spelling);
-      if (!registry.has(canonical.id) || equivalent.id !== canonical.id || INVALID_ALIASES.has(key(item.spelling)) ||
-        containsTechnologySpelling(body, item.spelling)) continue;
-      const names = aliases.get(canonical.id) ?? [];
+      if (!registry.has(canonical.id) || normalize(item.spelling).id !== canonical.id ||
+        INVALID_ALIASES.has(key(item.spelling)) || !containsTechnologySpelling(body, item.spelling)) continue;
       const spelling = canonical.id === 'kubernetes' && key(item.spelling) === 'k8s' ? 'k8s' : item.spelling;
-      if (!names.some((name) => key(name) === key(spelling))) {
-        names.push(spelling);
+      if (!addedAliases.some((alias) => normalize(alias.canonical).id === canonical.id && key(alias.spelling) === key(spelling)))
         addedAliases.push({ ...item, spelling });
-      }
-      aliases.set(canonical.id, names);
     }
     for (const terms of Object.values(categories)) {
-      for (let i = 0; i < terms.length; i++) {
-        const names = aliases.get(normalize(terms[i]).id);
-        if (names?.length) terms[i] += ` (${names.sort((a, b) => compareTechnologyNames(a, b, cv.language)).join(', ')})`;
-      }
       terms.sort((a, b) => compareTechnologyNames(a, b, cv.language));
     }
     original.intro = introOverrides[cv.language] ?? original.intro;
     return { language: cv.language, categories, original, addedAliases,
-      missingAliases: addedAliases.filter((item) => !containsTechnologySpelling(originalBody, item.spelling)),
+      missingAliases: addedAliases.filter((item) => !containsTechnologySpelling(cv.about, item.spelling)),
       missing: [...registry.values()].filter((item) => !aboutIds.has(item.id)).map((item) => item.canonical) };
   });
   for (const proposal of proposals) {
@@ -265,10 +276,13 @@ export function planCvTechnologySync(resumes, catalog = new Map(), options = {})
           if (!ids.has(id)) { ids.add(id); terms.push(term); added.push(term); }
         }
       }
-      if (terms.length !== raw.length || added.length > 0) {
+      const rendered = terms.map((term) => technologyDisplayLabel(term, cv.language, catalog, options))
+        .sort((a, b) => compareTechnologyNames(a, b, cv.language));
+      const description = terms.length ? replaceJobTechnologyLists(job.description, rendered, cv.language) : job.description;
+      if (description !== job.description) {
         changes.push({ kind: 'update', resumeHash: hash,
           target: { company: job.company, title: job.position, description: job.description },
-          fields: { description: replaceJobTechnologyLists(job.description, terms, cv.language) },
+          fields: { description },
           audit: { removedDuplicates: raw.length + added.length - terms.length, addedFromCounterpart: added } });
       }
     }

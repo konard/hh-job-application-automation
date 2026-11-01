@@ -31,6 +31,19 @@ describe('optional no-questions mode', () => {
     expect(state.takeNext()).toBeNull();
   });
 
+  test('only an explicit controlled reload handoff retains the mode and queue', () => {
+    const old = mode();
+    old.remember('123');
+    const normalStart = mode(false);
+    expect(normalStart.ids()).toEqual([]);
+    expect(normalStart.enabled).toBe(false);
+    normalStart.restore(old.snapshot());
+    expect(normalStart.ids()).toEqual(['123']);
+    expect(normalStart.enabled).toBe(true);
+    expect(() => normalStart.restore({ enabled: true, entries: [{ vacancyId: '123', url: 'file:///bad' }] })).toThrow('Invalid');
+    expect(normalStart.ids()).toEqual(['123']);
+  });
+
   const fixture = (questions = [{ question: 'Your experience?', currentValue: 'My actual answer' }]) => {
     const calls = [];
     const state = mode();

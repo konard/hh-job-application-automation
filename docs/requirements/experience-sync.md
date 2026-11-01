@@ -8,6 +8,22 @@ Status: ✅ done and verified live · 🧪 done, verified offline only (fixtures
 
 ## The user's words
 
+Technology aliases must be maintained in both Russian and English CVs: each About inventory
+and every relevant position's technology list. A variant already present in another field or
+another CV must not suppress an addition here. Use canonical brands, vacancy-evidenced equivalent
+spellings inline, alphabetical lists, lower-case `k8s`, and distinct `npm (JS/TS)` / Nginx Proxy
+Manager names. Never infer new experience, collapse distinct versions, or replace job narratives.
+
+The alias reviewer prepares one change at a time and waits for the owner's verified Save.
+It then exports actual saved CVs and replans so owner edits and newly discovered aliases are
+retained. Existing drafts are observed without overwriting or navigation. A single reviewer
+owns the slot across application restarts; new vacancy observations trigger another audit.
+Saved `.lino` snapshots are refreshed after each Save; publishing uses the existing explicit
+opt-in. Applications and the in-memory no-questions queue continue independently.
+
+Verification: `tests/cv-technologies.test.mjs`, `tests/cv-alias-sync.test.mjs` and the real-browser
+CV editor regressions.
+
 1. «We also need to develop ability to export both linked in and hh.ru working experince and display
    differences, that needs to be synced.»
 2. «We also need support auto sync with automatic translation support.»

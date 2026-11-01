@@ -177,12 +177,11 @@ test('a visible vacancy-first visit collects before preview and returns to searc
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 
-test('an open résumé draft is protected before session seeding can navigate away', async () => {
-  let seeded = false, released = false;
+test('the application delegates alias updates without seeding or navigating the CV slot', async () => {
+  let options;
   const update = createResumeAliasUpdater({ log: () => {},
-    open: async () => ({ page: { locator: () => ({ count: async () => 1 }) }, release: async () => { released = true; } }),
-    seed: async () => { seeded = true; } });
+    start: async (request) => { options = request; return { running: true }; } });
   await update({ resume, aliases: [{ canonical: 'Go', spelling: 'Golang' }] });
-  expect(seeded).toBe(false);
-  expect(released).toBe(true);
+  expect(options.fromPort).toBe(9322);
+  expect(options.port).toBe(9352);
 });
