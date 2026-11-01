@@ -210,7 +210,8 @@ resume
         'Developing a search engine that allows finding suitable tours for clients in less than 0.1 seconds across hundreds of millions of tours (each tour consists of a list of flights, accommodations, and additional services).'
         'Developing a tour database management system for entering high-quality and unified descriptions of tour components and synchronizing data with the systems of dozens of the largest tour operators in Russia.'
         ' '
-        'Skills used: SourceSafe, Subversion, MSSQL, Visual Studio, C#, AJAX, ASP.NET WebForms, WinForms, HTML, CSS, JavaScript, Excel.'
+        'Skills used:'
+        'AJAX, ASP.NET WebForms, C#, CSS, Excel, HTML, JavaScript (JS), Microsoft SQL Server (MS SQL, MSSQL), SourceSafe, Subversion, Visual Studio, WinForms'
     job
       company 'Ragnarok Online Game Server "AsgardRo"'
       position 'Lead Developer'
