@@ -65,7 +65,7 @@ resume
         'Automated development of PHP and Go services using Claude Code and Codex, and automated CI/CD. Built automation to deploy and reset test environments, providing sandboxes for both the team and AI agents. Automated AI-assisted fixes for Sentry errors using Hive Mind. Developed an advertising campaign scheduling module and a Go service for parsing data from Wildberries. Developed an AI router to simplify access to AI providers for autonomous agents and company staff, and to improve monitoring of AI usage. Maintained the product, fixed bugs and developed new features.'
         ' '
         'Technologies and tools:'
-        'PHP 8, Symfony 7, Go, PostgreSQL, ClickHouse, Redis, RabbitMQ, Docker, GitHub Actions, GitHub Actions Runner, Sentry, ElasticSearch, Kibana, PostHog, Okmeter, Nginx, Nginx Proxy Manager, Anthropic Claude Code CLI, OpenAI Codex CLI, Hive Mind'
+        'Anthropic Claude Code CLI, ClickHouse, Docker, Elasticsearch, GitHub Actions, GitHub Actions Runner, Go (Golang), Hive Mind, Kibana, Nginx, Nginx Proxy Manager (NPM), Okmeter, OpenAI Codex CLI, PHP 8, PostgreSQL (Postgre SQL, Postgres), PostHog, RabbitMQ, Redis, Sentry, Symfony 7'
     job
       company 'Capico LLC'
       position 'AI Senior Engineer'
