@@ -207,7 +207,8 @@ resume
         'Разработка поискового движка, позволяющего искать подходящие клиенту туры менее чем за 0.1 секунды по сотням млн. туров (каждый тур состоит из списка перелётов, мест проживания, и дополнительных услуг).'
         'Разработка системы управления базой данных туров для ввода качественных и унифицированных описаний компонентов тура и синхронизации данных с системами десятков крупнейших туроператоров России.'
         ' '
-        'Использовавшиеся навыки: SourceSafe, Subversion, MSSQL, Visual Studio, C#, AJAX, ASP.NET WebForms, WinForms, HTML, CSS, JavaScript, Excel.'
+        'Использовавшиеся навыки:'
+        'AJAX, ASP.NET WebForms, C#, CSS, Excel, HTML, JavaScript (JS), Microsoft SQL Server (MS SQL, MSSQL), SourceSafe, Subversion, Visual Studio, WinForms'
     job
       company 'Игровой сервер Ragnarok Online «AsgardRo»'
       position 'Ведущий разработчик'
