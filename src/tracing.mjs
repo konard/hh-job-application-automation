@@ -24,6 +24,7 @@ import { createCdpSession } from 'browser-commander';
 import { log } from './logging.mjs';
 import { recordNetwork } from './trace-network.mjs';
 import { recordDom } from './trace-dom.mjs';
+import { managedTraceRecording } from './trace-storage.mjs';
 
 /**
  * Trace options passed to browser-commander's startTrace
@@ -95,36 +96,45 @@ const report = (what) => (error) => log.debug(() => `${what} log error: ${error.
  * @returns {{stream: fs.WriteStream, write: (text: string) => void}}
  */
 function openLog(file) {
-  const stream = fs.createWriteStream(file, { flags: 'a' });
+  const stream = fs.createWriteStream(file, { flags: 'a', mode: 0o600 });
   stream.on('error', report(path.basename(file)));
   return { stream, write: (text) => !stream.writableEnded && stream.write(text) };
 }
 
 /**
- * Record one page into logs/traces/<time>[-<name>]: trace bundle, trace.lino, network.lino and
- * dom.lino. Several pages can be recorded at once, each into its own directory
+ * Record one page into ~/.hh-automation/traces/: bundles rotate daily and expire after three
+ * days by default. Several pages can be recorded at once, each into its own directory.
  * @param {Object} options
  * @param {Object} options.commander - Browser commander instance of the page
  * @param {Object} options.page - Raw engine page
  * @param {string} [options.name] - Added to the directory name (e.g. form-slot-4)
  * @returns {Promise<{directory: string, checkpoint: (name: string) => Promise<void>, stop: () => Promise<void>}>}
  */
-export async function createTracing({ commander, page, name = '' }) {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const directory = path.join(process.cwd(), 'logs', 'traces', name ? `${stamp}-${name}` : stamp);
-  fs.mkdirSync(directory, { recursive: true });
+export async function createTracing({ commander, page, name = '', storage = {} }) {
+  return managedTraceRecording({ ...storage, name, start: directory => startTraceRecording({ commander, page, directory }), onError: report('Trace retention') });
+}
+
+async function startTraceRecording({ commander, page, directory }) {
 
   // The network log starts first, so the requests of the initial checkpoint are in it
   const network = openLog(path.join(directory, 'network.lino'));
   const networkRecorder = recordNetwork({ page, write: network.write, onError: report('Network') });
 
   const traced = windowSafePage(page, () => createCdpSession(page, { engine: commander.engine }));
-  const trace = await commander.startTrace({
-    ...TRACE_OPTIONS,
-    page: traced.page,
-    output: path.join(directory, 'trace'),
-    links: { output: path.join(directory, 'trace.lino') },
-  });
+  let trace;
+  try {
+    trace = await commander.startTrace({
+      ...TRACE_OPTIONS,
+      page: traced.page,
+      output: path.join(directory, 'trace'),
+      links: { output: path.join(directory, 'trace.lino') },
+    });
+  } catch (error) {
+    networkRecorder.detach();
+    network.stream.end();
+    await traced.detach();
+    throw error;
+  }
 
   const dom = openLog(path.join(directory, 'dom.lino'));
   const domRecorder = recordDom({ page, bundle: trace.path, write: dom.write, onError: report('DOM') });
@@ -158,7 +168,7 @@ export async function createTracing({ commander, page, name = '' }) {
 }
 
 /**
- * Start recording the application run's page into logs/traces/<timestamp>
+ * Start recording the application run's page in the machine-local trace directory.
  * @param {Object} options
  * @param {Object} options.commander - Browser commander instance
  * @param {Object} options.page - Raw engine page

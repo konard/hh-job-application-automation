@@ -1,5 +1,7 @@
 # Logs
 logs
+# Browser diagnostics always stay local; also ignore accidental trace directories.
+traces/
 *.log
 npm-debug.log*
 yarn-debug.log*

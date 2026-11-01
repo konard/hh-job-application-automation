@@ -44,6 +44,7 @@ import { createResumeAliasUpdater } from './resume-aliases.mjs';
 import { submissionRetries } from './submission-retries.mjs';
 import { watchVacancyFeedback } from './vacancy-feedback.mjs';
 import { questionnaireMode } from './questionnaire-mode.mjs';
+import { traceRetentionDays } from './trace-storage.mjs';
 
 const qaDatabase = createQADatabase(path.join(process.cwd(), 'data', 'qa.lino'), { resolveVariants: true });
 
@@ -85,6 +86,7 @@ process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
 
 (async () => {
   const argv = createConfig();
+  process.env.TRACE_RETENTION_DAYS = String(traceRetentionDays(argv.traceRetentionDays));
   questionnaireMode.setEnabled(!argv.questions);
   if (process.env.HH_QUESTIONNAIRE_MODE_HANDOFF) {
     const handoff = process.env.HH_QUESTIONNAIRE_MODE_HANDOFF;

@@ -202,8 +202,12 @@ export function createConfig() {
         })
         .option('trace', {
           type: 'boolean',
-          description: 'Record a browser-commander trace (DOM, mutations, actions) with Links Notation export to logs/traces',
+          description: 'Record browser diagnostics locally in ~/.hh-automation/traces (three-day retention by default)',
           default: getenv('TRACE', true),
+        })
+        .option('trace-retention-days', {
+          type: 'number', description: 'Maximum age of local browser traces in days (positive; default 3)',
+          default: getenv('TRACE_RETENTION_DAYS', 3),
         })
         .option('user-data-dir', {
           type: 'string',

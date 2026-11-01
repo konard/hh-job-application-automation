@@ -62,7 +62,7 @@ const USAGE = `Usage: bun run experience -- <export|diff|sync|edit> [options]
   --hh-port <n>            Port of the hh.ru slot used by sync --to hh (default 9351)
   --hh-browser-port <n>    The hh.ru automation browser the login is copied from (default 9322; it is left untouched)
   --keep-open-hours <n>    Close an unused slot browser after this many hours (default 24)
-  --no-trace               Do not record the slot window (by default: DOM, its changes and network to logs/traces)`;
+  --no-trace               Do not record the slot window (default: machine-local traces, retained for three days)`;
 
 /** Plain flags: the command, and the options above */
 function parseArgs(args) {

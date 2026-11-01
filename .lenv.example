@@ -94,9 +94,11 @@
 # Default: 0
 # MAX_APPLICATIONS: 10
 
-# Record a browser-commander trace of each run in logs/traces
+# Record browser diagnostics in ~/.hh-automation/traces (outside the repository)
 # Default: true
 # TRACE: false
+# Local browser diagnostics expire after three days; must be positive.
+# TRACE_RETENTION_DAYS: 3
 
 # Path to user data directory for persistent session storage
 # Default: ~/.hh-automation/chrome-profile

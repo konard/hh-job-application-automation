@@ -65,7 +65,7 @@ async function growWindow(page) {
 
 /**
  * Open (or attach to) a slot. Its window is recorded by default (DOM snapshot and changes, field
- * values, network) into logs/traces/<time>-<name>, until the session is released
+ * values, network) into ~/.hh-automation/traces/, with bounded retention, until released
  * @param {Object} options
  * @param {string} options.name - Profile name: ~/.hh-automation/<name>
  * @param {number} options.port - Remote debugging port

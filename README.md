@@ -182,14 +182,20 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
   page/target crashes, target loss, connection loss, and worker shutdowns separately. A page-close
   event alone does not establish a manual close. URL credentials, query strings and fragments
   are omitted from these diagnostics.
-- **Debug traces** - every run records, in `logs/traces/<time>/`, a browser-commander trace (DOM
+- **Debug traces** - every run records, in `~/.hh-automation/traces/<time>-<name>-<id>/`, a browser-commander trace (DOM
   snapshots, DOM mutations, interactions, console messages, page errors, failed requests) with its
   Links Notation export `trace.lino`, plus two Links Notation logs written alongside it:
   `network.lino` (document/XHR/fetch requests and responses with headers and bodies) and `dom.lino`
   (the DOM after every page load and every DOM mutation). Cookies, authorization and CSRF headers,
   password/token form fields and hidden input values are redacted (names kept), long bodies are cut
-  with a truncation marker and binary bodies are skipped with their size. `logs/` is gitignored, but
-  the traces still hold page content: keep them local. Disable with `--no-trace`.
+  with a truncation marker and binary bodies are skipped with their size. Traces stay in private
+  machine-local app storage, outside the repository, and are never uploaded by the app or CI.
+  They expire after **three days** by default. Cleanup runs at recording startup and every minute
+  while recording, including waits on forms or account limits. Long recordings rotate daily, so an
+  active session cannot keep old diagnostics indefinitely. Only timestamped directories with the
+  recorder's own marker are pruned; unrelated files and symlink targets are preserved.
+  Configure a positive `--trace-retention-days` / `TRACE_RETENTION_DAYS` value. Disable recording
+  with `--no-trace` / `TRACE=0`. Old repository traces are not migrated into the new storage.
 
 **Quick setup:**
 
