@@ -171,7 +171,8 @@ resume
         'Разработка компонента для сжатия PDF документов.'
         'Разработка и поддержка системы для ФИПС (автоматизация распознавания перечня видов деятельности для регистрации патента).'
         ' '
-        'Использовавшиеся навыки: TFS, MS SQL, MS Access, Visual Studio, C#, ASP.NET WebForms, WinForms, HTML, CSS, Javascript, jQuery, ABBYY FineReader Engine, Aspose, NetBeans, Java.'
+        'Использовавшиеся навыки:'
+        'ABBYY FineReader Engine, ASP.NET WebForms, Aspose, C#, CSS, HTML, Java, JavaScript (JS), jQuery, Microsoft Access, Microsoft SQL Server (MS SQL, MSSQL), NetBeans, TFS, Visual Studio, WinForms'
     job
       company 'ЗАО «Термика», ЗАО «Термика-плюс»'
       position 'Программист .net'
