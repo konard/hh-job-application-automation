@@ -59,6 +59,17 @@ resume
       position 'AI Tech Lead'
       start 2026-05
       end present
+      area 'Voronezh'
+      website 'evirma.ru'
+      industries
+        industry
+          id '11.459'
+          name 'Marketing, Advertising, Designer, Event and PR Agencies'
+          parent 'Media, Marketing, Advertising, PR, Design, Production'
+        industry
+          id '44.393'
+          name 'Consulting Services'
+          parent 'Business Services'
       description
         'AI-first development of the product and system. Used self-developed Hive Mind to automate development. Advised the team on using AI effectively in their work.'
         ' '
@@ -71,6 +82,13 @@ resume
       position 'AI Senior Engineer'
       start 2025-11
       end 2026-05
+      area 'Tbilisi'
+      website 'capico.app'
+      industries
+        industry
+          id '43.650'
+          name 'Financial and Credit Brokering (Stock Exchange, Brokerage Activity, Card Issuing and Servicing, Risk Assessment, Currency Exchange Points, Crediting Agencies, Cash Collectors, Pawnshop, Payment Systems)'
+          parent 'Financial Sector'
       description
         'AI-first product development.'
         ' '
@@ -83,6 +101,13 @@ resume
       position 'Development Team Lead'
       start 2024-07
       end 2025-11
+      area 'Moscow'
+      website 'kaiten.ru'
+      industries
+        industry
+          id '7.541'
+          name 'Internet Company (Search Engines, Payment Systems, Social Networks, Information and Educational, Entertainment Resources, Website Promotion etc.)'
+          parent 'IT, System Integration, Internet'
       description
         'AI-first software development. Developed an automated CI/CD pipeline to prepare draft fixes for errors reported in Sentry. And tools for automatic conflicts resolution on high frequency merges from team members and AI agents.'
         ' '
@@ -102,6 +127,13 @@ resume
       position 'Co-founder, CTO'
       start 2022-09
       end 2024-06
+      area 'Moscow'
+      website 'github.com/deep-foundation'
+      industries
+        industry
+          id '7.540'
+          name 'Software Development'
+          parent 'IT, System Integration, Internet'
       description
         'Managing teams of programmers from various countries, formulating tasks, coordinating task execution, ensuring code quality and adherence to code style conventions, guaranteeing that code is covered with documentation, code examples, tests, and benchmarks, verifying the operability of the developed software solutions, developing continuous integration and delivery.'
         'Managing social media and interacting with the audience.'
@@ -136,6 +168,17 @@ resume
       position 'Programmer'
       start 2020-07
       end 2022-08
+      area 'Moscow'
+      website 'web.archive.org/web/20230201032219/shakeapp.ru'
+      industries
+        industry
+          id '49.404'
+          name 'Car Hire'
+          parent 'Public Services'
+        industry
+          id '7.541'
+          name 'Internet Company (Search Engines, Payment Systems, Social Networks, Information and Educational, Entertainment Resources, Website Promotion etc.)'
+          parent 'IT, System Integration, Internet'
       description
         'Developed and maintained ShakeApp, a C2C rental marketplace for cars and apartments. The platform connected private car owners with people who wanted to rent a car from another individual.'
         ' '
@@ -146,6 +189,13 @@ resume
       position 'Founder, CTO'
       start 2015-01
       end 2020-06
+      area 'Moscow'
+      website 'github.com/linksplatform'
+      industries
+        industry
+          id '7.540'
+          name 'Software Development'
+          parent 'IT, System Integration, Internet'
       description
         'Managing a team of programmers from multiple countries, tasks formulation and decomposition, coordinating task execution, ensuring code quality and adherence to code style conventions, guidelines and best practices, guaranteeing that code is covered with documentation, code examples, tests, and benchmarks, verifying the operability of the developed software solutions, developing continuous integration and delivery.'
         'Managing social media and interacting with the audience.'
@@ -167,6 +217,17 @@ resume
       position 'Programmer'
       start 2014-05
       end 2014-12
+      area 'Moscow'
+      website 'elar.ru'
+      industries
+        industry
+          id '52.651'
+          name 'Archive, Library, Art History'
+          parent 'Art, Culture'
+        industry
+          id '7.540'
+          name 'Software Development'
+          parent 'IT, System Integration, Internet'
       description
         "Developing and maintaining an adapter between Gazprombank's integration platform (СУВ, Interaction Management System) and ELAR JSC's Saperion system."
         'Developing a component for importing automatically recognized documents (invoices, etc.) using OCR.'
@@ -181,6 +242,17 @@ resume
       position '.NET Programmer'
       start 2013-04
       end 2014-04
+      area 'Moscow'
+      website 'termika.ru'
+      industries
+        industry
+          id '7.539'
+          name 'Systems integration, enterprise process automation, and IT consulting'
+          parent 'IT, System Integration, Internet'
+        industry
+          id '44.393'
+          name 'Consulting Services'
+          parent 'Business Services'
       description
         'Developing the Production Control system for Rosneft Oil Company.'
         ' '
@@ -191,6 +263,13 @@ resume
       position 'Software Developer'
       start 2009-09
       end 2011-03
+      area 'Israel'
+      website 'pegast.ru'
+      industries
+        industry
+          id '49.412'
+          name 'Travel Companies'
+          parent 'Public Services'
       description
         'Developing and maintaining a unified tour operator management system:'
         '1. Developing a unified tour operator management system for all company employees, with access from anywhere in the world, role-based access control, multilingual data and UI and form validation with guided help.'
@@ -204,6 +283,13 @@ resume
       position 'Software Developer'
       start 2008-05
       end 2009-08
+      area 'Moscow'
+      website 'web.archive.org/web/20211206042937/alprussia.com'
+      industries
+        industry
+          id '49.412'
+          name 'Travel Companies'
+          parent 'Public Services'
       description
         'Developing a tour search and booking system for travel agencies.'
         'Automated aggregation of tour operator offers into a single database for data unification and normalization.'
@@ -217,6 +303,17 @@ resume
       position 'Lead Developer'
       start 2007-09
       end 2008-04
+      area 'Moscow'
+      website 'web.archive.org/web/20190626105802/asgardro.com'
+      industries
+        industry
+          id '7.541'
+          name 'Internet Company (Search Engines, Payment Systems, Social Networks, Information and Educational, Entertainment Resources, Website Promotion etc.)'
+          parent 'IT, System Integration, Internet'
+        industry
+          id '7.540'
+          name 'Software Development'
+          parent 'IT, System Integration, Internet'
       description
         'Organizing collaborative development, developing additions and extensions for the game server core, developing extensions to protect the system from intruders, assisting in the development of a new version of the website, developing quest scripts for players.'
         ' '
@@ -227,6 +324,13 @@ resume
       position 'Web Developer'
       start 2006-11
       end 2007-08
+      area 'Moscow'
+      website 'web.archive.org/web/20220330051729/artbridge.ru'
+      industries
+        industry
+          id '41.511'
+          name 'Retail Chain (Books, Toys, Gifts, Watches etc.)'
+          parent 'Retail'
       description
         "Supporting and developing additions and extensions for the store's website, automated data import through Excel into the database."
         ' '
