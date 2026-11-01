@@ -77,7 +77,7 @@ resume
         'Developed a Grid trading bot for ByBit and BitGet. Maintained and improved the UI/UX of the trading terminal and other components of the trading aggregator.'
         ' '
         'Technologies and tools:'
-        'GitLab, GitLab CI/CD, GitLab CI/CD Runner, Git, PostgreSQL, InfluxDB, Redis, Rust, Vue.js, Node.js, TradingView, Anthropic Claude Code CLI, OpenAI Codex CLI'
+        'Anthropic Claude Code CLI, Git, GitLab, GitLab CI/CD, GitLab CI/CD Runner, InfluxDB, Node.js (NodeJS), OpenAI Codex CLI, PostgreSQL (Postgre SQL, Postgres), Redis, Rust, TradingView, Vue.js (VueJS)'
     job
       company 'Kaiten'
       position 'Development Team Lead'
