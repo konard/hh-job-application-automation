@@ -135,9 +135,10 @@ resume
       start 2020-07
       end 2022-08
       description
-        'Developing and maintaining the car and apartment sharing platform ShakeApp.'
+        'Developed and maintained ShakeApp, a C2C rental marketplace for cars and apartments. The platform connected private car owners with people who wanted to rent a car from another individual.'
         ' '
-        'Skills used: GitLab, GitLab CI/CD, Git, PostgreSQL, SQL, Hasura, GraphQL, minio, HasuraStorage, Selectel, Docker, Kubernetes, Grafana, Prometheus, draw.io, Visual Studio Code, XCode, Android Studio, TypeScript, JavaScript, Next.JS, React.JS, HTML, CSS, iOS, Android, Capacitor, Apache Cordova'
+        'Skills used:'
+        'Android, Android Studio, Apache Cordova, Capacitor, CSS, Docker, draw.io, Git, GitLab, GitLab CI/CD, Grafana, GraphQL, Hasura, Hasura Storage, HTML, iOS, JavaScript (JS), Kubernetes (k8s), minio, Next.js, PostgreSQL (Postgre SQL, Postgres), Prometheus, React (React.js, ReactJS), Selectel Cloud, SQL, TypeScript (TS), Visual Studio Code, Xcode'
     job
       company 'LinksPlatform'
       position 'Founder, CTO'
