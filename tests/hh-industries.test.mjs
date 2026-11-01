@@ -2,12 +2,18 @@ import { test, expect } from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { flattenIndustryTree, resolveIndustry, loadHhIndustryTree } from '../src/hh-industries.mjs';
+import { flattenIndustryTree, resolveIndustry, loadHhIndustryTree, industryNamesInText } from '../src/hh-industries.mjs';
 
 const tree = [
   { id: '7', name: 'Internet', industries: [{ id: '7.541', name: 'Internet Company' }, { id: '7.542', name: 'Shared' }] },
   { id: '49', name: 'Services', industries: [{ id: '49.404', name: 'Car Hire' }, { id: '49.405', name: 'Shared' }] },
 ];
+test('selected labels are parsed exactly without splitting commas inside an industry name', () => {
+  const directory = [...tree, { id: '99', name: 'Other', industries: [{ id: '99.100', name: 'Internet Company (Search, Entertainment)' }] }];
+  expect(industryNamesInText('Internet Company (Search, Entertainment), Car Hire', directory)).toEqual(['Internet Company (Search, Entertainment)', 'Car Hire']);
+  expect(industryNamesInText('', directory)).toEqual([]);
+  expect(() => industryNamesInText('Unknown activity', directory)).toThrow('Cannot identify');
+});
 test('full IDs and paths select any leaf, including ambiguous names; groups cannot be selected', () => {
   expect(flattenIndustryTree(tree)).toHaveLength(6);
   expect(resolveIndustry({ id: '49.404' }, tree)).toMatchObject({ uiId: '404', parentId: '49' });

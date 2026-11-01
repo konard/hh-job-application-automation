@@ -4,17 +4,18 @@ import { chromium } from 'playwright';
 import { selectHhIndustryReferences } from '../../src/hh-industries.mjs';
 
 const tree = Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), name: `Group ${i + 1}`,
-  industries: [{ id: `${i + 1}.${500 + i}`, name: i === 29 ? 'Car Hire' : 'Shared name' }] }));
+  industries: [{ id: `${i + 1}.${500 + i}`, name: i === 0 ? 'Previously selected activity' : i === 29 ? 'Car Hire' : 'Shared name' }] }));
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
   const page = await browser.newPage();
-  await page.setContent('<html lang="en"><body><div data-qa="trigger-root">Company\'s field of activity<span data-qa="trigger-values-wrapper"></span></div><button id="final-save">Save workplace</button></body></html>');
+  await page.setContent('<html lang="en"><body><div data-qa="trigger-root">Company\'s field of activity<span data-qa="trigger-values-wrapper">Previously selected activity</span></div><button id="final-save">Save workplace</button></body></html>');
   await page.evaluate(tree => {
     window.finalSaves = 0;
     document.querySelector('#final-save').onclick = () => { window.finalSaves++; };
     const selected = new Set(['1.500']);
     const trigger = document.querySelector('[data-qa="trigger-root"]');
     trigger.onclick = () => {
+      const original = [...selected];
       const dialog = document.createElement('div');
       dialog.setAttribute('role', 'dialog');
       dialog.innerHTML = '<input data-qa="tree-selector-search-input"><button id="reset">Reset</button><section></section><button id="apply">Save</button>';
@@ -31,7 +32,7 @@ try {
         };
       };
       dialog.querySelector('input').oninput = render;
-      dialog.querySelector('#reset').onclick = () => { selected.clear(); render(); };
+      dialog.querySelector('#reset').onclick = () => { selected.clear(); for (const id of original) selected.add(id); render(); };
       dialog.querySelector('#apply').onclick = () => {
         trigger.querySelector('span').textContent = tree.flatMap(g => g.industries).filter(i => selected.has(i.id)).map(i => i.name).join(', ');
         window.selected = [...selected]; dialog.remove();

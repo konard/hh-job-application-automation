@@ -58,6 +58,21 @@ export function resolveIndustry(selection, tree) {
   return matches[0];
 }
 
+/** Commas inside labels are part of their names; match the longest complete directory label. */
+export function industryNamesInText(text, tree) {
+  let remaining = String(text ?? '').replace(/^(?:Company's field of activity|Сфера деятельности компании|Сфера деятельности)/i, '')
+    .replace(/(?:and more|и ещ[её])\s*\d+\s*$/i, '').replace(/\s+/g, ' ').trim();
+  const names = [...new Set(flattenIndustryTree(tree).filter(i => i.selectable).map(i => i.name))].sort((a, b) => b.length - a.length);
+  const selected = [];
+  while (remaining) {
+    const name = names.find(name => remaining === name || remaining.startsWith(`${name}, `));
+    if (!name) throw new Error(`Cannot identify selected HH industry: ${remaining}`);
+    selected.push(name);
+    remaining = remaining.slice(name.length).replace(/^,\s*/, '');
+  }
+  return selected;
+}
+
 /** Select stable leaf IDs, even when most of the tree is not mounted in the DOM. */
 export async function selectHhIndustryReferences(page, selections, { tree = null } = {}) {
   const locale = await page.locator('html').getAttribute('lang');
@@ -65,26 +80,37 @@ export async function selectHhIndustryReferences(page, selections, { tree = null
   const entries = selections.map(item => resolveIndustry(item, tree));
   if (entries.length > 5 || new Set(entries.map(e => e.id)).size !== entries.length) throw new Error('Select at most five distinct industries');
   const trigger = page.locator('[data-qa="trigger-root"]').filter({ hasText: /field of activity|сфера деятельности/i }).first();
+  const selectedText = async () => {
+    const values = trigger.locator('[data-qa="trigger-values-wrapper"]');
+    return await values.count() ? await values.textContent() : await trigger.textContent();
+  };
+  const previous = industryNamesInText(await selectedText(), tree);
   const dialog = page.getByRole('dialog').filter({ has: page.locator('[data-qa="tree-selector-search-input"]') }).last();
   if (!await dialog.isVisible().catch(() => false)) await trigger.click();
   await dialog.waitFor({ state: 'visible' });
   const reset = dialog.getByRole('button', { name: /^(reset|сбросить)$/i });
+  // HH Reset restores the original selections; it does not empty the selection.
   if (await reset.isEnabled()) await reset.click();
-  for (const entry of entries) {
+  const choose = async (entry, checked) => {
     await dialog.locator('[data-qa="tree-selector-search-input"]').fill(entry.name);
     const item = dialog.locator(`[data-qa~="tree-selector-item-text-${entry.uiId}"]`);
     await item.waitFor({ state: 'visible', timeout: 15000 });
     await item.scrollIntoViewIfNeeded();
     const checkbox = dialog.locator(`input[data-qa~="tree-selector-input-${entry.uiId}"]`);
-    if (!await checkbox.isChecked()) await item.click();
-    await page.waitForFunction(id => document.querySelector(`input[data-qa~="tree-selector-input-${id}"]`)?.checked,
-      entry.uiId, { timeout: 5000 });
+    if (await checkbox.isChecked() !== checked) await item.click();
+    await page.waitForFunction(({ id, checked }) => document.querySelector(`input[data-qa~="tree-selector-input-${id}"]`)?.checked === checked,
+      { id: entry.uiId, checked }, { timeout: 5000 });
+  };
+  const wanted = new Set(entries.map(i => i.id));
+  for (const name of previous) {
+    for (const entry of flattenIndustryTree(tree).filter(i => i.selectable && i.name === name && !wanted.has(i.id))) await choose(entry, false);
   }
+  for (const entry of entries) await choose(entry, true);
   // Chooser Save applies local form fields only; the workplace Save remains the owner's.
   await dialog.getByRole('button', { name: /^(save|сохранить)$/i }).click();
   await dialog.waitFor({ state: 'hidden' });
-  const text = await trigger.innerText();
-  if (entries.some(entry => !text.includes(entry.name))) throw new Error('Industry labels did not appear in the workplace draft');
+  const actual = industryNamesInText(await selectedText(), tree).sort();
+  if (JSON.stringify(actual) !== JSON.stringify(entries.map(i => i.name).sort())) throw new Error('Workplace industry selection does not exactly match the requested activities');
   return entries;
 }
 

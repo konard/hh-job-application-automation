@@ -31,6 +31,14 @@ Select and verify each leaf by its stable UI ID. Only the industry's local dialo
 the workplace's final Save remains the owner's. Verification: `tests/hh-industries.test.mjs`,
 `tests/browser/hh-industries.mjs`; live directory: 30 groups and 296 leaves per language.
 
+Replacing industries must explicitly deselect unwanted existing leaves: HH's Reset restores
+the original choices rather than clearing them. Read complete existing labels from the trigger,
+preserving commas within names, and verify the resulting set exactly, so adding desired choices
+cannot silently retain an incorrect category. The browser fixture models Reset's actual behavior.
+AsgardRo is an online gaming project: replace the inherited Gambling / Игорный бизнес category
+with Software Development (`7.540`) and Internet Company (`7.541`) in both CVs. The current HH
+dictionary has no separate Gaming leaf; the selector must use real directory IDs.
+
 Abracar/ShakeApp's description must explain its C2C rental marketplace and private-owner car rental
 model in both languages. Selected activities: Internet Company (`7.541`) and Car Hire (`49.404`).
 Explicit owner-requested edits use the private CV edit queue, prioritized before ordinary alias
