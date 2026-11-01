@@ -172,7 +172,8 @@ resume
         'Developing a component for compressing PDF documents.'
         'Developing and maintaining a system for FIPS (automation of activity type recognition for patent registration).'
         ' '
-        'Skills used: TFS, MS SQL, MS Access, Visual Studio, C#, ASP.NET WebForms, WinForms, HTML, CSS, Javascript, jQuery, ABBYY FineReader Engine, Aspose, NetBeans, Java.'
+        'Skills used:'
+        'ABBYY FineReader Engine, ASP.NET WebForms, Aspose, C#, CSS, HTML, Java, JavaScript (JS), jQuery, Microsoft Access, Microsoft SQL Server (MS SQL, MSSQL), NetBeans, TFS, Visual Studio, WinForms'
     job
       company 'Termika CJSC, Termika-Plus CJSC'
       position '.NET Programmer'
