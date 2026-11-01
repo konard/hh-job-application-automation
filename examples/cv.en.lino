@@ -182,7 +182,8 @@ resume
       description
         'Developing the Production Control system for Rosneft Oil Company.'
         ' '
-        'Skills used: Subversion, MS SQL, MSSQL CE, SQLite, VistaDB, InfoPath, Visual Studio, C#, WPF, Telerik, Stimulsoft.'
+        'Skills used:'
+        'C#, InfoPath, Microsoft SQL Server (MS SQL, MSSQL), MS SQL CE, SQLite, Stimulsoft, Subversion, Telerik, VistaDB, Visual Studio, WPF'
     job
       company 'Pegas LLC'
       position 'Software Developer'
