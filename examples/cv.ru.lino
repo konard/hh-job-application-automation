@@ -136,7 +136,8 @@ resume
       description
         'Разработка и поддержка шеринговой платформы для автомобилей и квартир ShakeApp.'
         ' '
-        'Использовавшиеся навыки: GitLab, GitLab CI/CD, Git, PostgreSQL, SQL, Hasura, GraphQL, minio, HasuraStorage, Selectel, Docker, Kubernetes, Grafana, Prometheus, draw.io, Visual Studio Code, XCode, Android Studio, TypeScript, JavaScript, Next.JS, React.JS, HTML, CSS, iOS, Android, Capacitor, Apache Cordova'
+        'Использовавшиеся навыки:'
+        'Android, Android Studio, Apache Cordova, Capacitor, CSS, Docker, draw.io, Git, GitLab, GitLab CI/CD, Grafana, GraphQL, Hasura, Hasura Storage, HTML, iOS, JavaScript (JS), Kubernetes (k8s), minio, Next.js, PostgreSQL (Postgre SQL, Postgres), Prometheus, React (React.js, ReactJS), Selectel Cloud, SQL, TypeScript (TS), Visual Studio Code, Xcode'
     job
       company 'LinksPlatform'
       position 'Основатель, технический директор'
