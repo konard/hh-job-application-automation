@@ -194,7 +194,8 @@ resume
         '2. Разработка подсистемы расчёта цен туров, проживания в отелях, авиаперелётов и др.'
         '3. Разработка подсистемы поиска и бронирования туров для физических и юридических лиц.'
         ' '
-        'Использовавшиеся навыки: Subversion, MS SQL, Visual Studio, C#, WCF, Silverlight, WinForms, DevExpress, ASP.NET MVC, HTML, CSS, Javascript, jQuery.'
+        'Использовавшиеся навыки:'
+        'ASP.NET MVC, C#, CSS, DevExpress, HTML, JavaScript (JS), jQuery, Microsoft SQL Server (MS SQL, MSSQL), Silverlight, Subversion, Visual Studio, WCF, WinForms'
     job
       company 'ООО «АльпОнлайн»'
       position 'Программист-разработчик'
