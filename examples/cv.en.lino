@@ -220,7 +220,8 @@ resume
       description
         'Organizing collaborative development, developing additions and extensions for the game server core, developing extensions to protect the system from intruders, assisting in the development of a new version of the website, developing quest scripts for players.'
         ' '
-        'Skills used: Subversion, MySQL, Visual Studio, C/C++, IDA, PHP, HTML, CSS, JavaScript, MVC, Lua.'
+        'Skills used:'
+        'C/C++, CSS, HTML, IDA, JavaScript (JS), Lua, MVC, MySQL, PHP, Subversion, Visual Studio'
     job
       company 'Gift Online Store "ArtBridge"'
       position 'Web Developer'
