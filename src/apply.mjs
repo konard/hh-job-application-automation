@@ -37,6 +37,7 @@ import { todayLine } from './stats.mjs';
 import { prepareAlerts } from './notify.mjs';
 import { createChatHistory } from './chat-history.mjs';
 import { learnChatQuestions, withChatHistoryAnswers } from './chat-learning.mjs';
+import { answerCorrections } from './answer-corrections.mjs';
 import { watchChats } from './chat-recording.mjs';
 import { createVacancyInsights } from './vacancy-insights.mjs';
 import { vacancyContextTexts } from './vacancy-context.mjs';
@@ -124,7 +125,7 @@ process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
     onRates: value => { salaryRates = value.rubPer ?? {}; },
   });
   const chatHistory = createChatHistory();
-  const chatQa = withContacts(withChatHistoryAnswers(qaDatabase, { history: chatHistory, contacts }), contacts);
+  const chatQa = withContacts(withChatHistoryAnswers(qaDatabase, { history: chatHistory, contacts, corrections: answerCorrections }), contacts);
   const { readQADatabase, addOrUpdateQA, addQAIfMissing } = chatQa;
   argv.message = expandContacts(argv.message, contacts);
   argv.messageEn = expandContacts(argv.messageEn ?? '', contacts);

@@ -6,6 +6,7 @@ import { contractContacts } from './contacts.mjs';
 import { ANSWER_SEPARATOR } from './qa.mjs';
 import { mergeAnswerFrequencies } from './answer-variants.mjs';
 import { fitsAvailabilityQuestion } from './answer-preferences.mjs';
+import { allowedCorrectedAnswer, emptyAnswerCorrections, applyAnswerCorrections } from './answer-corrections.mjs';
 
 /** Access-controlled recruiter links belong in the private transcript, never the shared Q&A. */
 export const hasPrivateRecruiterLinks = (text) => /https?:\/\/\S*(?:\/private\/|[?&](?:token|access_token|auth|key|p)=)/iu.test(String(text));
@@ -15,11 +16,12 @@ export const hasPrivateRecruiterLinks = (text) => /https?:\/\/\S*(?:\/private\/|
  * wording. Checkbox arrays keep their meaning. Contacts are templated before expansion in the
  * vacancy's context. The archive is the source of variants, including answers to known questions.
  */
-export function withChatHistoryAnswers(db, { history = createChatHistory(), contacts = {}, finalPeriod } = {}) {
+export function withChatHistoryAnswers(db, { history = createChatHistory(), contacts = {}, finalPeriod, corrections = emptyAnswerCorrections } = {}) {
   let previous;
   let recordedCounts = [];
   const read = async () => {
-    const raw = await db.readQADatabase();
+    const policy = await corrections.read();
+    const raw = applyAnswerCorrections(await db.readQADatabase(), policy);
     const chats = await history.read();
     if (chats !== previous) {
       recordedCounts = Object.values(chats).filter((chat) => !isSupportChat(chat))
@@ -30,6 +32,7 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
     const frequencies = new Map([...raw].filter(([, answer]) => !Array.isArray(answer)).map(([question, answer]) =>
       [question, new Map(String(answer).split(ANSWER_SEPARATOR).map((text) => [text, 0]))]));
     for (const { question, answer: reply, count } of recordedCounts) {
+      if (!allowedCorrectedAnswer(question, reply, policy)) continue;
       const normalized = normalizeQuestion(question);
       const key = keys.get(normalized) ?? question;
       keys.set(normalized, key);
@@ -48,11 +51,12 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
       else raw.delete(question);
       ranked.set(question, answers);
     }
-    return { answers: raw, frequencies: ranked };
+    return { answers: applyAnswerCorrections(raw, policy), frequencies: ranked };
   };
   return {
     ...db,
-    readSavedQADatabase: db.readQADatabase,
+    answerCorrections: corrections,
+    readSavedQADatabase: async () => applyAnswerCorrections(await db.readQADatabase(), await corrections.read()),
     async readQADatabase() {
       return (await read()).answers;
     },
@@ -63,7 +67,7 @@ export function withChatHistoryAnswers(db, { history = createChatHistory(), cont
 }
 
 /** Persist the transcript first, then learn new questions; existing saved answers stay intact. */
-export async function learnChatQuestions(chat, { history, qaDatabase, buttonQuestions = new Set(), log = console.log }) {
+export async function learnChatQuestions(chat, { history, qaDatabase, buttonQuestions = new Set(), log = console.log, corrections = qaDatabase.answerCorrections ?? emptyAnswerCorrections }) {
   if (chat?.transitioning) return;
   await history.record(chat);
   if (!chat?.id || isSupportChat(chat)) return;
@@ -71,7 +75,9 @@ export async function learnChatQuestions(chat, { history, qaDatabase, buttonQues
   const { questions, templates } = learnedPairs(kept.messages);
   const asked = templates.filter(([question]) => buttonQuestions.has(normalizeQuestion(question)));
   const known = await (qaDatabase.readSavedQADatabase ?? qaDatabase.readQADatabase)();
+  const policy = await corrections.read();
   for (const [question, answer] of [...questions, ...asked]) {
+    if (!allowedCorrectedAnswer(question, answer, policy)) continue;
     if (hasPrivateRecruiterLinks(question)) continue;
     if (known.has(question)) continue;
     if (qaDatabase.addQAIfMissing) {

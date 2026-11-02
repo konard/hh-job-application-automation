@@ -89,6 +89,14 @@ normally includes unspecified pay and that salary-only flags/labels exclude it.
 
 ## The user's words
 
+Explicit owner corrections must override older chat answers, edited-message variants and recruiter
+bot summaries. Save clean factual answers separately for each question; a one-off apology or
+correction explanation must not become a reusable experience answer. Rejected answers must stay
+excluded even when a bot quotes them in Markdown or under a paraphrased question. Keep the actual
+transcript unchanged. Store the correction policy privately in `~/.hh-automation/answers/corrections.json`;
+apply it to Q&A reads, frequency ranking, and learning/relearning. Verification:
+`tests/answer-corrections.test.mjs`, chat recording/history tests and live context-aware answer reads.
+
 Informal recruiter requests without question marks (for example, «Укажи, пожалуйста, свои
 зарплатные ожидания (в месяц, на руки)») must trigger automatic prefilling from the saved target.
 Recognize both informal and formal imperatives, preserve currency/net/month context, and keep an
