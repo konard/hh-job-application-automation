@@ -37,6 +37,13 @@ unrelated login CAPTCHA. Hidden/transparent banners without a recorded active pa
 limits and ambiguous close controls do not authorize dismissal. Keep actionable chat/CV alerts
 independent. Autosaving permits only one pending page read, avoiding accumulated waits.
 
+Navigation can destroy the execution context during an application-error check. Such interrupted
+reads must abort the queued action, preserve the current page and answers, and recheck its state
+from startup, the main loop or a full-form handler. They must not shut down the worker or emit
+repeated Q&A-save errors. An unreadable state without navigation evidence remains a blocking error;
+it must not be treated as an empty/successful response. Unexpected fatal errors retain their stack
+and classification in the private lifecycle log. Verification: `tests/application-limits.test.mjs`.
+
 Verification: `tests/application-limits.test.mjs`, `tests/browser/application-limits.mjs`,
 `tests/popup-application.test.mjs`, `tests/pacing.test.mjs` and `tests/notify.test.mjs`.
 Overlap verification: `tests/captcha.test.mjs`, `tests/application-limits.test.mjs` and

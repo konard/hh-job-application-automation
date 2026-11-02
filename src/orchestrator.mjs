@@ -34,7 +34,7 @@ import { coverLetterFor } from './cover-letter.mjs';
 import { deferFailedSubmission, submissionRetries } from './submission-retries.mjs';
 import { createApplicationResumeSelector } from './application-resume.mjs';
 import { completeApplicationDraft } from './application-drafts.mjs';
-import { prepareApplicationLimit, waitForApplicationLimit } from './application-limits.mjs';
+import { isApplicationStateNavigation, prepareApplicationLimit, waitForApplicationLimit } from './application-limits.mjs';
 import { silenceAlertsUntil } from './notify.mjs';
 import { questionnaireMode, skipQuestionnaireForNow } from './questionnaire-mode.mjs';
 import { createSalaryLadder } from './salary-ladder.mjs';
@@ -132,10 +132,24 @@ export function createOrchestrator({
   let plannedVacancy = null;
   let dailyLimitRecovery = null;
 
-  async function retryAfterDailyLimit(task) {
+  async function recoverInterruptedStateRead(error) {
+    if (!isApplicationStateNavigation(error)) return false;
+    handledResponseUrl = null;
+    plannedVacancy = null;
+    log.debug(() => 'Application-state read interrupted by navigation; rechecking the current page.');
+    // Yield without a guarded browser action: its state must be checked before any action resumes.
+    await new Promise(resolve => setTimeout(resolve, 250));
+    return true;
+  }
+
+  async function retryAfterPageInterruption(task) {
     for (;;) {
       try { return await task(); }
       catch (error) {
+        if (await recoverInterruptedStateRead(error)) {
+          if (pageClosedByUser) return;
+          continue;
+        }
         if (!isDailyLimitInterrupted(error)) throw error;
         handledResponseUrl = null;
         workStartedAt = null;
@@ -322,7 +336,8 @@ export function createOrchestrator({
     }
     handledResponseUrl = commander.getUrl();
     const retryId = retryingVacancyId;
-    const operation = runVacancyResponseHandler().catch(error => {
+    const operation = runVacancyResponseHandler().catch(async error => {
+      if (await recoverInterruptedStateRead(error)) return;
       if (!isDailyLimitInterrupted(error)) throw error;
       handledResponseUrl = null;
       workStartedAt = null;
@@ -488,7 +503,7 @@ export function createOrchestrator({
         onPageClosed();
       });
 
-      await retryAfterDailyLimit(() => ensureLoggedIn({ commander, page, argv, isPageClosed: getPageClosedByUser }));
+      await retryAfterPageInterruption(() => ensureLoggedIn({ commander, page, argv, isPageClosed: getPageClosedByUser }));
       if (pageClosedByUser) {
         return;
       }
@@ -499,14 +514,14 @@ export function createOrchestrator({
       // Capture an existing failed form before resume selection navigates away from it.
       // Resolving a full form's return search only fetches the CV list; it never leaves the form.
       const initialUrl = commander.getUrl();
-      const preparedStart = URL_PATTERNS.vacancyResponse.test(initialUrl) ? await retryAfterDailyLimit(() => resolveApplicationStart(commander, START_URL)) : null;
+      const preparedStart = URL_PATTERNS.vacancyResponse.test(initialUrl) ? await retryAfterPageInterruption(() => resolveApplicationStart(commander, START_URL)) : null;
       if (preparedStart) lastSearchPageUrl = salaryLadder.prepare(preparedStart.startUrl);
-      const failedApplicationOpen = await retryAfterDailyLimit(() => deferVisibleSubmissionError());
+      const failedApplicationOpen = await retryAfterPageInterruption(() => deferVisibleSubmissionError());
 
       const start = preparedStart ?? (failedApplicationOpen && !URL_PATTERNS.vacancyResponse.test(commander.getUrl())
         ? { startUrl: START_URL || (URL_PATTERNS.searchVacancy.test(commander.getUrl())
           ? commander.getUrl() : 'https://hh.ru/search/vacancy?from=resumelist'), preserveCurrentForm: true }
-        : await retryAfterDailyLimit(() => resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL)));
+        : await retryAfterPageInterruption(() => resolveApplicationStart(commander, failedApplicationOpen ? undefined : START_URL)));
       if (failedApplicationOpen) start.preserveCurrentForm = commander.getUrl() === initialUrl;
       START_URL = start.startUrl ? salaryLadder.prepare(start.startUrl) : null;
       if (!START_URL) {
@@ -516,9 +531,9 @@ export function createOrchestrator({
       if (start.preserveCurrentForm) {
         console.log('📄 Resuming the open application; entered answers are preserved.');
       } else if (commander.getUrl() !== START_URL) {
-        await retryAfterDailyLimit(() => commander.goto({ url: START_URL, waitForStableUrlBefore: false }));
+        await retryAfterPageInterruption(() => commander.goto({ url: START_URL, waitForStableUrlBefore: false }));
       }
-      await retryAfterDailyLimit(() => dismissOverlays(commander));
+      await retryAfterPageInterruption(() => dismissOverlays(commander));
 
       // Declarative page handling (vacancy_response, vacancy and search pages)
       const cleanupTriggers = registerPageTriggers({
@@ -720,6 +735,7 @@ export function createOrchestrator({
             return;
           }
         } catch (error) {
+          if (await recoverInterruptedStateRead(error)) continue;
           if (!isDailyLimitInterrupted(error)) throw error;
           handledResponseUrl = null;
           workStartedAt = null;

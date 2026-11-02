@@ -37,7 +37,7 @@ import { questionnaireMode, questionnairePrompt, skipQuestionnaireForNow } from 
 import { completeApplicationDraft, readApplicationDraft, restoreApplicationDraft, saveApplicationDraft } from './application-drafts.mjs';
 import { alertUntilDone } from './notify.mjs';
 import { vacancyContextTexts } from './vacancy-context.mjs';
-import { prepareApplicationLimit, readApplicationLimit } from './application-limits.mjs';
+import { isApplicationStateNavigation, prepareApplicationLimit, readApplicationLimit } from './application-limits.mjs';
 import {
   dismissOverlays,
   findFirstSelector,
@@ -252,7 +252,7 @@ export async function readQAPairs({ commander, strict = false }) {
   } catch (error) {
     if (strict) throw error;
     // The page navigated away while reading it; the save before navigation covers it
-    if (isNavigationError(error)) {
+    if (isNavigationError(error) || isApplicationStateNavigation(error)) {
       log.debug(() => `Q&A save skipped during navigation: ${error.message}`);
     } else {
       console.error('Error reading Q&A pairs:', error.message);

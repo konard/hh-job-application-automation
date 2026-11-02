@@ -1,10 +1,11 @@
 import { describe, test, expect } from 'bun:test';
-import { applicationStateReadError, isDailyApplicationLimit, prepareApplicationLimit, waitForApplicationLimit, createDailyLimitPriority } from '../src/application-limits.mjs';
+import { applicationStateReadError, isApplicationStateNavigation, isDailyApplicationLimit, prepareApplicationLimit, waitForApplicationLimit, createDailyLimitPriority } from '../src/application-limits.mjs';
 import { createSubmissionRetries, deferFailedSubmission } from '../src/submission-retries.mjs';
 import { LIMIT_COOLDOWN_MS, limitHeldUntil } from '../src/pacing.mjs';
 import { waitForManualResponse } from '../src/vacancy-response.mjs';
 import { waitForApplicationModal } from '../src/vacancies.mjs';
 import { createOrchestrator } from '../src/orchestrator.mjs';
+import { withCaptchaGuard } from '../src/captcha.mjs';
 
 const url = 'https://hh.ru/applicant/vacancy_response?vacancyId=123';
 function fixture() {
@@ -202,8 +203,48 @@ describe('account-wide application limits', () => {
   });
 
   test('expected navigation remains distinguishable from a real unreadable state', () => {
-    expect(applicationStateReadError({ getUrl: () => url }, { navigationError: true }, url).expectedNavigation).toBe(true);
-    expect(applicationStateReadError({ getUrl: () => url }, {}, url).expectedNavigation).toBe(false);
+    const interrupted = applicationStateReadError({ getUrl: () => url }, { navigationError: true }, url);
+    const unreadable = applicationStateReadError({ getUrl: () => url }, {}, url);
+    expect(interrupted.expectedNavigation).toBe(true);
+    expect(isApplicationStateNavigation(interrupted)).toBe(true);
+    expect(unreadable.expectedNavigation).toBe(false);
+    expect(isApplicationStateNavigation(unreadable)).toBe(false);
+    expect(isApplicationStateNavigation({ expectedNavigation: true })).toBe(false);
+  });
+
+  test('a guarded daily-limit read interrupted by navigation does not terminate or resume the queued action', async () => {
+    let checks = 0, sent = 0;
+    const actions = [];
+    const raw = { getUrl: () => 'https://hh.ru/search/vacancy?resume=ru', shouldAbort: () => false,
+      safeEvaluate: async ({ operationName, defaultValue }) => {
+        if (operationName === 'daily application limit check' && ++checks === 1) {
+          return { success: false, navigationError: true, value: null };
+        }
+        return { success: true, value: defaultValue };
+      },
+      wait: async () => { throw new Error('Finished observing recovered loop'); },
+      goto: async () => actions.push('navigate'), clickButton: async () => actions.push('submit'),
+    };
+    const hooks = createDailyLimitPriority({ getEvents: () => [], record: () => {}, log: () => {} });
+    const commander = withCaptchaGuard(raw, hooks);
+    const worker = createOrchestrator({ commander, page: {}, argv: { jobApplicationInterval: 60, browserPort: 9573 },
+      qaDB: { addOrUpdateQA: async () => actions.push('save') }, getEvents: () => [], onApplicationSent: () => sent++ });
+    await expect(worker.runMainLoop()).rejects.toThrow('Finished observing recovered loop');
+    expect(checks).toBeGreaterThan(1);
+    expect(actions).toEqual([]);
+    expect(sent).toBe(0);
+  });
+
+  test('a failed application-state read without navigation evidence still stops before any page action', async () => {
+    const actions = [];
+    const commander = { getUrl: () => 'https://hh.ru/search/vacancy?resume=ru', shouldAbort: () => false,
+      safeEvaluate: async () => ({ success: false, navigationError: false, value: null }),
+      wait: async () => actions.push('wait'), goto: async () => actions.push('navigate'),
+    };
+    const worker = createOrchestrator({ commander, page: {}, argv: { jobApplicationInterval: 60, browserPort: 9573 },
+      qaDB: { addOrUpdateQA: async () => {} }, getEvents: () => [] });
+    await expect(worker.runMainLoop()).rejects.toThrow('Could not read application errors');
+    expect(actions).toEqual([]);
   });
 
   test('a restarted orchestrator blocks both search and open-form routes even without a visible banner', async () => {

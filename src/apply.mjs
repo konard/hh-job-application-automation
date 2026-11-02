@@ -281,6 +281,8 @@ process.on('SIGUSR2', () => questionnaireMode.setEnabled(false));
   if (isTimeoutError(error)) {
     return shutdown(`Timeout while waiting for page elements: ${error.message}`);
   }
-  console.error('Error occurred:', error.message);
+  recordBrowserLifecycle('worker_error', { code: error.code, name: error.name,
+    expectedNavigation: Boolean(error.expectedNavigation), stack: error.stack ?? error.message });
+  console.error('Error occurred:', error.stack ?? error.message);
   return shutdown('Unexpected error', 1);
 });

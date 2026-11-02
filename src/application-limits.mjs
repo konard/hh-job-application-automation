@@ -16,10 +16,14 @@ export function isDailyApplicationLimit(error) {
 
 export function applicationStateReadError(commander, result, url) {
   const error = new Error('Could not read application errors; keeping the current page');
+  error.code = 'APPLICATION_STATE_READ_FAILED';
   error.expectedNavigation = Boolean(result.navigationError || commander.getUrl() !== url ||
     commander.shouldAbort?.() || commander.navigationManager?.isNavigating());
   return error;
 }
+
+/** Only a known interrupted read is retryable; an unreadable stable page is still an error. */
+export const isApplicationStateNavigation = error => error?.code === 'APPLICATION_STATE_READ_FAILED' && error.expectedNavigation === true;
 
 /** Runs in the page: only rendered error/alert elements count, never vacancy text or hidden templates. */
 export function readVisibleApplicationLimit({ dismissCaptcha = false, knownLimitUntil = 0, expectedUrl = '' } = {}) {
