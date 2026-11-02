@@ -297,7 +297,7 @@ resume
         'Developing a tour database management system for entering high-quality and unified descriptions of tour components and synchronizing data with the systems of dozens of the largest tour operators in Russia.'
         ' '
         'Skills used:'
-        'AJAX, ASP.NET WebForms, C#, CSS, Excel, HTML, JavaScript (JS), Microsoft SQL Server (MS SQL, MSSQL), SourceSafe, Subversion, Visual Studio, WinForms'
+        'AJAX, ASP.NET WebForms, C# (csharp), CSS, Excel, HTML, JavaScript (JS), Microsoft SQL Server (MS SQL, MSSQL), SourceSafe, Subversion, Visual Studio, WinForms'
     job
       company 'Ragnarok Online Game Server "AsgardRo"'
       position 'Lead Developer'
