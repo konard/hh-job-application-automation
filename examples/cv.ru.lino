@@ -276,7 +276,7 @@ resume
         '3. Разработка подсистемы поиска и бронирования туров для физических и юридических лиц.'
         ' '
         'Использовавшиеся навыки:'
-        'ASP.NET MVC, C#, CSS, DevExpress, HTML, JavaScript (JS), jQuery, Microsoft SQL Server (MS SQL, MSSQL), Silverlight, Subversion, Visual Studio, WCF, WinForms'
+        'ASP.NET MVC, C# (csharp), CSS, DevExpress, HTML, JavaScript (JS), jQuery, Microsoft SQL Server (MS SQL, MSSQL), Silverlight, Subversion, Visual Studio, WCF, WinForms'
     job
       company 'ООО «АльпОнлайн»'
       position 'Программист-разработчик'
