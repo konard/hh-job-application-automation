@@ -121,7 +121,7 @@ resume
         'Участие в разработке приложения Convertinator, в частности конвертация данных из ClickUp в формат для универсального импорта в Kaiten.'
         ' '
         'Используемые технологии:'
-        'Ansible, Anthropic Claude Code CLI, Capacitor, Cursor, Docker, Elasticsearch, Electron, GitHub, GitHub Actions, GitHub Actions Runner, GitHub Copilot, Grafana, Kibana, Kubernetes (k8s), Node.js (NodeJS), OpenAI Codex CLI, PostgreSQL (Postgre SQL, Postgres), Prometheus, RabbitMQ, React (React.js, ReactJS), Redis, Redux, Selectel Cloud, Sentry, Terraform, Visual Studio Code, Yandex Cloud'
+        'Ansible, Anthropic Claude Code CLI, Capacitor, Cursor, Docker, Elasticsearch (Elastic Search), Electron, GitHub, GitHub Actions, GitHub Actions Runner, GitHub Copilot, Grafana, Kibana, Kubernetes (k8s), Node.js (NodeJS), OpenAI Codex CLI, PostgreSQL (Postgre SQL, Postgres), Prometheus, RabbitMQ, React (React.js, ReactJS), Redis, Redux, Selectel Cloud, Sentry, Terraform, Visual Studio Code, Yandex Cloud'
     job
       company 'Deep.Foundation'
       position 'Сооснователь, технический директор'
