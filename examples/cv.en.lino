@@ -277,7 +277,7 @@ resume
         '3. Developing a subsystem for searching and booking tours for individuals and legal entities.'
         ' '
         'Skills used:'
-        'ASP.NET MVC, C#, CSS, DevExpress, HTML, JavaScript (JS), jQuery, Microsoft SQL Server (MS SQL, MSSQL), Silverlight, Subversion, Visual Studio, WCF, WinForms'
+        'ASP.NET MVC, C# (csharp), CSS, DevExpress, HTML, JavaScript (JS), jQuery, Microsoft SQL Server (MS SQL, MSSQL), Silverlight, Subversion, Visual Studio, WCF, WinForms'
     job
       company 'AlpOnline LLC'
       position 'Software Developer'
