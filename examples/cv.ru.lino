@@ -296,7 +296,7 @@ resume
         'Разработка системы управления базой данных туров для ввода качественных и унифицированных описаний компонентов тура и синхронизации данных с системами десятков крупнейших туроператоров России.'
         ' '
         'Использовавшиеся навыки:'
-        'AJAX, ASP.NET WebForms, C#, CSS, Excel, HTML, JavaScript (JS), Microsoft SQL Server (MS SQL, MSSQL), SourceSafe, Subversion, Visual Studio, WinForms'
+        'AJAX, ASP.NET WebForms, C# (csharp), CSS, Excel, HTML, JavaScript (JS), Microsoft SQL Server (MS SQL, MSSQL), SourceSafe, Subversion, Visual Studio, WinForms'
     job
       company 'Игровой сервер Ragnarok Online «AsgardRo»'
       position 'Ведущий разработчик'
