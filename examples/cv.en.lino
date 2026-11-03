@@ -162,7 +162,7 @@ resume
         '9. Smart store as web application with products showcase accessible through voice and text chat using GPT-4o as assistant foundation.'
         ' '
         'Skills, technologies, and tools:'
-        'Android, Android Studio, Apache Cordova, C/C++, Capacitor, CSS, Docker, Elasticsearch, Electron, Express (Express.js), Git, GitHub, GitHub Actions, GraphQL, Hasura, Hasura Storage, HTML, iOS, JavaScript (JS), jsdoc, Kotlin, Kubernetes (k8s), LaTeX, Linux, macOS, minio, Next.js, npm (JS/TS), OBS-Studio, PHP, PostgreSQL (Postgre SQL, Postgres), PyPI, Python, React (React.js, ReactJS), Rust, Selectel Cloud, SQL, TeX, TypeScript (TS), Unix shell, Visual Studio Code, Windows, Xcode'
+        'Android, Android Studio, Apache Cordova, C/C++, Capacitor, CSS, Docker, Elasticsearch (Elastic Search), Electron, Express (Express.js), Git, GitHub, GitHub Actions, GraphQL, Hasura, Hasura Storage, HTML, iOS, JavaScript (JS), jsdoc, Kotlin, Kubernetes (k8s), LaTeX, Linux, macOS, minio, Next.js, npm (JS/TS), OBS-Studio, PHP, PostgreSQL (Postgre SQL, Postgres), PyPI, Python, React (React.js, ReactJS), Rust, Selectel Cloud, SQL, TeX, TypeScript (TS), Unix shell, Visual Studio Code, Windows, Xcode'
     job
       company 'Abracar LLC'
       position 'Programmer'
