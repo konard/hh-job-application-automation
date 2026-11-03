@@ -1,5 +1,9 @@
 # Requirements
 
+For current hands-on startup, configuration, feature commands and full shutdown, use the
+[operating guide](../OPERATING_GUIDE.md) and [CLI reference](../CLI_REFERENCE.md).
+The audit dates and status rows below retain their historical context.
+
 Latest delivery audit: [2026-11-01](audit-2026-11-01.md), including the optional RAM questionnaire
 mode, bilingual CV maintenance, industry selection and salary ladder. Historical statuses below
 retain their original audit dates.

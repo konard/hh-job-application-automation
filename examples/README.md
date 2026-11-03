@@ -1,4 +1,7 @@
-# CV examples
+# CV examples and operator profile
+
+[`operator.lenv`](operator.lenv) is the reusable silent startup profile. See the
+[operating guide](../docs/OPERATING_GUIDE.md) for its command and full workflow.
 
 `cv.ru.lino` and `cv.en.lino` are snapshots of the owner's saved HH.ru CVs in Links Notation. They are published with the owner's permission. Drafts awaiting review are kept separately and are not presented as saved CVs.
 
@@ -8,34 +11,27 @@ HH.ru changes are prepared one position at a time. The owner reviews and saves e
 
 ## Synchronization status
 
-Snapshot on 2026-10-28, after the latest verified Russian About save:
+Verified on 2026-11-03 against the actual saved exports:
 
-- The Russian CV contains the saved AI-first Evirma, Capico and Kaiten descriptions, including the owner's edits to the proposed text.
-- Both saved CVs contain the same 12 jobs, with matching order and dates. The latest three roles' technology lists match across languages, including Claude Code and Codex in all three and Hive Mind in Evirma.
-- English Kaiten has the Development Team Lead title and July 2024–November 2025 dates, restoring the Evirma → Capico → Kaiten order. Its saved description includes the owner's addition about automatic conflict resolution for frequent merges from team members and AI agents. The owner also saved the equivalent Russian sentence; both snapshots include it.
-- Evirma is complete in both languages: English contains “self-developed Hive Mind,” Russian contains “Hive Mind собственной разработки,” and each language-specific entry is selected only in its own CV.
-- Capico is complete in both languages as AI Senior Engineer, November 2025–May 2026. The English copy is saved, the original Russian entry is deselected from English, and the Russian CV retains its original description.
-- Older English job descriptions are unchanged from the initial export; the additional details listed below are retained for later Russian review.
+- Both snapshots contain the same 12 positions, matching order and employment dates.
+- Both About inventories contain 201 technologies, with no missing entries or duplicate canonical names.
+- Position lists have no pending counterpart/formatting differences. Verified aliases appear inline;
+  categories are alphabetical, `k8s` is lowercase, and `npm (JS/TS)` stays distinct from Nginx Proxy Manager.
+- The dangling `Yandex Cloud/` entry has been removed. It is not a second technology; internal slashes
+  in real names such as `CI/CD` and `C/C++` are preserved.
+- Both Kaiten descriptions include the owner's billing-system work. English Evirma is `Evirma LLC`,
+  and ELAR's English narrative names the Interaction Management System integration correctly.
+- City, company website, industry IDs/labels and dates are retained by Links Notation import/export.
+  Biography, job narratives and owner edits are preserved.
+- These are saved snapshots, not proposed drafts. A closed editor alone never counts as a Save.
 
-A subsequent raw technology audit found incomplete About inventories and duplicate items that the
-previous deduplicating parser had hidden. The reviewed plan consolidates 201 technical entries in
-both About sections, preserves their biography/personal text, removes duplicates in both languages'
-Deep.Foundation and LinksPlatform lists, and adds Lua to Russian ArtBridge from its English counterpart.
-Russian About has now been saved and independently verified from fresh exports. It contains all
-201 technical entries and the owner's additional wording about other water-related technologies.
-English About and the position-list cleanups still require the owner's browser Save.
-Canonical technology names use inline parentheses only for verified alternative spellings actually
-found in the local vacancy corpus and absent elsewhere in the CV. The old separate name-variant
-section is removed in the proposed About updates.
-The revised drafts alphabetize each technical category, use lowercase `k8s`, and distinguish
-`npm (JS/TS)` from `Nginx Proxy Manager (NPM)`. Their introductions now include AI engineering,
-teaching effective AI use, and interest in water treatment, medical, mining and space technologies.
-Russian introduction changes are saved; their English counterpart is prefilled for review.
-Snapshots remain actual saved data. A transient export timeout initially stalled the queue;
-the Russian Save has been recovered and its exact owner edits retained.
-Run `bun run cv -- technologies --hh-browser-port 9351` for a fresh audit. Its verification covers
-technology inventories, not the older prose differences below. The example files continue to show
-only actual saved content, and are refreshed after each confirmed Save.
+This is a dated verification, not a promise that later edits need no review. Run
+`bun run cv -- technologies` while an authenticated automation browser is available for a fresh
+private audit. Add `--review --snapshots-out examples` to review each proposed update in the CV
+slot; the owner presses final Save. Publishing snapshots remains a separate explicit opt-in.
+A technology audit verifies inventories and position lists, not sentence-for-sentence equivalence
+of older translated narratives. The retained English details below remain available for a later
+separately reviewed Russian expansion.
 
 ## English details to retain and consider adding to Russian later
 
@@ -46,7 +42,5 @@ These details already exist in the English CV. Keep them while editing English; 
 - **Pegas:** form validation includes guided help.
 - **ArtBridge:** Lua is listed among the technologies used.
 
-The ELAR English description incorrectly expands “СУВ” as “database management system.”
-[The platform developer's project page](https://cinimex.ru/projects/gazprombank/) identifies it as
-“Система управления взаимодействием,” Gazprombank's integration platform. A correction in both
-CVs is prepared for separate owner review; this note does not claim that it is already saved.
+ELAR's saved English description now uses “Interaction Management System, IMS” for the
+Gazprombank integration platform; the obsolete “database management system” expansion was corrected.

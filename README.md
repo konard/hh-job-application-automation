@@ -1,6 +1,27 @@
 # hh-apply
 Automation of job application in hh.ru
 
+## Start here
+
+The [operating guide](docs/OPERATING_GUIDE.md) explains setup, the exact startup profiles,
+questionnaire controls, background runs, full shutdown, answers/salary, CV maintenance, recovery
+and every auxiliary feature. The [CLI reference](docs/CLI_REFERENCE.md) lists all 47 application
+options and their actual defaults. [`.lenv.example`](.lenv.example) lists every mapped environment key.
+
+With dependencies installed and your cover letter reviewed:
+
+```bash
+# Silent visual alerts, manual CAPTCHA handling, browser review of uncertain answers.
+bun run apply -- --configuration examples/operator.lenv
+
+# Optional unattended stretch: defer questionnaires in RAM for this run.
+bun run apply -- --configuration examples/operator.lenv --no-questions
+```
+
+The checked-in [operator profile](examples/operator.lenv) contains no credentials. A normal run
+allows questionnaires; `--no-questions` is optional. Test mode sends real applications too.
+See [full shutdown](docs/OPERATING_GUIDE.md#stop-the-entire-app) before leaving detached workers running.
+
 ## Video demonstration
 
 https://github.com/user-attachments/assets/6884b2fe-e322-4358-aab8-7f3c20ccdc46
@@ -209,8 +230,9 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
    # Enable verbose logging by default
    VERBOSE: true
 
-   # Seconds between opened vacancies (default 240; a random extra up to a quarter is added)
-   JOB_APPLICATION_INTERVAL: 300
+   # 0 is the default: adaptive pacing within 1–4 minutes, including random variation.
+   # A positive value selects a fixed interval in seconds instead.
+   JOB_APPLICATION_INTERVAL: 0
 
    # Keep the browser open between runs (closed after 30 idle minutes)
    KEEP_BROWSER_OPEN: true
@@ -224,11 +246,15 @@ are excluded. If search cards reorder, the previewed vacancy is found again by I
    bun run apply
    ```
 
-**Configuration priority:**
-1. CLI arguments (highest priority) - e.g., `--verbose`
-2. Environment variables - e.g., `export VERBOSE=true`
-3. `.lenv` file - local configuration
-4. Default values (lowest priority)
+**Configuration priority with the installed `lino-arguments` library:**
+1. Explicit CLI arguments (highest priority), e.g. `--no-notification-sound`.
+2. `--configuration <file>` / `-c <file>`, when supplied.
+3. The local `.lenv` file (it overrides matching ambient environment variables).
+4. Ambient environment variables not replaced by those files.
+5. Built-in defaults (lowest priority).
+
+Use an explicit CLI flag when overriding an existing local setting for one run. Auxiliary commands
+with their own argument parser do not automatically accept the main application's flags.
 
 **Note:** The `.lenv` file is gitignored to keep your personal settings private.
 
@@ -256,7 +282,7 @@ By default, the script will, on the short popup and on the full form alike:
 To send forms with non-exact answers unattended anyway, use the `--auto-submit-vacancy-response-form` flag:
 
 ```bash
-bun run apply -- --auto-submit-vacancy-response-form --verbose
+bun run apply -- --message-file data/cover-letter.txt --auto-submit-vacancy-response-form --verbose
 ```
 
 **Safety Note:** The default behavior (manual review) is recommended to ensure test answers are correct before submission.
@@ -329,7 +355,8 @@ bun run apply -- --message-file data/cover-letter.txt --no-update-resume-aliases
 ```
 
 Individual switches are `--no-collect-vacancies`, `--no-compare-resume`, and
-`--no-update-resume-aliases`; `--no-vacancy-insights` disables the whole pre-application check.
+`--no-update-resume-aliases`; `--no-vacancy-insights` disables the analysis bundle. The vacancy-page
+entry route is controlled independently by `--apply-from-vacancy-page`.
 The comparisons and statistics run locally and use no AI tokens.
 
 Optional Oxion credentials belong in ignored `.lenv`: `OXION_BASE_URL`, `OXION_API_KEY`, and
@@ -343,7 +370,7 @@ explicitly, and a different model is never substituted silently. Credentials are
 To check what will be sent, apply to a single vacancy step by step:
 
 ```bash
-bun run apply -- --test-mode
+bun run apply -- --message-file data/cover-letter.txt --test-mode --max-applications 1
 ```
 
 By default the run asks before sending a form with questions (`--confirm send`) and waits
@@ -580,8 +607,9 @@ bun run skipped -- --clear resume_not_visible
 bun run skipped -- --clear 138295841
 ```
 
-The file holds only public vacancy data (IDs, titles from the vacancy card, the employer's link) and
-can be committed like `data/deferred-questions.lino`.
+Keep these runtime records and `data/deferred-questions.lino` local, alongside your private answers.
+They can be modified in the working tree because they are historically tracked; stage source and
+sanitized CV snapshots explicitly rather than publishing the runtime stores with `git add .`.
 
 A vacancy with hh.ru's notice «поменяйте видимость резюме на «Видно всем работодателям…»» is skipped
 without asking (`resume_not_visible`). Only a rendered notice counts: every response popup carries it
@@ -696,7 +724,7 @@ bun run answer-chats -- --watch                        # every chat waiting for 
 ```
 
 Chats open in their own browser slot (port 9340), logged in with the hh.ru session of the automation
-browser. For the message waiting for an answer the reply is typed into the message field, never sent:
+browser. Without `--auto-send`, replies are typed into the message field for your review:
 
 - a template message (the same text from many companies, greeting and signature aside) gets its saved
   reply from `data/chat-templates.lino`, or one of the replies you have given to it before, picked at
@@ -882,7 +910,7 @@ See [the requirements](docs/requirements/experience-sync.md).
 
 ```bash
 bun run resume                          # the most recently updated resume
-bun run resume -- --resume <hash>       # a specific one, from https://hh.ru/resume/<hash>
+bun run resume -- --resume YOUR_RESUME_HASH       # a specific one, from https://hh.ru/resume/YOUR_RESUME_HASH
 bun run resume -- --formats pdf,doc,rtf,txt --out ~/cv
 ```
 
@@ -899,21 +927,27 @@ because it holds personal data:
 | `resume.json` | Name, position, update date, key skills, jobs and the collected stack |
 | `stack.md` | Every technology once, key skills, "Технические навыки" categories, and per job the listed technologies ("Используемые технологии", "Использовавшиеся навыки", …) plus those only mentioned in the description |
 
-`bun run resume -- --all` exports every resume of the account, each to `<out>/<hash>/`.
+`bun run resume -- --all` exports every resume of the account, each to `<out>/YOUR_RESUME_HASH/`.
 
 ### The Resume as .lino Files (Export and Import)
 
 ```bash
 bun run cv -- export                       # every resume to examples/cv.<language>.lino
 bun run cv -- import --lang en             # bring hh.ru in line with examples/cv.en.lino
-bun run cv -- import ~/my-cv.ru.lino --resume <hash>
-bun run cv -- import ~/my-cv.en.lino --resume <hash> --one --detach-extra
-bun run cv -- edit logs/experience/my-change.json --resume <hash> --snapshots-out examples
+bun run cv -- import ~/my-cv.ru.lino --resume YOUR_RESUME_HASH
+bun run cv -- import ~/my-cv.en.lino --resume YOUR_RESUME_HASH --one --detach-extra
+bun run cv -- edit logs/experience/my-change.json --resume YOUR_RESUME_HASH --snapshots-out examples
 bun run cv -- watch --hh-port 9351 --out examples   # observe, never edit or navigate
-bun run cv -- batch ~/cv-changes.json --resume <hash> --snapshots-out examples
-bun run cv -- technologies --hh-browser-port 9351  # private bilingual technology audit and drafts
-bun run cv -- technologies --hh-browser-port 9351 --review --snapshots-out examples
+bun run cv -- batch ~/cv-changes.json --resume YOUR_RESUME_HASH --snapshots-out examples
+bun run cv -- technologies                  # private bilingual technology audit and drafts
+bun run cv -- technologies --review --snapshots-out examples
 ```
+
+The export source is normally the authenticated main browser on port 9322. Editing/review/watch
+commands attach to an existing CV slot (9351 by default); the
+[operating guide](docs/OPERATING_GUIDE.md#cv-export-editing-and-technology-maintenance) shows how to
+open it without starting applications. `--hh-browser-port` selects the export/login source,
+whereas `--hh-port` selects the editor.
 
 Each resume becomes one indented file: title, «Навыки», «Обо мне» and the jobs, a text line
 per line (`' '` is an empty line), dates as `2026-05` or `present`. The Russian and English
@@ -1002,31 +1036,19 @@ Browser workflow checks use an isolated fixture, never a real account:
 
 ### Captcha, Pauses and the Chat Panel
 
-- **Captcha**: when hh.ru shows a captcha, the run touches nothing on the page (no clicks,
-  page scripts or navigation) and waits until you have solved it in the browser.
-- **Captcha prefill**: meanwhile local Claude Code (Haiku) and Codex (the newest Luna model of
-  your account) read the captcha picture, only the picture and in its original size (copied from
-  the already loaded image, no new request; a screenshot of the picture is the fallback), the way
-  [image-to-number](https://github.com/link-assistant/image-to-number) does, and their guess is
-  typed into the empty captcha field: one answer when they agree, both as `haiku|luna` when they
-  don't. **Auto-send once** (`--captcha-auto-send`, on by default): on the first picture of a
-  captcha only Haiku's reading is typed in and «Отправить» is clicked, once. If hh.ru does not
-  accept it (a new picture appears), nothing more is sent: from then on the guess is only
-  prefilled, and you check it, fix it and send it yourself. With `--no-captcha-auto-send` it is
-  never sent. The picture is taken once
-  it has loaded and the dialog has faded in, and kept in `logs/captcha/` for checking. Each
-  picture is read until there is an answer, at most three times; a field you are typing in is
-  left alone. The only clicks are the one that focuses the field for typing and the single send. A reply that is not a captcha answer (one to three Russian or English words,
-  e.g. "злеат вьюнить") is dropped: Luna usually declines, Haiku usually answers. Both run at
-  low reasoning effort (`READER_EFFORT` in `src/captcha-solver.mjs`), whatever your own Claude
-  Code and Codex settings are. Needs `claude` and `codex` on `PATH`; turn it off with
-  `--no-captcha-prefill`.
-- **Unconfirmed application**: if hh.ru does not mark a vacancy as responded after sending,
-  the run waits for you (or stops in unattended runs) instead of opening the next vacancy.
-- **Pauses**: after every opened vacancy, sent or not, the next one waits the same even
-  pause (default 4-5 minutes), so hh.ru sees few requests and 200 applications a day still fit.
-  The pause counts from the start of work on the vacancy, so an application takes 4-5 minutes in
-  all, under 7: a long form or a captcha is not followed by a whole pause, only by 30-60 s.
+- **CAPTCHA**: the operator profile disables prefill and automatic sending; the run waits for
+  you to finish the challenge in the indicated browser. A confirmed daily application limit
+  takes priority: the unusable dialog is dismissed, answers are preserved and the account waits.
+- **Optional assistance settings**: the implementation also exposes `--captcha-prefill` and
+  `--captcha-auto-send`, both enabled in the built-in defaults, unlike the operator profile.
+  They depend on configured local model tooling; a configured model name does not establish
+  availability. Use `--no-captcha-prefill --no-captcha-auto-send` to select manual handling explicitly.
+- **Unconfirmed application**: a click alone is not success. If HH does not confirm the application,
+  the worker waits for review or stops instead of counting it and opening another vacancy.
+- **Pauses**: adaptive pacing defaults to a two-minute starting interval and moves within 1–4 minutes,
+  including random variation. Work already spent on a vacancy counts toward its interval; manual
+  reviews, login and CAPTCHA waits can extend the actual cycle. A positive
+  `--job-application-interval` selects a fixed interval instead. Server account limits have their own pause.
 - **Stats**: `bun run stats` (`-- --days <n>`, 14 by default) shows each day: applications, per
   hour, the time of work on one (typical and longest), how many took over 7 minutes with the pause,
   captchas (how many AI solved, and per 100 applications), skipped vacancies, rejections read (how
@@ -1055,76 +1077,46 @@ advertised; the ladder does not guess tax treatment or convert unknown project/s
 If you want to skip vacancies that require any additional questionnaire fields beyond the cover letter, use:
 
 ```bash
-bun run apply -- --ignore-vacancies-with-questionnaire --verbose
+bun run apply -- --message-file data/cover-letter.txt --ignore-vacancies-with-questionnaire --verbose
 ```
 
 This works for both modal response forms and full `vacancy_response` pages. The vacancy will be skipped as soon as the script detects extra questionnaire fields, and kept in `data/skipped-vacancies.lino` (reason `questionnaire_ignored`; the former `data/ignored-vacancy-ids.txt` is moved there on the next run).
 
 ### Using Playwright (default)
 
-Using bun script (with verbose logging for debugging):
 ```bash
-bun run puppeteer -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --verbose 2>&1 | tee log.txt
+bun run playwright -- --configuration examples/operator.lenv
 ```
 
-Or explicitly specify Playwright:
-```bash
-bun run playwright -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --verbose 2>&1 | tee log.txt
-```
-
-With custom search parameters:
+Or use the main entry point explicitly:
 
 ```bash
-bun run puppeteer -- --url "https://hh.ru/search/vacancy?from=resumelist&order_by=salary_desc&work_format=REMOTE&enable_snippets=false&professional_role=96&professional_role=104&professional_role=125&salary=375000" --manual-login --job-application-interval 5 --verbose 2>&1 | tee log.txt
+bun run apply -- --engine playwright --configuration examples/operator.lenv
 ```
 
-And for Playwright:
+For your own search, copy its URL from hh.ru and quote it:
 
 ```bash
-bun run playwright -- --url "https://hh.ru/search/vacancy?from=resumelist&order_by=salary_desc&work_format=REMOTE&enable_snippets=false&professional_role=96&professional_role=104&professional_role=125&salary=375000" --manual-login --job-application-interval 5 --verbose 2>&1 | tee log.txt
+bun run apply -- --configuration examples/operator.lenv \
+  --url 'https://hh.ru/search/vacancy?resume=YOUR_RESUME_HASH&from=resumelist'
 ```
 
-With custom message:
-
-```bash
-bun run apply -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --message "Your custom application message here" --verbose
-```
-
-With multi-line message from file:
-
-```bash
-bun run apply -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --message-file ./message.txt --verbose
-```
-
-Direct execution:
-```bash
-./src/apply.mjs --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --verbose
-```
-
-Using globally installed CLI (after `bun install -g`):
-```bash
-hh-apply --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --verbose
-```
+The operator profile uses adaptive 1–4 minute pacing. `--job-application-interval SECONDS`
+selects a fixed interval instead. `--verbose` adds debugging output. The
+[operating guide](docs/OPERATING_GUIDE.md#foreground-background-and-live-mode-switches) shows
+how to capture logs and a worker PID without losing live questionnaire controls.
 
 ### Using Puppeteer
 
-Using bun script (with verbose logging for debugging):
 ```bash
-bun run puppeteer -- --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --verbose
+bun run puppeteer -- --configuration examples/operator.lenv
 ```
 
-With custom message:
+Or explicitly:
 
 ```bash
-bun run apply -- --engine puppeteer --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --message "Your custom application message here" --verbose
+bun run apply -- --engine puppeteer --configuration examples/operator.lenv
 ```
 
-Direct execution:
-```bash
-./src/apply.mjs --engine puppeteer --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --verbose
-```
-
-Using globally installed CLI (after `bun install -g`):
-```bash
-hh-apply --engine puppeteer --url "https://hh.ru/search/vacancy?resume=80d55a81ff0171bfa80039ed1f743266675357&from=resumelist" --manual-login --job-application-interval 5 --verbose
-```
+Both engines use the same configured profile by default. Run one worker per profile; switch engines
+between runs. For an isolated profile, use the CLI option `--user-data-dir /path/to/profile`.

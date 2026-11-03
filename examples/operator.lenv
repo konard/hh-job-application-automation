@@ -1,0 +1,27 @@
+# Reusable settings for the interactive browser workflow described in docs/OPERATING_GUIDE.md.
+# Use: bun run apply -- --configuration examples/operator.lenv
+# Add --no-questions only when you want questionnaires deferred in RAM for this run.
+# This file contains no credentials or personal salary/contact values.
+MESSAGE_FILE: data/cover-letter.txt
+KEEP_BROWSER_OPEN: true
+CONFIRM: none
+NOTIFY_SOUND: false
+CAPTCHA_PREFILL: false
+CAPTCHA_AUTO_SEND: false
+AUTO_SEND_EXACT_ANSWERS: true
+AUTO_SUBMIT_VACANCY_RESPONSE_FORM: false
+ON_MISSING_ANSWERS: wait
+AUTO_REUSE_ANSWERS: false
+CLEAR_REJECTIONS: true
+ASK_REJECTION_REASON: true
+PROCESS_CHATS: false
+JOB_APPLICATION_INTERVAL: 0
+SALARY_LADDER: true
+VACANCY_INSIGHTS: true
+APPLY_FROM_VACANCY_PAGE: true
+VACANCY_PREVIEW_SECONDS: 3
+COLLECT_VACANCIES: true
+COMPARE_RESUME: true
+UPDATE_RESUME_ALIASES: true
+TRACE: true
+TRACE_RETENTION_DAYS: 3

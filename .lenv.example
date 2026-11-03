@@ -1,144 +1,200 @@
-# Default job application automation settings for hh.ru
+# Main application settings. See docs/OPERATING_GUIDE.md and docs/CLI_REFERENCE.md.
+# Copy to .lenv only if you do not already have one; uncomment the values you want.
+# For the ready-to-use silent/manual-CAPTCHA profile instead:
+#   bun run apply -- --configuration examples/operator.lenv
 #
-# This is an example configuration file for the hh-apply CLI tool.
-# Copy this file to .lenv and uncomment/modify the options you want to use.
-#
-# The .lenv file uses Links Notation format with ': ' (colon-space) separator.
-# Configuration priority (highest to lowest):
-# 1. CLI arguments (e.g., --port 8080)
-# 2. Environment variables (e.g., export PORT=8080)
-# 3. .lenv file (this file when renamed to .lenv)
-#
-# For more details, see: https://github.com/link-foundation/lino-arguments
+# Actual load order: ambient environment, then .lenv (overrides it), then an optional
+# --configuration FILE (overrides .lenv); explicit CLI arguments win over all of these.
+# The built-in defaults below apply when no configured value is present.
+# --questions/--no-questions and --user-data-dir are CLI-only; there is no QUESTIONS
+# or USER_DATA_DIR environment mapping in the current main CLI.
+# .lenv is ignored by Git. Keep real credentials and personal settings there.
 
-# Browser automation engine to use
-# Choices: 'playwright' or 'puppeteer'
-# Default: playwright
-# ENGINE: playwright
+# Browser automation engine to use: playwright or puppeteer
+# Built-in default: playwright
+# ENGINE: "playwright"
 
-# Starting URL for job search
-# Default: suggested vacancies of the most recently updated resume
-# START_URL: https://hh.ru/search/vacancy?resume=YOUR_RESUME_ID&from=resumelist
+# Vacancy search URL (default: suggested vacancies for the Russian CV, or the latest CV if unavailable)
+# Built-in default: unset
+# START_URL: "https://hh.ru/search/vacancy?resume=YOUR_RESUME_HASH&from=resumelist"
 
-# Skip the automatic login and wait for a manual one in the browser window
-# Default: false
-# MANUAL_LOGIN: true
+# Matching search: start at the target salary, lower by 50000 RUB after exhausting each tier, keep unspecified pay; exclude caps below half target
+# Built-in default: true
+# SALARY_LADDER: true
 
-# Import the hh.ru login only from this browser/profile (e.g. "chrome", "yandex Default")
-# Default: the best detected one
-# LOGIN_FROM: chrome
+# Do not import logins from other browsers; wait for a manual login instead
+# Built-in default: false
+# MANUAL_LOGIN: false
 
-# Keep the browser running after the script exits and reuse it on the next run
-# Default: false (the browser is closed on exit)
-# KEEP_BROWSER_OPEN: true
+# Only use logins from browser profiles whose name contains this text (e.g. "chrome Default")
+# Built-in default: unset
+# LOGIN_FROM: ""
 
-# Minutes after which a kept-open browser closes itself when unused
-# Default: 30
+# Keep the browser running after exit so the next run reuses it
+# Built-in default: false
+# KEEP_BROWSER_OPEN: false
+
+# Minutes after which a kept-open, unused browser is closed
+# Built-in default: 30
 # BROWSER_IDLE_TIMEOUT: 30
 
 # Remote debugging port of the automation browser
-# Default: 9322
+# Built-in default: 9322
 # BROWSER_PORT: 9322
 
-# Supervised run preset: MAX_APPLICATIONS 1 and also confirm answers
-# Default: false
-# TEST_MODE: true
+# Preset for a supervised run: --max-applications 1 and also confirm answers
+# Built-in default: false
+# TEST_MODE: false
 
-# Steps to confirm on stdin: answers, cover-letter, send, popup (comma-separated), or none
-# Default: send (forms with questions are sent after you confirm)
-# CONFIRM: answers,send
+# Steps to confirm on stdin, comma-separated: answers, cover-letter, send, popup, or none
+# Built-in default: send
+# CONFIRM: "send"
 
-# Play notification sounds independently of visual alerts
-# Default: true. Set false to mute; restore true or remove this setting to enable sound again.
+# Play a sound when attention is needed; disable sound while keeping visual alerts
+# Built-in default: true
 # NOTIFY_SOUND: false
 
-# Questions without a saved answer: wait (for you to answer them) or skip (the vacancy)
-# Default: wait
-# ON_MISSING_ANSWERS: wait
+# Questions without a saved answer: wait for the user to answer them, or skip the vacancy
+# Built-in default: wait
+# ON_MISSING_ANSWERS: "wait"
 
-# Keep the automation browser to one tab: other tabs are closed when a run attaches, new ones
-# as they open
-# Default: true
-# SINGLE_TAB: false
+# Send a form with questions without asking when every question is a saved question word for word and autofill answered it with the saved answer; other forms are autofilled and wait for you
+# Built-in default: true
+# AUTO_SEND_EXACT_ANSWERS: true
 
-# Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna)
-# for you to check and send
-# Default: true
+# Select and verify the English CV for dollar pay or English questions; use Russian for Russian applications
+# Built-in default: true
+# AUTO_SELECT_RESUME_LANGUAGE: true
+
+# When both answer variants exist, resolve a final-period conflict with or without the period; first saves keep their wording
+# Built-in default: with
+# ANSWER_FINAL_PERIOD: "with"
+
+# Answer the viewed-but-not-applied vacancy survey with "Maybe I'll apply later"
+# Built-in default: true
+# AUTO_ANSWER_VIEWED_VACANCY: true
+
+# How long the page has no requests before it counts as ready for the next step (browser-commander waits 30000 by default)
+# Built-in default: 2000
+# NETWORK_IDLE_MS: 2000
+
+# Answer the chat hh.ru opens after an application (a recruiter bot's questions) before the next vacancy: perfect matches of saved answers are sent (with --auto-send-exact-answers), others wait for you in the panel
+# Built-in default: true
+# ANSWER_INSTANT_CHATS: true
+
+# When a recruiter bot offers the answers given to it before («Используем эти ответы?»), choose «Да» when each is your saved answer and «Нет» when one differs; by default they are compared and you choose
+# Built-in default: false
+# AUTO_REUSE_ANSWERS: false
+
+# Keep the automation browser to one tab: other tabs are closed when the run attaches, new ones as they open
+# Built-in default: true
+# SINGLE_TAB: true
+
+# Prefill the captcha with the guesses of local Claude Code (Haiku) and Codex (latest Luna) for you to check and send
+# Built-in default: true
 # CAPTCHA_PREFILL: false
 
-# With CAPTCHA_PREFILL: send Haiku's reading of a captcha once; if hh.ru does not accept it,
-# the captcha is only prefilled and waits for you
-# Default: true
+# Collect private vacancy descriptions, compare the résumé and add verified technology aliases; application entry is controlled separately
+# Built-in default: true
+# VACANCY_INSIGHTS: true
+
+# Show and collect the vacancy page, then open its application directly; disable to return to search before opening the form
+# Built-in default: true
+# APPLY_FROM_VACANCY_PAGE: true
+
+# Show the collected vacancy before its application (seconds, 0 disables the pause)
+# Built-in default: 3
+# VACANCY_PREVIEW_SECONDS: 3
+
+# Cache full vacancy descriptions locally in Links Notation (never committed)
+# Built-in default: true
+# COLLECT_VACANCIES: true
+
+# Print a separate technology coverage comparison with the résumé before each application
+# Built-in default: true
+# COMPARE_RESUME: true
+
+# Add verified alternate spellings of existing résumé technologies to the résumé; never infer new experience
+# Built-in default: true
+# UPDATE_RESUME_ALIASES: true
+
+# Private local vacancy cache directory
+# Built-in default: ~/.hh-automation/vacancies
+# VACANCY_CACHE_DIR: "~/.hh-automation/vacancies"
+
+# With --captcha-prefill: send Haiku's reading of a captcha once; if hh.ru does not accept it, the captcha is only prefilled and waits for you
+# Built-in default: true
 # CAPTCHA_AUTO_SEND: false
 
-# Send a form with questions without asking when every question is a saved question word for
-# word and autofill answered it with the saved answer; other forms are autofilled and wait for you
-# Default: true
-# AUTO_SEND_EXACT_ANSWERS: false
-
-# Resolve a conflict only when both otherwise identical answers exist, with and without a final
-# period. The first save is kept as entered; distinct answers and checkbox selections stay separate.
-# Choices: with, without. Default: with
-# ANSWER_FINAL_PERIOD: without
-
-# Answer "You've viewed the vacancy but haven't applied. Why?" with "Maybe I'll apply later".
-# Default: true. Turn off to leave these surveys for manual handling.
-# AUTO_ANSWER_VIEWED_VACANCY: false
-
-# Skip vacancies that ask these questions (a part of a question is enough) for now,
-# separated by |; they are kept in data/deferred-questions.lino until answered in qa.lino
-# Default: none
-# SKIP_QUESTIONS: портфель автоматизаций|руководить командой
+# Skip vacancies that ask this question (or a part of it) for now; repeat for several. They are kept in data/deferred-questions.lino
+# Built-in default: unset
+# SKIP_QUESTIONS: "question fragment|another fragment"
 
 # Stop after sending this many applications (0 = no limit)
-# Default: 0
-# MAX_APPLICATIONS: 10
+# Built-in default: 0
+# MAX_APPLICATIONS: 0
 
-# Record browser diagnostics in ~/.hh-automation/traces (outside the repository)
-# Default: true
-# TRACE: false
-# Local browser diagnostics expire after three days; must be positive.
+# Record browser diagnostics locally in ~/.hh-automation/traces (three-day retention by default)
+# Built-in default: true
+# TRACE: true
+
+# Maximum age of local browser traces in days (positive; default 3)
+# Built-in default: 3
 # TRACE_RETENTION_DAYS: 3
 
-# Path to user data directory for persistent session storage
-# Default: ~/.hh-automation/chrome-profile
-# USER_DATA_DIR: ./user-data
+# Seconds between opened vacancies, a fixed pace (a random extra of up to a quarter is added); 0, the default: adaptive pacing within 1-4 min, including jitter, with a bounded CAPTCHA hold
+# Built-in default: 0
+# JOB_APPLICATION_INTERVAL: 0
 
-# Seconds between opened vacancies; a random extra of up to a quarter is added
-# Default: 240 (4-5 minutes, fits 200 applications a day)
-# JOB_APPLICATION_INTERVAL: 240
+# Cover letter to send with every application (this or --message-file is required)
+# Built-in default: unset
+# MESSAGE: ""
 
-# Cover letter sent with every application: MESSAGE or MESSAGE_FILE is required
-# (data/cover-letter.txt holds the cover letter shown in README)
-# MESSAGE: Здравствуйте, я заинтересован в данной вакансии...
+# Path to a UTF-8 text file with the cover letter, e.g. data/cover-letter.txt
+# Built-in default: unset
+# MESSAGE_FILE: "data/cover-letter.txt"
 
-# Path to a UTF-8 text file with a multi-line application message
-# Used when MESSAGE is not set
-# MESSAGE_FILE: data/cover-letter.txt
+# The English cover letter, used when the vacancy's questions are in English (default: <message-file>.en.txt when it exists)
+# Built-in default: unset
+# MESSAGE_FILE_EN: "data/cover-letter.en.txt"
 
 # Enable verbose logging for debugging
-# Default: false
-# VERBOSE: true
+# Built-in default: false
+# VERBOSE: false
 
-# Vacancy descriptions and analysis are enabled by default. Employer text stays locally under
-# data/vacancies/ (gitignored); comparisons do not reject an application based on a score.
-# VACANCY_INSIGHTS: false
-# COLLECT_VACANCIES: false
-# COMPARE_RESUME: false
-# UPDATE_RESUME_ALIASES: false
-# VACANCY_CACHE_DIR: data/vacancies
+# Send forms with questions (popup or full form) unattended even when not every answer is the saved answer of the very same question (default: false for safety)
+# Built-in default: false
+# AUTO_SUBMIT_VACANCY_RESPONSE_FORM: false
 
-# Optional Oxion API credentials: use .lenv, which is ignored by git. Never commit a real key.
-# Check available models with: bun run ai-status -- --probe
-# OXION_BASE_URL: 'https://oxionai.com/v1'
-# OXION_API_KEY: your_private_key
-# OXION_MODEL: claude-haiku-5-5
+# Skip vacancies that require additional questionnaire fields beyond the cover letter (kept in data/skipped-vacancies.lino)
+# Built-in default: false
+# IGNORE_VACANCIES_WITH_QUESTIONNAIRE: false
 
-# Send forms with questions (popup or full form) unattended even when not every answer is the
-# saved answer of the very same question (otherwise such a form waits for you)
-# Default: false (manual review recommended for safety)
-# AUTO_SUBMIT_VACANCY_RESPONSE_FORM: true
+# Handle unread rejections in the inactive chat browser slot (port 9340); closed chats are read, open chats may get the configured reason request
+# Built-in default: true
+# CLEAR_REJECTIONS: true
 
-# Skip vacancies that require questionnaire fields beyond the cover letter
-# Default: false
-# IGNORE_VACANCIES_WITH_QUESTIONNAIRE: true
+# Ask once for the reason when a rejected application still allows replies, only in an inactive window without a draft
+# Built-in default: true
+# ASK_REJECTION_REASON: true
+
+# Message sent once to an open rejection chat
+# Built-in default: Здравствуйте, могу я узнать причину?
+# REJECTION_REASON_REPLY: "Здравствуйте, могу я узнать причину?"
+
+# Also answer unread chats alongside the application loop in the chat browser slot (port 9340), always after the rejections are cleared
+# Built-in default: false
+# PROCESS_CHATS: false
+
+# How often the rejections are cleared and, with --process-chats, unread chats answered (minutes)
+# Built-in default: 120
+# CHATS_INTERVAL_MINUTES: 120
+
+# Standalone notification switch: 0 turns off visual alerts as well.
+# NOTIFY: 0
+
+# Optional authenticated model discovery, not needed for ordinary application runs.
+# bun run ai-status -- --probe makes an authenticated text request too.
+# OXION_BASE_URL: "https://oxionai.com/v1"
+# OXION_API_KEY: "your-private-key"
+# OXION_MODEL: "MODEL_ID_FROM_YOUR_AUTHENTICATED_CATALOG"
