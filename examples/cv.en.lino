@@ -121,7 +121,7 @@ resume
         "Contributed to Convertinator, including converting ClickUp data into Kaiten's universal import format."
         ' '
         'Technologies and tools:'
-        'Ansible, Anthropic Claude Code CLI, Capacitor, Cursor, Docker, Elasticsearch (Elastic Search), Electron, GitHub, GitHub Actions, GitHub Actions Runner, GitHub Copilot, Grafana, Kibana, Kubernetes (k8s), Node.js (NodeJS), OpenAI Codex CLI, PostgreSQL (Postgre SQL, Postgres), Prometheus, RabbitMQ, React (React.js, ReactJS), Redis, Redux, Selectel Cloud, Sentry, Terraform, Visual Studio Code, Yandex Cloud/'
+        'Ansible, Anthropic Claude Code CLI, Capacitor, Cursor, Docker, Elasticsearch (Elastic Search), Electron, GitHub, GitHub Actions, GitHub Actions Runner, GitHub Copilot, Grafana, Kibana, Kubernetes (k8s), Node.js (NodeJS), OpenAI Codex CLI, PostgreSQL (Postgre SQL, Postgres), Prometheus, RabbitMQ, React (React.js, ReactJS), Redis, Redux, Selectel Cloud, Sentry, Terraform, Visual Studio Code, Yandex Cloud'
     job
       company 'Deep.Foundation'
       position 'Co-founder, CTO'
