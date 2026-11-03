@@ -12,6 +12,42 @@ const cvs = [
 ];
 
 describe('bilingual About technology consolidation', () => {
+  test('an owner-saved dangling slash is repaired across languages instead of becoming counterpart evidence', () => {
+    const resumes = ['ru', 'en'].map(language => ({ hash: language, cv: { language, skills: [],
+      about: `${language} biography.\n\nTechnical Skills\nTools:\nYandex Cloud, Yandex Cloud/, /, CI/CD\nPersonal:\nKeep personal text.`,
+      jobs: [{ company: 'Kaiten', position: 'Developer', start: '2024-01', end: null,
+        description: `Keep ${language} narrative.\n\nTools:\nYandex Cloud${language === 'en' ? '/' : ''}, CI/CD, C/C++, .NET` }],
+    } }));
+    const catalog = new Map([['CI/CD', ['CI/CD', 'CI CD']]]);
+    const options = { observed: [{ canonical: 'Yandex Cloud/', spelling: 'Yandex Cloud/' }, { canonical: '/', spelling: '/' }] };
+    const initial = verifyCvTechnologyCoverage(resumes, catalog, options);
+    assert.equal(initial.complete, false);
+    assert.ok(initial.malformedNames.some(item => item.term === 'Yandex Cloud/'));
+    const plan = planCvTechnologySync(resumes, catalog, options);
+    assert.ok(!plan.technologies.some(item => !item.id || item.canonical.endsWith('/')));
+    for (const change of plan.changes) {
+      const cv = resumes.find(r => r.hash === change.resumeHash).cv;
+      const text = change.fields.about ?? change.fields.description;
+      assert.ok(!text.includes('Yandex Cloud/'));
+      assert.ok(text.includes('CI/CD'));
+      if (change.kind === 'about') {
+        assert.ok(text.startsWith(`${cv.language} biography.`));
+        assert.ok(text.includes('Keep personal text.'));
+        cv.about = text;
+      } else {
+        assert.ok(text.startsWith(`Keep ${cv.language} narrative.`));
+        assert.ok(text.includes('C/C++'));
+        assert.ok(text.includes('.NET'));
+        cv.jobs[0].description = text;
+      }
+    }
+    assert.equal(verifyCvTechnologyCoverage(resumes, catalog, options).complete, true);
+    assert.deepEqual(planCvTechnologySync(resumes, catalog, options).changes, []);
+    const normalize = createTechnologyNormalizer(catalog);
+    assert.equal(normalize('Yandex Cloud/').id, normalize('Yandex Cloud').id);
+    const onlyAbout = [{ hash: 'en', cv: { language: 'en', about: 'Technical Skills\nTools:\nYandex Cloud/', jobs: [] } }];
+    assert.equal(verifyCvTechnologyCoverage(onlyAbout).complete, false);
+  });
   test('retains biography, personal text and ATS spelling variants while deduplicating globally', () => {
     const result = auditCvTechnologies(cvs, aliases, { observed });
     assert.ok(result.aboutDuplicates.some((item) => item.duplicate === 'git'));

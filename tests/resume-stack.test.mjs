@@ -3,7 +3,7 @@
  */
 import { describe, test, assert } from 'test-anywhere';
 import {
-  collectStack, findMentionedTerms, formatStackMarkdown, jobProse, parseJobStack, parseTechnicalSkills, splitList,
+  collectStack, findMentionedTerms, formatStackMarkdown, jobProse, parseJobStack, parseTechnicalSkills, rawJobStack, splitList,
 } from '../src/resume-stack.mjs';
 
 describe('splitList', () => {
@@ -13,6 +13,13 @@ describe('splitList', () => {
 
   test('accepts semicolons and drops a trailing period', () => {
     assert.deepEqual(splitList('MySQL; PHP, Excel.'), ['MySQL', 'PHP', 'Excel']);
+  });
+  test('dangling delimiters and punctuation cannot become technologies; internal name punctuation survives', () => {
+    assert.deepEqual(splitList('Yandex Cloud/, /, |, ++, Yandex Cloud /; .NET, C#, C++, C/C++, CI/CD, npm (JS/TS), GitLab CI/CD'),
+      ['Yandex Cloud', 'Yandex Cloud', '.NET', 'C#', 'C++', 'C/C++', 'CI/CD', 'npm (JS/TS)', 'GitLab CI/CD']);
+    assert.deepEqual(parseJobStack('Tools: Yandex Cloud, Yandex Cloud/, /'), ['Yandex Cloud']);
+    assert.deepEqual(collectStack({ keySkills: ['Yandex Cloud/', '/', 'Yandex Cloud', 'CI/CD'] }).all, ['Yandex Cloud', 'CI/CD']);
+    assert.deepEqual(rawJobStack('Tools: Yandex Cloud/, /', { clean: false }), ['Yandex Cloud/', '/']);
   });
 });
 

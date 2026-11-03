@@ -1,7 +1,7 @@
 /** Local, evidence-based technology comparison. Equivalent names never imply a new skill. */
 import path from 'node:path';
 import { createQADatabase, stringSimilarity } from './qa-database.mjs';
-import { collectStack } from './resume-stack.mjs';
+import { cleanTechnologyName, collectStack } from './resume-stack.mjs';
 
 export const TECHNOLOGY_ALIASES_FILE = path.join(process.cwd(), 'data/technology-aliases.lino');
 const escape = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -21,7 +21,8 @@ export async function loadTechnologyAliases(file = TECHNOLOGY_ALIASES_FILE) {
 
 /** Long names consume their span: React Native and .NET Core do not invent React/.NET evidence. */
 export function technologyMentions(text, aliases) {
-  const variants = [...aliases].flatMap(([canonical, names]) => names.map((name) => ({ canonical, name })))
+  const variants = [...aliases].flatMap(([canonical, names]) => names.map((name) => ({ canonical: cleanTechnologyName(canonical), name: cleanTechnologyName(name) })))
+    .filter(({ canonical, name }) => canonical && name)
     .sort((a, b) => b.name.length - a.name.length);
   let remaining = String(text ?? '');
   const found = new Map();

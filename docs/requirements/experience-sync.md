@@ -14,6 +14,14 @@ another CV must not suppress an addition here. Use canonical brands, vacancy-evi
 spellings inline, alphabetical lists, lower-case `k8s`, and distinct `npm (JS/TS)` / Nginx Proxy
 Manager names. Never infer new experience, collapse distinct versions, or replace job narratives.
 
+Discard standalone punctuation and strip dangling list delimiters from technology names before
+deduplication, vocabulary learning, matching or cross-CV propagation. `Yandex Cloud/` is the same
+technology as `Yandex Cloud`; `/` is never a skill or alias. Preserve internal punctuation in
+`CI/CD`, `C/C++`, `C#`, `.NET` and `npm (JS/TS)`. Audit raw saved names as well as canonical IDs so
+normalization cannot falsely certify an uncorrected CV as complete. Replanning after reviewed
+cleanup must be stable, with the same experience and intact narratives and metadata.
+Verification: resume-stack, CV technology and vacancy-analysis regression tests.
+
 The alias reviewer prepares one change at a time and waits for the owner's verified Save.
 It then exports actual saved CVs and replans so owner edits and newly discovered aliases are
 retained. Existing drafts are observed without overwriting or navigation. A single reviewer

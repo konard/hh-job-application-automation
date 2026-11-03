@@ -1,5 +1,5 @@
 /** Evidence-based, bilingual technology inventories and About drafts. No browser writes. */
-import { collectStack, findMentionedTerms, JOB_STACK_HEADINGS, rawJobStack, splitList } from './resume-stack.mjs';
+import { cleanTechnologyName, collectStack, findMentionedTerms, JOB_STACK_HEADINGS, rawJobStack, splitList } from './resume-stack.mjs';
 import { containsTechnologySpelling, technologyMentions } from './vacancy-analysis.mjs';
 import { companyKey, companySimilarity } from './experience.mjs';
 
@@ -52,7 +52,7 @@ function sameEmployer(a, b) {
   return x.some((token) => y.includes(token));
 }
 
-export function parseAboutInventory(about) {
+export function parseAboutInventory(about, options = {}) {
   const rows = String(about).split('\n');
   const start = rows.findIndex((row) => /^(?:технические навыки|technical skills):?$/i.test(row.trim()));
   if (start < 0) {
@@ -75,7 +75,7 @@ export function parseAboutInventory(about) {
     }
     if (section === 'personal') result.personal += `${result.personal ? '\n' : ''}${raw}`;
     else if (section === 'aliases') result.aliases.push(row);
-    else if (section) result.categories[section].push(...splitList(row));
+    else if (section) result.categories[section].push(...splitList(row, options));
     else throw new Error('About technical list has text outside a category');
   }
   return result;
@@ -85,10 +85,13 @@ export function parseAboutInventory(about) {
 export function createTechnologyNormalizer(catalog = new Map()) {
   const reverse = new Map();
   for (const [canonical, names] of [...catalog, ...EXTRA_ALIASES]) {
-    reverse.set(key(canonical), canonical);
-    for (const spelling of names) reverse.set(key(spelling), canonical);
+    const name = cleanTechnologyName(canonical);
+    if (!name) continue;
+    reverse.set(key(name), name);
+    for (const spelling of names.map(cleanTechnologyName).filter(Boolean)) reverse.set(key(spelling), name);
   }
   return (term) => {
+    term = cleanTechnologyName(term);
     const linux = String(term).match(/^Linux\s*(\([^)]*\))?$/i);
     const decorated = String(term).match(/^(.*?)\s+\(([^()]*)\)$/);
     const base = decorated && reverse.get(key(decorated[1]));
@@ -113,9 +116,10 @@ export function technologyDisplayLabel(term, language, catalog = new Map(), { ob
   });
   const variants = new Map();
   for (const variant of [...inline, ...observed]) {
-    if (normalize(variant.canonical).id !== item.id || normalize(variant.spelling).id !== item.id ||
-        INVALID_ALIASES.has(key(variant.spelling)) || containsTechnologySpelling(display, variant.spelling)) continue;
-    const spelling = item.id === 'kubernetes' && key(variant.spelling) === 'k8s' ? 'k8s' : variant.spelling;
+    const cleaned = cleanTechnologyName(variant.spelling);
+    if (!cleaned || normalize(variant.canonical).id !== item.id || normalize(cleaned).id !== item.id ||
+        INVALID_ALIASES.has(key(cleaned)) || containsTechnologySpelling(display, cleaned)) continue;
+    const spelling = item.id === 'kubernetes' && key(cleaned) === 'k8s' ? 'k8s' : cleaned;
     if (!variants.has(key(spelling))) variants.set(key(spelling), spelling);
   }
   const names = [...variants.values()].sort((a, b) => compareTechnologyNames(a, b, language));
@@ -139,9 +143,16 @@ export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [], i
   const normalize = createTechnologyNormalizer(catalog);
   const inventories = cvs.map((cv) => parseAboutInventory(cv.about));
   const registry = new Map();
+  const malformedNames = cvs.flatMap(cv => [
+    { section: 'about', terms: Object.values(parseAboutInventory(cv.about, { clean: false }).categories).flat() },
+    { section: 'skills', terms: cv.skills ?? [] },
+    ...cv.jobs.map(job => ({ section: 'position', company: job.company, terms: rawJobStack(job.description, { clean: false }) })),
+  ].flatMap(({ terms, ...where }) => terms.filter(term => cleanTechnologyName(term) !== term)
+    .map(term => ({ language: cv.language, ...where, term, cleaned: cleanTechnologyName(term) }))));
   const register = (term, category) => {
     for (const component of components(term)) {
       const item = normalize(component);
+      if (!item.id) continue;
       const previous = registry.get(item.id);
       if (previous) {
         previous.spellings.add(component);
@@ -212,9 +223,10 @@ export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [], i
     const addedAliases = [];
     for (const item of observed) {
       const canonical = normalize(item.canonical);
-      if (!registry.has(canonical.id) || normalize(item.spelling).id !== canonical.id ||
-        INVALID_ALIASES.has(key(item.spelling)) || !containsTechnologySpelling(body, item.spelling)) continue;
-      const spelling = canonical.id === 'kubernetes' && key(item.spelling) === 'k8s' ? 'k8s' : item.spelling;
+      const cleaned = cleanTechnologyName(item.spelling);
+      if (!cleaned || !registry.has(canonical.id) || normalize(cleaned).id !== canonical.id ||
+        INVALID_ALIASES.has(key(cleaned)) || !containsTechnologySpelling(body, cleaned)) continue;
+      const spelling = canonical.id === 'kubernetes' && key(cleaned) === 'k8s' ? 'k8s' : cleaned;
       if (!addedAliases.some((alias) => normalize(alias.canonical).id === canonical.id && key(alias.spelling) === key(spelling)))
         addedAliases.push({ ...item, spelling });
     }
@@ -236,7 +248,7 @@ export function auditCvTechnologies(cvs, catalog = new Map(), { observed = [], i
     delete proposal.original;
   }
   return { technologies: [...registry.values()].map((item) => ({ ...item, spellings: [...item.spellings] })),
-    aboutDuplicates, positionDuplicates, listedByPosition, proposals };
+    aboutDuplicates, positionDuplicates, malformedNames, listedByPosition, proposals };
 }
 
 /** Replace only labelled stack blocks, keeping the job's narrative and first heading. */
@@ -315,10 +327,10 @@ export function verifyCvTechnologyCoverage(resumes, catalog = new Map(), options
     return Object.entries(audit.proposals[index].categories).filter(([category, terms]) => JSON.stringify(actual[category]) !== JSON.stringify(terms))
       .map(([category]) => ({ language: cv.language, category }));
   });
-  const complete = inventories.every((item) => !item.duplicates.length && !item.missing.length) && !positionDifferences.length && !plan.unmatched.length &&
+  const complete = !audit.malformedNames.length && inventories.every((item) => !item.duplicates.length && !item.missing.length) && !positionDifferences.length && !plan.unmatched.length &&
     aliasGaps.every((item) => !item.missing.length) && !legacyAliasSections.length && !categoryDifferences.length;
   return { complete,
-    technologies: audit.technologies.length, inventories, positionDuplicates: audit.positionDuplicates,
+    technologies: audit.technologies.length, inventories, positionDuplicates: audit.positionDuplicates, malformedNames: audit.malformedNames,
     unmatched: plan.unmatched, aliasGaps, legacyAliasSections, categoryDifferences,
     positionDifferences: positionDifferences.map((change) => ({ resumeHash: change.resumeHash, company: change.target.company, ...change.audit })) };
 }

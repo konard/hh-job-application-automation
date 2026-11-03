@@ -25,13 +25,19 @@ export const COMMON_TECH_TERMS = [
 /** "Технические навыки" categories that are not technologies */
 const NON_TECHNICAL_CATEGORIES = new Set(['личные', 'personal']);
 
+/** Drop dangling list separators, keeping punctuation inside real names (CI/CD, C/C++, .NET). */
+export function cleanTechnologyName(value) {
+  const name = String(value ?? '').trim().replace(/^[\s/\\|]+|[\s/\\|.]+$/gu, '');
+  return /[\p{L}\p{N}]/u.test(name) ? name : '';
+}
+
 /**
  * Split a comma or semicolon separated list, keeping parenthesised groups such as
  * "C# (.NET Core, .NET Framework)" as a single item
  * @param {string} text
  * @returns {string[]}
  */
-export function splitList(text) {
+export function splitList(text, { clean = true } = {}) {
   const items = [];
   let depth = 0;
   let current = '';
@@ -45,7 +51,7 @@ export function splitList(text) {
     }
   }
   items.push(current);
-  return items.map((item) => item.trim().replace(/\.$/, '').trim()).filter(Boolean);
+  return items.map(item => clean ? cleanTechnologyName(item) : item.trim().replace(/\.$/, '').trim()).filter(Boolean);
 }
 
 /**
@@ -55,9 +61,9 @@ export function splitList(text) {
  */
 export function uniqueTerms(items) {
   const seen = new Set();
-  return items.filter((item) => {
+  return items.map(cleanTechnologyName).filter((item) => {
     const key = item.toLowerCase();
-    return !seen.has(key) && seen.add(key);
+    return item && !seen.has(key) && seen.add(key);
   });
 }
 
@@ -71,7 +77,7 @@ const lines = (text) => text.split('\n').map((line) => line.trim()).filter(Boole
  * @param {string} description
  * @returns {string[]}
  */
-export function rawJobStack(description) {
+export function rawJobStack(description, options = {}) {
   const result = [];
   let active = false;
   let started = false;
@@ -80,14 +86,14 @@ export function rawJobStack(description) {
     if (match) {
       active = true;
       started = Boolean(match[1].trim());
-      result.push(...splitList(match[1]));
+      result.push(...splitList(match[1], options));
     } else if (active) {
       if (!row.trim()) {
         if (started) active = false;
       } else if (/^[^:,]+:\s*$/.test(row.trim())) {
         active = false;
       } else {
-        result.push(...splitList(row));
+        result.push(...splitList(row, options));
         started = true;
       }
     }

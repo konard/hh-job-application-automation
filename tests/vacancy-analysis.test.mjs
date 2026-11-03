@@ -11,6 +11,14 @@ const catalog = await loadTechnologyAliases();
 const resume = { hash: 'resume1', title: 'Developer', keySkills: ['JavaScript', 'PostgreSQL', 'Go'], about: 'React Native, Angular, .NET.\nOriginal paragraph.', jobs: [] };
 
 describe('vacancy analysis', () => {
+  test('a malformed resume list cannot teach slash variants or punctuation-only names to vacancy matching', () => {
+    const bad = { keySkills: ['Yandex Cloud/', '/', '|'], about: '', jobs: [] };
+    const vocabulary = withResumeVocabulary(new Map(), bad);
+    expect([...vocabulary.keys()]).toEqual(['Yandex Cloud']);
+    expect(technologyMentions('Yandex Cloud/ and /', vocabulary)).toEqual([{ canonical: 'Yandex Cloud', spellings: ['Yandex Cloud'] }]);
+    expect(technologyMentions('Yandex Cloud/ and /', new Map([['Yandex Cloud/', ['Yandex Cloud/']], ['/', ['/']]])))
+      .toEqual([{ canonical: 'Yandex Cloud', spellings: ['Yandex Cloud'] }]);
+  });
   test('aliases match existing technologies without conflating languages, frameworks or versions', () => {
     const comparison = compareVacancyToResume({ skills: ['JS', 'Postgres', 'Golang', 'AngularJS', '.NET Core', 'React'], description: '' }, resume, catalog);
     expect(comparison.matched.map((item) => item.canonical).sort()).toEqual(['Go', 'JavaScript', 'PostgreSQL']);
